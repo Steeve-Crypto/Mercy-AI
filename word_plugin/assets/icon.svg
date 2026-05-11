@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-label="Mercy">
+  <rect width="80" height="80" rx="12" fill="#155eef"/>
+  <path d="M20 18h30l10 10v34H20z" fill="#fff"/>
+  <path d="M50 18v12h10" fill="#d9e6ff"/>
+  <path d="M29 38h22M29 46h22M29 54h14" stroke="#155eef" stroke-width="4" stroke-linecap="round"/>
+</svg>

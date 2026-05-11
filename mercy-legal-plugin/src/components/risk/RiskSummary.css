@@ -1,0 +1,98 @@
+.emptyRisk,
+.scorePanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(14, 42, 74, 0.07);
+  padding: 16px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: #0e2a4a;
+  font-size: 17px;
+}
+
+.workflowList {
+  display: grid;
+  gap: 8px;
+}
+
+.workflowList > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  background: #fafbfc;
+  color: #344054;
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
+.workflowList svg {
+  color: #c9a44c;
+}
+
+.panelEyebrow {
+  display: block;
+  color: #c9a44c;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.scoreValue {
+  color: #0e2a4a;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.riskCard {
+  border-left: 4px solid #f1c40f;
+  box-shadow: 0 8px 26px rgba(14, 42, 74, 0.07);
+  animation: riskPulse 900ms ease-out;
+}
+
+.riskCard.high {
+  border-left-color: #c4314b;
+}
+
+.riskCard.medium {
+  border-left-color: #d96c00;
+}
+
+.riskCard.low {
+  border-left-color: #f1c40f;
+}
+
+.riskCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.excerpt {
+  color: #4b5563;
+  font-style: italic;
+}
+
+@keyframes riskPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(201, 164, 76, 0.32);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(201, 164, 76, 0);
+  }
+}

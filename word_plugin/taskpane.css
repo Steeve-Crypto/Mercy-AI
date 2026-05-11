@@ -1,0 +1,139 @@
+:root {
+  --ink: #181614;
+  --muted: #71695f;
+  --line: #ded8cd;
+  --panel: #fffdf8;
+  --page: #f3f0e8;
+  --action: #7a1f2b;
+  --action-hover: #641824;
+  --brass: #b08a3c;
+  --code: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page);
+}
+
+main {
+  padding: 14px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+header img {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+p,
+label,
+#status,
+.statusCard span {
+  color: var(--muted);
+}
+
+.statusCard {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid rgba(176, 138, 60, 0.52);
+  border-radius: 8px;
+  background: #fff8e8;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  font: inherit;
+  background: var(--panel);
+  color: var(--ink);
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(176, 138, 60, 0.16);
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--action);
+  color: #fffdf8;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--action-hover);
+}
+
+.secondary {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.secondary:hover {
+  background: #fbf4e4;
+}
+
+pre {
+  min-height: 190px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--code);
+  color: #f7f0df;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#status {
+  font-size: 12px;
+}

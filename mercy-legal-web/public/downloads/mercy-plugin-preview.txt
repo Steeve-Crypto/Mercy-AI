@@ -1,0 +1,12 @@
+Mercy.ai Word Plugin
+
+This is a private beta download placeholder for the Mercy.ai Microsoft Word plugin.
+
+Planned plugin capabilities:
+- Real-time risk highlighting inside Word documents
+- One-click "Explain This Clause" with DC context
+- Insert DC standard clauses from the Mercy.ai library
+- Sidebar chat for the active DC matter
+- Risk report generation directly into the document
+
+Replace this file with the signed plugin installer package when distribution is ready.

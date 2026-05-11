@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+
+  --color-background: #f7f8fb;
+  --color-foreground: #0a1428;
+  --color-card: #ffffff;
+  --color-card-foreground: #0a1428;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0a1428;
+  --color-primary: #0a1428;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #edf0f5;
+  --color-secondary-foreground: #17213a;
+  --color-muted: #eef1f6;
+  --color-muted-foreground: #64708a;
+  --color-accent: #d4af37;
+  --color-accent-foreground: #0a1428;
+  --color-destructive: #b42318;
+  --color-border: #dde3ee;
+  --color-input: #d8deea;
+  --color-ring: #d4af37;
+  --color-mercy-navy: #0a1428;
+  --color-mercy-navy-soft: #13213d;
+  --color-mercy-gold: #d4af37;
+  --color-mercy-gold-soft: #f0df9b;
+  --radius: 0.625rem;
+  --radius-xs: calc(var(--radius) * 0.5);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: calc(var(--radius) * 0.875);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(212, 175, 55, 0.12), transparent 30rem),
+    linear-gradient(180deg, #ffffff 0%, #f7f8fb 42%, #eef2f7 100%);
+  color: var(--color-foreground);
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(212, 175, 55, 0.35);
+}
+
+.navy-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.gold-sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.gold-sheen::after {
+  animation: sheen 4.5s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  transform: translateX(-120%);
+}
+
+@keyframes sheen {
+  0%,
+  72% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}

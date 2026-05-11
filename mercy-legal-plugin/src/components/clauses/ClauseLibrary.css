@@ -1,0 +1,20 @@
+.clauseCard {
+  display: grid;
+  gap: 10px;
+}
+
+.clauseMeta {
+  display: block;
+  color: #c9a44c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clausePreview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #344054;
+  font-size: 13px;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}

@@ -1,0 +1,19 @@
+.actionStrip {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(14, 42, 74, 0.08);
+  padding: 14px;
+}
+
+.actionStrip.compact {
+  padding: 10px;
+}
+
+.actionButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}

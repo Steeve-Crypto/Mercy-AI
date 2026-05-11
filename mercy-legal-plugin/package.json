@@ -1,0 +1,40 @@
+{
+  "name": "mercy-legal-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mercy Legal Microsoft Word add-in for DC-focused legal AI assistance.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3000",
+    "build": "tsc --noEmit && vite build",
+    "manifest:prod": "node scripts/generate-production-manifest.mjs",
+    "validate:prod-manifest": "office-addin-manifest validate dist/manifest.xml",
+    "preview": "vite preview --host 127.0.0.1 --port 3000",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "validate:manifest": "office-addin-manifest validate manifest.xml",
+    "install:certs": "office-addin-dev-certs install",
+    "start:desktop": "office-addin-debugging start manifest.xml desktop",
+    "stop": "office-addin-debugging stop manifest.xml"
+  },
+  "dependencies": {
+    "@fluentui/react-components": "^9.56.2",
+    "@fluentui/react-icons": "^2.0.264",
+    "framer-motion": "^11.11.17",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/office-js": "^1.0.589",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.14.0",
+    "@typescript-eslint/parser": "^8.14.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "office-addin-debugging": "^6.0.7",
+    "office-addin-dev-certs": "^2.0.7",
+    "office-addin-manifest": "^2.1.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

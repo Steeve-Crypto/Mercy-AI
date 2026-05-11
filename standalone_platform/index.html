@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mercy AI Workspace</title>
+    <link rel="stylesheet" href="/static/dashboard/styles.css" />
+  </head>
+  <body>
+    <div class="appShell">
+      <aside class="sideRail" aria-label="Mercy navigation">
+        <div class="brandBlock">
+          <img src="/word_plugin/assets/icon.svg" alt="" class="brandMark" />
+          <div>
+            <strong>Mercy AI</strong>
+            <span>Shared Intelligence Core</span>
+          </div>
+        </div>
+        <nav>
+          <a href="#matterForm" class="navItem active">Command</a>
+          <a href="#discoveryForm" class="navItem">Record</a>
+          <a href="#draftForm" class="navItem">Draft</a>
+          <a href="#guardrailOutput" class="navItem">Audit</a>
+        </nav>
+        <div class="trustPanel">
+          <span class="eyebrow">D.C. native</span>
+          <p>Rule 28, Rule 32, record anchoring, and Ethics Opinion 388 supervision are built into the response layer.</p>
+        </div>
+      </aside>
+
+      <main class="mainDeck">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">AI-native legal workspace</span>
+            <h1>Mercy turns records into supervised D.C. appellate drafting.</h1>
+          </div>
+          <div class="status" id="healthStatus">Checking core</div>
+        </header>
+
+        <section class="briefingStrip" aria-label="Workspace briefing">
+          <article>
+            <span>Mode</span>
+            <strong>One brain, two windows</strong>
+          </article>
+          <article>
+            <span>Security</span>
+            <strong>Zero-retention local context</strong>
+          </article>
+          <article>
+            <span>Premium hook</span>
+            <strong>Client billing report</strong>
+          </article>
+          <article>
+            <span>Verification</span>
+            <strong id="guardrailStatus">Awaiting output</strong>
+          </article>
+        </section>
+
+        <section class="matterBand">
+          <form id="matterForm" class="matterForm">
+            <div>
+              <span class="eyebrow">Matter command</span>
+              <h2>Start a case workspace</h2>
+            </div>
+            <label>
+              Matter
+              <input id="matterName" placeholder="EPA v. Smith administrative record" />
+            </label>
+            <label>
+              Tier
+              <select id="matterTier">
+                <option value="free">Free</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <button type="submit">Create matter</button>
+          </form>
+          <div class="matterMeta">
+            <span class="eyebrow">Active matter</span>
+            <strong id="activeMatter">No matter selected</strong>
+            <code id="activeMatterId">Create a matter to sync Word.</code>
+            <button class="secondaryButton" id="billingReport" type="button">Generate billing report</button>
+          </div>
+        </section>
+
+        <section class="workbench">
+          <form class="panel intakePanel" id="discoveryForm">
+            <div class="panelHead">
+              <div>
+                <span class="eyebrow">Heavy lifter</span>
+                <h2>Record intake</h2>
+              </div>
+              <span>Legal Discovery AI crew</span>
+            </div>
+            <label>
+              PDF path
+              <input
+                id="documentPath"
+                name="documentPath"
+                placeholder="C:\Users\12404\Downloads\Mercy AI\legal_discovery_ai\data\uploads\Opinion_2025-0910.pdf"
+              />
+            </label>
+            <label>
+              Or upload PDF
+              <input id="documentFile" name="documentFile" type="file" accept="application/pdf" />
+            </label>
+            <label>
+              Supplemental instructions
+              <textarea id="documentText" rows="6" placeholder="Jurisdiction focus, issue priorities, procedural posture, agency context, or record gaps"></textarea>
+            </label>
+            <button type="submit">Run discovery</button>
+          </form>
+
+          <form class="panel draftPanel" id="draftForm">
+            <div class="panelHead">
+              <div>
+                <span class="eyebrow">Draft sidekick</span>
+                <h2>D.C. Clerk OS</h2>
+              </div>
+              <span>Word-ready output</span>
+            </div>
+            <label>
+              Draft type
+              <select id="draftType">
+                <option value="statement_of_case">Statement of case</option>
+                <option value="summary_of_argument">Summary of argument</option>
+                <option value="argument_section">Argument section</option>
+                <option value="full_appellate_brief">Full appellate brief scaffold</option>
+              </select>
+            </label>
+            <label>
+              Requested relief
+              <input id="requestedRelief" placeholder="vacate the order and remand" />
+            </label>
+            <label>
+              Facts JSON
+              <textarea id="factsJson" rows="10" placeholder='{"case_summary":"...","key_issues":["..."]}'></textarea>
+            </label>
+            <button type="submit">Draft and verify</button>
+          </form>
+        </section>
+
+        <section class="outputGrid">
+          <article class="outputPanel">
+            <div class="panelHead">
+              <div>
+                <span class="eyebrow">Attorney work product</span>
+                <h2>Word-ready draft</h2>
+              </div>
+              <button class="iconButton" id="copyDraft" type="button" title="Copy draft">Copy</button>
+            </div>
+            <pre id="draftOutput">Create a matter, run discovery, or paste facts to start drafting.</pre>
+          </article>
+          <article class="outputPanel">
+            <div class="panelHead">
+              <div>
+                <span class="eyebrow">Compliance shield</span>
+                <h2>Guardrails and billing</h2>
+              </div>
+            </div>
+            <pre id="guardrailOutput">Guardrail results and billing reports appear here.</pre>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="/static/dashboard/app.js"></script>
+  </body>
+</html>

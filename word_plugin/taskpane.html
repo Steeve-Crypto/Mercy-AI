@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mercy</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="/word_plugin/taskpane.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="/word_plugin/assets/icon.svg" alt="" />
+        <div>
+          <h1>Mercy</h1>
+          <p>D.C. Clerk OS sidekick</p>
+        </div>
+      </header>
+
+      <section class="statusCard">
+        <strong>Human-supervised drafting</strong>
+        <span>Insert only after cite and record review.</span>
+      </section>
+
+      <label>
+        Matter ID
+        <input id="matterId" placeholder="Paste from Mercy dashboard" />
+      </label>
+
+      <label>
+        Draft type
+        <select id="draftType">
+          <option value="statement_of_case">Statement of case</option>
+          <option value="summary_of_argument">Summary of argument</option>
+          <option value="argument_section">Argument section</option>
+          <option value="full_appellate_brief">Full brief scaffold</option>
+        </select>
+      </label>
+
+      <label>
+        Requested relief
+        <input id="requestedRelief" placeholder="vacate and remand" />
+      </label>
+
+      <label>
+        Facts JSON
+        <textarea id="factsJson" rows="10" placeholder='{"case_summary":"..."}'></textarea>
+      </label>
+
+      <button id="draftButton" type="button">Generate supervised draft</button>
+      <button id="insertButton" class="secondary" type="button">Insert in document</button>
+
+      <pre id="output"></pre>
+      <div id="status">Connects to http://127.0.0.1:8000</div>
+    </main>
+    <script src="/word_plugin/taskpane.js"></script>
+  </body>
+</html>

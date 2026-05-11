@@ -1,0 +1,162 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #eef2f6;
+  color: #172033;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.appHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 14px;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.appTitle {
+  display: block;
+  margin: 0;
+  color: #0e2a4a;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.appSubtitle {
+  display: block;
+  color: #5c6676;
+  font-size: 12px;
+}
+
+.jurisdictionBadge {
+  border-color: rgba(201, 164, 76, 0.72);
+  color: #0e2a4a;
+  font-weight: 700;
+}
+
+.reviewHero {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(14, 42, 74, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(201, 164, 76, 0.14)),
+    #0e2a4a;
+  box-shadow: 0 18px 46px rgba(14, 42, 74, 0.16);
+  color: #ffffff;
+  padding: 18px;
+}
+
+.heroKicker {
+  display: block;
+  color: #f5d47d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.heroTitle {
+  display: block;
+  margin: 4px 0 6px;
+  font-size: 24px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.heroCopy {
+  display: block;
+  max-width: 33ch;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.heroStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.heroStats > div {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 10px;
+}
+
+.statValue {
+  display: block;
+  color: #f5d47d;
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.statLabel {
+  display: block;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+.viewTabs {
+  margin-top: 14px;
+  padding: 3px;
+  border: 1px solid #dde4ee;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.viewContent {
+  min-height: 340px;
+  padding: 14px 0 72px;
+}
+
+.softDivider {
+  opacity: 0.45;
+}
+
+.successToast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  max-width: 280px;
+  border: 1px solid rgba(201, 164, 76, 0.45);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 36px rgba(14, 42, 74, 0.16);
+  color: #0e2a4a;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 14px;
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.muted {
+  color: #667085;
+}
