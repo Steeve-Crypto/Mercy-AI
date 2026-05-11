@@ -51,6 +51,7 @@ Without a configured model key, Mercy returns structured fallback drafts with at
 
 ## Documentation
 
+- `.specify/memory/constitution.md`
 - `MERCY_BUILD_DOCUMENTATION.md`
 - `DEPLOYMENT.md`
 - `PRODUCT_BLUEPRINT_ALIGNMENT.md`
