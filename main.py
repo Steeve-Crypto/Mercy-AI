@@ -6,7 +6,7 @@ from typing import Any
 
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
-from dc_knowledge_rag import retrieve_dc_knowledge
+from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -156,6 +156,9 @@ class RagRetrieveRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=10, description="Maximum number of chunks to retrieve.")
     user_type: str = Field("solo", description="User type used by the MoE router.")
     surface_context: str = Field("core_rag", description="Calling surface name.")
+    practice_area: str | None = Field(None, description="Optional D.C. practice area metadata filter.")
+    date_from: str | None = Field(None, description="Optional source date lower bound.")
+    date_to: str | None = Field(None, description="Optional source date upper bound.")
 
 
 class RagEvaluateRequest(BaseModel):
@@ -482,6 +485,12 @@ async def rag_retrieve(
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
+        if request.practice_area:
+            context["practice_area"] = request.practice_area
+        if request.date_from:
+            context["date_from"] = request.date_from
+        if request.date_to:
+            context["date_to"] = request.date_to
         if request.matter_id:
             context["matter_id"] = request.matter_id
 
@@ -507,6 +516,13 @@ async def rag_retrieve(
             "human_review_required": True,
         }
         return _attach_route(payload, route, tenant_user, request.matter_id, context, source="rag_retrieve")
+
+
+@app.get("/v1/rag/status")
+async def rag_status(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    context = {"surface_context": "core_rag_status", "auth_context": _tenant_context(tenant_user)}
+    trace_event(name="rag_status_view", surface_context="core_rag_status", category="rag", metadata=_auth_metadata(tenant_user))
+    return rag_backend_status(context)
 
 
 @app.post("/v1/rag/evaluate")

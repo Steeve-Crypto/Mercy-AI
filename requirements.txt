@@ -5,4 +5,8 @@ python-multipart
 langgraph
 langgraph-checkpoint
 langchain-core
+qdrant-client
+langchain-qdrant
+neo4j
+langchain-neo4j
 -r legal_discovery_ai/requirements.txt

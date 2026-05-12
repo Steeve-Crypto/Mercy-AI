@@ -8,7 +8,7 @@ from importlib import metadata
 from typing import Any, Callable
 
 from dc_guardrails import evaluate_dc_guardrails
-from dc_knowledge_rag import retrieve_dc_knowledge
+from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from observability import trace_event, trace_span
 from ragas_eval import METRICS as RAGAS_METRICS
@@ -226,7 +226,7 @@ def cite_and_verify(law_or_case: str, matter_context: dict[str, Any] | None = No
         return result
 
 
-def check_dc_ethics(query: str, draft: str) -> dict[str, Any]:
+def check_dc_ethics(query: str, draft: str, matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     with trace_span("mcp_check_dc_ethics", "agent_network", "agent_skill") as span:
         guardrails = evaluate_dc_guardrails(
             {
@@ -237,7 +237,7 @@ def check_dc_ethics(query: str, draft: str) -> dict[str, Any]:
         )
         retrieval = retrieve_dc_knowledge(
             query=f"D.C. ethics compliance for: {query}",
-            matter_context={"jurisdiction": "District of Columbia"},
+            matter_context={**(matter_context or {}), "jurisdiction": "District of Columbia"},
             top_k=3,
             route={"expert": "compliance_guardrails", "route_mode": "compliance_check"},
             agentic=True,
@@ -358,6 +358,7 @@ def _skill_registry() -> dict[str, MCPSkill]:
                 {
                     "query": {"type": "string"},
                     "draft": {"type": "string"},
+                    "matter_context": {"type": "object"},
                 },
                 ["query", "draft"],
             ),
@@ -491,7 +492,7 @@ class DraftingAgent(BaseLegalAgent):
             agentic=True,
         )
         draft = _grounded_draft(task, context, retrieval)
-        ethics = self._call_skill("check_dc_ethics", query=task, draft=draft)
+        ethics = self._call_skill("check_dc_ethics", query=task, draft=draft, matter_context=context)
         export = self._call_skill("export_to_word", content=draft, format=str(state["params"].get("format") or "docx"))
         status = "block" if not retrieval.get("results") else ethics.get("status", "warn")
         return {
@@ -516,7 +517,7 @@ class ComplianceAgent(BaseLegalAgent):
     def execute(self, state: dict[str, Any]) -> dict[str, Any]:
         params = state["params"]
         draft = str(params.get("draft") or params.get("content") or state["task"])
-        ethics = self._call_skill("check_dc_ethics", query=state["task"], draft=draft)
+        ethics = self._call_skill("check_dc_ethics", query=state["task"], draft=draft, matter_context=state["matter_context"])
         return {
             "agent": self.name,
             "status": ethics["status"],
@@ -608,6 +609,7 @@ class AgentNetwork:
             "langgraph": dict(self._langgraph_runtime),
             "agents": [agent.metadata() for agent in self.agents.values()],
             "skills": [skill.metadata() for skill in self.skills.values()],
+            "rag_backend": rag_backend_status(),
             "strict_grounding": True,
             "langsmith_tracing": True,
         }

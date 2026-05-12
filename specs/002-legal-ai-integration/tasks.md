@@ -94,9 +94,10 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Added LangGraph dependencies, installed them in the core venv, compiled a native `StateGraph` when available, blocked non-local startup without LangGraph, kept fallback local/dev only, and exposed runtime/version metadata through `/v1/agent/skills`.
    - **Dependencies**: PD026.
 
-4. [ ] PD031 [Core RAG] Connect configured vector and graph backend adapters.
+4. [X] PD031 [Core RAG] Connect configured vector and graph backend adapters.
    - **Target Paths**: `dc_knowledge_rag.py`, `.env.example`, `tests/test_dc_knowledge_rag.py`.
    - **Definition of Done**: Qdrant and Neo4j configured modes invoke adapter boundaries with mocked clients in tests; backend status reports connected/fallback/blocked truthfully; production-like mode does not silently use seeded demo data.
+   - **Result**: Added Qdrant/pgvector/Neo4j adapter boundaries, protected seeded local corpus behind local/dev mode, added tenant-aware metadata filters and LangSmith traces, exposed `/v1/rag/status`, and surfaced RAG backend status in agent skills.
    - **Dependencies**: PD015, PD030.
 
 5. [ ] PD032 [Core RAG] Add official D.C. source ingestion and registry contract.

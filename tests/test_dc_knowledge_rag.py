@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
-from dc_knowledge_rag import retrieve_dc_knowledge
+os.environ.setdefault("MERCY_ENV", "local")
+
+from dc_knowledge_rag import DCKnowledgeRAG, KnowledgeChunk, RetrievalConfig, RetrievalHit, rag_backend_status, retrieve_dc_knowledge
 from legal_task_router import moe_route
 
 
@@ -24,6 +28,7 @@ class DCKnowledgeRagTests(unittest.TestCase):
             self.assertTrue(chunk["citation"]["label"])
             self.assertTrue(chunk["citation"]["provenance"]["source_id"])
             self.assertTrue(chunk["provenance"]["official_locator"])
+        self.assertTrue(result["backend_status"]["local_demo_allowed"])
 
     def test_router_injects_knowledge_for_drafting(self) -> None:
         decision = moe_route(
@@ -40,6 +45,75 @@ class DCKnowledgeRagTests(unittest.TestCase):
         self.assertTrue(decision.knowledge_context["available"])
         self.assertTrue(decision.knowledge_context["results"])
         self.assertTrue(any(citation["provenance"]["source_id"] for citation in decision.citations))
+
+    def test_non_local_without_external_backends_blocks_seeded_demo_retrieval(self) -> None:
+        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "", "MERCY_RAG_VECTOR_BACKEND": "local", "MERCY_RAG_GRAPH_BACKEND": "local"}):
+            result = retrieve_dc_knowledge(
+                query="What D.C. ethics rules apply?",
+                matter_context={
+                    "jurisdiction": "District of Columbia",
+                    "auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"},
+                    "surface_context": "unit_test_prod",
+                },
+                route={"expert": "research"},
+            )
+
+        self.assertEqual(result["verification"]["status"], "block")
+        self.assertIn("external_backend_required_in_non_local_mode", result["verification"]["issues"])
+        self.assertFalse(result["results"])
+
+    def test_configured_external_adapters_are_invoked(self) -> None:
+        chunk = KnowledgeChunk(
+            chunk_id="external-dc-source",
+            text="External D.C. source text.",
+            summary="External source summary.",
+            source_title="External Source",
+            citation_label="External Cite",
+            source_type="official_source",
+            authority_type="rule",
+            jurisdiction="District of Columbia",
+            official_locator="External locator",
+        )
+
+        class FakeVector:
+            def search(self, *_args, **_kwargs):
+                return [RetrievalHit(chunk, 0.9, "qdrant")]
+
+            def status(self):
+                return {"backend": "qdrant", "connected": True, "mode": "external_vector", "fallback": False}
+
+        class FakeGraph:
+            def search(self, *_args, **_kwargs):
+                return [RetrievalHit(chunk, 0.8, "neo4j")]
+
+            def status(self):
+                return {"backend": "neo4j", "connected": True, "mode": "external_graph", "fallback": False}
+
+        config = RetrievalConfig(vector_backend="qdrant", graph_backend="neo4j", qdrant_url="http://qdrant", neo4j_uri="bolt://neo4j")
+        with patch("dc_knowledge_rag.QdrantVectorAdapter", return_value=FakeVector()) as vector_adapter:
+            with patch("dc_knowledge_rag.Neo4jGraphAdapter", return_value=FakeGraph()) as graph_adapter:
+                result = DCKnowledgeRAG(config=config).retrieve(
+                    "External D.C. query",
+                    {
+                        "jurisdiction": "District of Columbia",
+                        "auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"},
+                        "surface_context": "unit_test_external",
+                    },
+                    route={"expert": "research"},
+                )
+
+        self.assertTrue(vector_adapter.called)
+        self.assertTrue(graph_adapter.called)
+        self.assertEqual(result["backend_status"]["vector_backend"], "qdrant")
+        self.assertEqual(result["backend_status"]["graph_backend"], "neo4j")
+        self.assertTrue(result["results"])
+
+    def test_rag_backend_status_reports_package_and_tenant_metadata(self) -> None:
+        status = rag_backend_status({"auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"}})
+
+        self.assertEqual(status["rag_version"], "dc-knowledge-rag-1.0")
+        self.assertTrue(status["tenant_isolated"])
+        self.assertIn("qdrant_client", status["packages"])
 
 
 if __name__ == "__main__":

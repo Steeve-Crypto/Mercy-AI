@@ -345,6 +345,7 @@ def product_capabilities() -> dict[str, Any]:
             ],
             "endpoint": "/v1/router/inspect",
             "rag_endpoint": "/v1/rag/retrieve",
+            "rag_status_endpoint": "/v1/rag/status",
             "rag_eval_endpoint": "/v1/rag/evaluate",
             "full_intake_endpoint": "/v1/matter/intake/full",
             "agent_execute_endpoint": "/v1/agent/execute",
