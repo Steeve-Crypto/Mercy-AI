@@ -4,6 +4,7 @@ import { Send24Regular, TextBulletListSquareSparkle24Regular } from "@fluentui/r
 import { api } from "../../services/api";
 import { readDocumentText } from "../../services/word";
 import { ChatMessage } from "../../types";
+import { ReliabilitySignals } from "../metadata/ReliabilitySignals";
 import "./AssistantChat.css";
 
 interface AssistantChatProps {
@@ -34,7 +35,7 @@ export function AssistantChat({ onExplainSelection }: AssistantChatProps) {
     try {
       const context = await readDocumentText();
       const revision = await api.draftRevision(userMessage.content, context);
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: revision }]);
+      setMessages((current) => [...current, revision]);
     } finally {
       setIsSending(false);
     }
@@ -61,6 +62,19 @@ export function AssistantChat({ onExplainSelection }: AssistantChatProps) {
         {messages.map((message) => (
           <article key={message.id} className={`message ${message.role}`}>
             <Text>{message.content}</Text>
+            {message.core?.route && (
+              <Text className="messageMeta">
+                {message.core.route.expert_label} / {message.core.route.route_mode.replace(/_/g, " ")} /{" "}
+                {Math.round(message.core.route.confidence * 100)}% confidence /{" "}
+                {message.core.guardrailStatus ?? message.core.route.guardrail_status}
+                {message.core.envelope ? ` / matter ${message.core.envelope.matter_context_snapshot.hash}` : ""}
+                {message.core.matterContext ? ` / ${message.core.matterContext.name}` : ""}
+                {message.core.intakeSummary
+                  ? ` / intake ${message.core.intakeSummary.conflict_status.replace(/_/g, " ")}`
+                  : ""}
+              </Text>
+            )}
+            <ReliabilitySignals core={message.core} compact />
           </article>
         ))}
       </div>

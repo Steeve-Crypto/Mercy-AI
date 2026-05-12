@@ -6,10 +6,18 @@ import { DocumentVault } from "@/components/dashboard/document-vault";
 import { MatterManagement } from "@/components/dashboard/matter-management";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getCoreSnapshot } from "@/lib/core-client";
 import { dashboardStats } from "@/lib/data";
 import { Bell, CalendarDays, Plus, Search, Sparkles } from "lucide-react";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const coreSnapshot = await getCoreSnapshot();
+  const stats = dashboardStats.map((stat) =>
+    stat.label === "Active matters"
+      ? { ...stat, value: coreSnapshot.online ? String(coreSnapshot.matters.length) : stat.value }
+      : stat,
+  );
+
   return (
     <div className="px-5 py-5 lg:px-8">
       <header className="sticky top-0 z-20 -mx-5 mb-6 border-b bg-[#f4f6fa]/88 px-5 py-4 backdrop-blur lg:-mx-8 lg:px-8">
@@ -17,11 +25,20 @@ export default function DashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="gold">DC practice workspace</Badge>
-              <span className="text-xs text-muted-foreground">Tuesday, April 28</span>
+              <Badge variant={coreSnapshot.online ? "secondary" : "outline"}>
+                Core {coreSnapshot.online ? "online" : "demo fallback"}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {coreSnapshot.health?.clerk_os_version ?? "FastAPI core unavailable"} | {coreSnapshot.coreUrl}
+              </span>
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-mercy-navy">
               Good afternoon, Counsel
             </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {coreSnapshot.capabilities?.security_posture.mode ??
+                "Showing dashboard demo data until the local Mercy core is reachable."}
+            </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex h-10 items-center gap-2 rounded-md border bg-white px-3 text-sm text-muted-foreground shadow-sm sm:w-72">
@@ -43,7 +60,7 @@ export default function DashboardPage() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {dashboardStats.map((stat) => (
+        {stats.map((stat) => (
           <div key={stat.label} className="rounded-lg border bg-white p-5 shadow-[0_16px_45px_rgba(10,20,40,0.05)]">
             <div className="flex items-center justify-between">
               <div className="flex size-10 items-center justify-center rounded-md bg-[#f5ecd0] text-[#9b740e]">
@@ -58,7 +75,11 @@ export default function DashboardPage() {
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <AiAssistantPanel />
+        <AiAssistantPanel
+          router={coreSnapshot.router}
+          matterContext={coreSnapshot.intake?.matter_context}
+          intakeSummary={coreSnapshot.intake?.intake_summary}
+        />
         <ContractAnalyzer />
       </section>
 
@@ -68,7 +89,12 @@ export default function DashboardPage() {
       </section>
 
       <section className="mt-5 grid gap-5 pb-8 xl:grid-cols-[1fr_0.8fr]">
-        <MatterManagement />
+        <MatterManagement
+          coreMatters={coreSnapshot.matters}
+          coreOnline={coreSnapshot.online}
+          currentMatter={coreSnapshot.intake?.matter_context}
+          intakeSummary={coreSnapshot.intake?.intake_summary}
+        />
         <ActivityFeed />
       </section>
     </div>

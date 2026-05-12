@@ -1,228 +1,252 @@
-# Implementation Plan: Mercy Source-of-Truth Architecture Plan
+# Implementation Plan: Mercy Legal AI Brownfield Architecture
 
 **Branch**: `001-migrate-docs-spec` | **Date**: 2026-05-11 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-migrate-docs-spec/spec.md`
+**Input**: Consolidated Mercy product vision plus the current brownfield
+implementation in the repository.
 
-**Note**: This plan documents the current implementation architecture and the
-technical modernization path implied by the migrated source-of-truth spec. It does
-not implement new production features.
+<!--
+Purpose: This plan records the implementation reality of the existing Mercy AI
+codebase and turns it into a practical integration strategy. It must be read as a
+brownfield plan: spec.md is the product vision, while the codebase is the current
+system of record for what has already been built.
+
+Primary product authority: specs/001-migrate-docs-spec/spec.md
+Current implementation reality: root FastAPI modules, mercy-legal-web/,
+mercy-legal-plugin/, legal_discovery_ai/, standalone_platform/, word_plugin/,
+and tools/mercy_cli.py.
+-->
 
 ## Summary
 
-Mercy is currently a multi-surface legal AI workspace centered on a Python FastAPI
-Shared Intelligence Core. The core serves `/v1/*` product, matter, discovery, and
-drafting APIs; attaches D.C. guardrail metadata; hosts a static dashboard and a
-lightweight Word taskpane; and bridges into the existing `legal_discovery_ai`
-CrewAI discovery package. A separate Next.js product/dashboard app and a separate
-React/Vite production-oriented Word add-in exist as parallel product surfaces.
+Mercy is not a greenfield project. The repository already contains substantial
+working implementation across the Shared Intelligence Core, Standalone Platform,
+Office / Word Add-in, and Legal Discovery AI. The near-term plan is to integrate
+these built surfaces around one shared live core contract, not to recreate them.
 
-The plan preserves the current "One Brain, Two Windows" architecture while
-documenting the technical debt and modernization sequence required to move from
-local/demo readiness to production readiness: typed shared contracts, persistent
-encrypted matter storage, authentication and tenant isolation, source anchoring,
-official citation verification, premium gating, audit logging, and unified
-cross-surface integration with the Shared Intelligence Core.
+The current architecture is a brownfield "One Brain, Multiple Surfaces" system:
+
+1. **Shared Intelligence Core**: `main.py`, `bridge.py`, `mercy_context.py`,
+   `dc_guardrails.py`, and `system_prompts.py` already provide FastAPI endpoints,
+   matter storage, discovery/drafting bridges, billing hooks, D.C. guardrails,
+   and Clerk OS prompt behavior.
+2. **Standalone Platform**: There are two web surfaces:
+   `standalone_platform/` is a static FastAPI-served workspace wired to the local
+   core; `mercy-legal-web/` is a substantial Next.js product/dashboard app with
+   marketing, auth shells, pricing/Stripe checkout, dashboard modules, matter
+   management, document vault, assistant panel, contract analyzer, clause library,
+   and activity UI. The Next dashboard currently uses local mock/static data
+   rather than the live core.
+3. **Office / Word Add-in**: There are two add-in surfaces:
+   `word_plugin/` is a lightweight local taskpane wired to the FastAPI drafting
+   endpoint; `mercy-legal-plugin/` is the production-oriented Vite/React/Fluent UI
+   Word add-in with Office.js document read/insert helpers, risk review, clause
+   library, chat, report generation, manifest tooling, and local mock AI services.
+4. **Legal Discovery AI**: `legal_discovery_ai/` is a CrewAI package and
+   Streamlit UI for PDF parsing, risk scanning, case brief writing, RAG over past
+   cases, export to Markdown/PDF/DOCX/JSON, and provider fallback across
+   Anthropic, OpenAI, and Gemini.
+
+The main implementation gap is cross-surface integration: the built Next.js
+dashboard and production Word add-in need to call the live Shared Intelligence
+Core with a stable route/matter/guardrail/source metadata contract.
+
+## Brownfield Inventory
+
+### Shared Intelligence Core
+
+| Path | Already Built | Current Gap |
+|------|---------------|-------------|
+| `main.py` | FastAPI app, CORS, static mounts, `/health`, product capabilities, matter create/list/get, billing report, Clerk OS, discovery, discovery upload, drafting endpoints. | No explicit MoE route endpoint or route metadata contract yet. Request models are narrow and do not cover full structured intake. |
+| `bridge.py` | Bridges to `legal_discovery_ai.run_crew`, normalizes discovery results, builds billing hooks, calls configured LLM for drafting, provides safe fallback drafts. | Discovery/drafting output lacks unified source-anchor and route envelope. |
+| `mercy_context.py` | In-memory local matter store with matter ID, name, tier, facts, drafts, billing events, product capability metadata, billing reports. | Intake fields, documents, route history, guardrail history, and source anchors are not modeled. |
+| `dc_guardrails.py` | Middleware attaches D.C. Rule 28/32 and Ethics Opinion 388 checks to `/v1/*` JSON output. | Guardrail shape is advisory and not yet a full compliance signal envelope used by all UI surfaces. |
+| `system_prompts.py` | D.C. Clerk OS prompt, no-fabrication rules, Word-ready drafting instructions, D.C. local rule schema, prompt builder. | Prompt contracts are not yet surfaced as reusable skills or route-specific capabilities. |
+| `tools/mercy_cli.py` | Local CLI for health, capabilities, matters, matter creation, drafting, and billing reports. | CLI does not cover route inspection, intake, research, or discovery upload. |
+
+### Standalone Platform
+
+| Path | Already Built | Current Gap |
+|------|---------------|-------------|
+| `standalone_platform/` | Static dashboard served by FastAPI. It creates matters, runs discovery by path/upload, drafts from facts, displays guardrails, copies drafts, and fetches billing reports. | Local scaffold only; not the primary production dashboard UI. |
+| `mercy-legal-web/` | Next.js 15 app with marketing page, sign-in/sign-up shells, dashboard layout, assistant panel, contract analyzer, document vault, upload UI, clause library, matter management, activity feed, Zustand store, Stripe checkout route, shadcn-style UI primitives. | Dashboard data is mock/static from `src/lib/data.ts`; auth forms are placeholders; document upload progress is simulated; no adapter to FastAPI core yet. |
+| `mercy-legal-web/src/app/api/checkout/route.ts` | Stripe subscription checkout with demo fallback when Stripe configuration is absent. | Entitlements are not enforced against core capabilities. |
+
+### Office / Word Add-In
+
+| Path | Already Built | Current Gap |
+|------|---------------|-------------|
+| `word_plugin/` | Lightweight taskpane wired to `http://127.0.0.1:8000/v1/workspace/draft`, with Word insertion or clipboard fallback. | Local scaffold; not the polished production add-in. |
+| `mercy-legal-plugin/` | Vite/React/Fluent UI add-in with Office manifest, HTTPS localhost config, icons, risk view, clause library, chat, report view, Word read/selection/insert helpers, production manifest generator, validation scripts. | `src/services/api.ts` returns mocked analysis/explanation/drafting results instead of calling the FastAPI core; no shared route/guardrail metadata display yet. |
+| `mercy-legal-plugin/scripts/generate-production-manifest.mjs` | Generates HTTPS production manifest from local manifest. | Production hosting, support/privacy/terms, auth, and live core configuration remain deployment gates. |
+
+### Legal Discovery AI
+
+| Path | Already Built | Current Gap |
+|------|---------------|-------------|
+| `legal_discovery_ai/src/legal_discovery_ai/crew.py` | CrewAI document parser, risk scanner, case brief writer, provider fallback, RAG tools when OpenAI key is present, sequential crew, CLI entry point. | Output is not yet normalized into the shared route/source/guardrail envelope. |
+| `legal_discovery_ai/src/legal_discovery_ai/app.py` | Streamlit UI with PDF upload, agent status panel, analysis history, friendly provider errors, formatted tabs, export to Markdown/PDF/DOCX/JSON. | Separate UI path; not yet integrated into the Next dashboard or production add-in. |
+| `legal_discovery_ai/data/` | Past-case RAG directory, upload directory, analysis history file. | Uploads/history are local processing artifacts, not production document vault storage. |
+
+## Architecture Direction
+
+The correct brownfield direction is integration and contract stabilization:
+
+```text
+Existing product surfaces
+  |-- mercy-legal-web dashboard
+  |-- mercy-legal-plugin Word add-in
+  |-- standalone_platform local dashboard
+  |-- word_plugin local taskpane
+  |-- legal_discovery_ai Streamlit/CrewAI
+  `-- tools/mercy_cli.py
+
+All should converge on:
+  Shared Intelligence Core
+    -> matter context
+    -> route / capability contract
+    -> discovery, drafting, research, clause, compliance skills
+    -> D.C. guardrail and source metadata envelope
+    -> safe surface-specific rendering
+```
+
+Do not create another dashboard, add-in, or discovery engine. Use the existing
+ones and wire them to the core.
+
+## MoE Routing Strategy
+
+The MoE task router is still needed, but it should be implemented as a
+brownfield compatibility layer over existing endpoints, not as a replacement for
+the working core.
+
+Minimum route envelope:
+
+| Field | Purpose |
+|-------|---------|
+| `route_mode` | Intake, D.C. research, drafting, document review, discovery review, contract review, clause explanation, billing report, compliance check, or general matter assistance. |
+| `confidence` | Route certainty for UI display and fallback decisions. |
+| `missing_inputs` | Facts, matter data, selected text, document source, relief, jurisdiction, or authority support needed before a safe answer. |
+| `selected_capability` | Existing or future handler: FastAPI draft, discovery crew, clause helper, contract analyzer, research skill, billing report, or compliance check. |
+| `guardrail_profile` | D.C. compliance requirements applied to the response. |
+| `fallback_path` | Safe local/mock/fallback behavior when live model, source, or document context is unavailable. |
+| `surface_context` | Calling surface such as Next dashboard, production Word add-in, static dashboard, local taskpane, Streamlit, or CLI. |
+| `premium_gate` | Free, paid, premium, production-gated, or future expansion status. |
+
+First implementation target: add route metadata to existing `main.py` responses
+and expose a small route-inspection helper or endpoint. Then update
+`mercy-legal-web` and `mercy-legal-plugin` to consume that metadata.
+
+## Cross-Surface Integration Plan
+
+### Standalone Platform Priority
+
+The production Standalone Platform priority is `mercy-legal-web/`, because that
+is the substantial user-facing dashboard. It should be connected to the live
+FastAPI core in small slices:
+
+1. Add a typed core API client in `mercy-legal-web/src/lib/`.
+2. Replace mock matter data with `/v1/matters` and `/v1/matters/{id}`.
+3. Wire document review actions to `/v1/workspace/discovery` or
+   `/v1/workspace/discovery/upload`.
+4. Wire drafting/research-style assistant actions to existing core endpoints or
+   route inspection as those contracts are added.
+5. Display `dc_guardrails`, route metadata, missing inputs, and verification
+   status in the dashboard.
+
+`standalone_platform/` should remain a local smoke-test surface for the FastAPI
+core until the Next dashboard fully owns the product workflow.
+
+### Office / Word Add-In Priority
+
+The production Office priority is `mercy-legal-plugin/`, because it already has
+the polished Vite/React/Fluent UI implementation and manifest tooling. It should
+be connected to the live core without losing preview behavior:
+
+1. Replace mock methods in `mercy-legal-plugin/src/services/api.ts` with a core
+   API client configurable by environment.
+2. Preserve development fallback data when Word or the core is unavailable.
+3. Send full document text and selected text to the appropriate route/core
+   endpoint.
+4. Render route, missing-input, compliance, source, and human-review metadata in
+   `RiskSummary`, `AssistantChat`, and `DocumentActions`.
+5. Keep `word_plugin/` as a lightweight local draft/insertion scaffold.
+
+### Legal Discovery AI Priority
+
+`legal_discovery_ai/` is already a meaningful agent/crew component. The next step
+is not to rebuild it; it is to normalize its output through `bridge.py` so the
+web dashboard and Word add-in can show facts, risks, source/page placeholders,
+guardrails, missing elements, next actions, and export/report data consistently.
 
 ## Technical Context
 
-**Language/Version**: Python 3.10-3.13 supported by `legal_discovery_ai`; Python 3.11/3.12 preferred on Windows; TypeScript 5.6+ and 5.7+ across web/add-in packages; JavaScript for static dashboard and lightweight taskpane.  
-**Primary Dependencies**: FastAPI, Uvicorn, Pydantic, python-multipart, CrewAI, crewai-tools, python-dotenv, Streamlit, reportlab, python-docx, Next.js 15, React 19, React 18, Vite 5, Office.js typings/tools, Fluent UI, Radix primitives, Tailwind CSS 4, Stripe SDK.  
-**Storage**: Current core uses in-memory matter state and local uploaded PDF files under `legal_discovery_ai/data/uploads`; discovery RAG reads `legal_discovery_ai/data/past_cases`; no production database is active. Future persistent storage must be encrypted and tenant-isolated.  
-**Testing**: Current package scripts expose Next.js build/typecheck/lint and Vite build/lint/manifest validation. No centralized Python test suite is present. Manual verification covers FastAPI local run, dashboard flow, Word taskpane flow, CLI commands, and Office manifest validation.  
-**Target Platform**: Local Windows development, local browser dashboard, Microsoft Word add-in sideloading, Dockerized FastAPI service, future HTTPS-hosted web and Office add-in deployment.  
-**Project Type**: Multi-surface legal AI workspace: web service, static browser workspace, Word add-in, Next.js product/dashboard, Vite Word add-in, CrewAI package, and CLI utilities.  
-**Performance Goals**: Local health and matter actions should feel immediate; legal discovery/drafting may be long-running but must provide user-visible progress or recoverable status; future document indexing should support large administrative records without blocking the drafting surface.  
-**Constraints**: D.C.-native legal scope, mandatory attorney review, no invented authority, zero-retention local posture, no external client-data deployment without auth/tenant isolation/encryption/retention controls, HTTPS required for production Word add-in, official citation verification required before final reliance.  
-**Scale/Scope**: Current scope is local/demo and source-of-truth planning. Target product scope is solo and boutique D.C. firms first, expanding toward premium case projects and small-firm/team workflows after hardening.
+**Backend**: FastAPI, Pydantic, Uvicorn, Python local modules, CrewAI bridge,
+in-memory matter store, middleware guardrails.
+**Standalone Web**: Next.js 15, React 19, Tailwind CSS 4, Radix UI primitives,
+lucide-react, Zustand, Stripe SDK, mocked dashboard data.
+**Office Add-In**: Vite 5, React 18, Fluent UI, Office.js typings/tools,
+framer-motion, manifest validation/generation scripts, mocked local AI services.
+**Discovery**: CrewAI, crewai-tools, Streamlit, reportlab, python-docx,
+python-dotenv, provider fallback across Anthropic/OpenAI/Gemini.
+**Current Storage**: In-memory matters in `mercy_context.py`, local upload files
+under `legal_discovery_ai/data/uploads`, analysis history JSON, no production
+database.
+**Production Gates**: Authentication, tenant isolation, encrypted persistence,
+retention/deletion controls, official citation/source verification, HTTPS Word
+hosting, support/privacy/terms, payment enforcement, and audit logging.
 
-## Constitution Check
-
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
-- **Scope gate**: PASS. The plan documents D.C. appellate, administrative,
-  contract, discovery, and small-firm workflows from the source spec. No
-  jurisdictional expansion is introduced.
-- **Supervision gate**: PASS. Existing `system_prompts.py`, `bridge.py`, and
-  `dc_guardrails.py` preserve attorney review, verification placeholders, D.C.
-  Rule 28/32 checks, and Ethics Opinion 388 review metadata. Modernization items
-  retain human review and citation/source verification as required gates.
-- **Privacy gate**: PASS. Current storage is in-memory matter state plus local
-  uploaded files for processing. The plan blocks production persistence until
-  authentication, tenant isolation, encryption, retention, deletion, and audit-log
-  boundaries are designed.
-- **Architecture gate**: PASS. The Shared Intelligence Core remains authoritative.
-  Standalone dashboard, Word taskpane, Next.js product/dashboard, Vite Word add-in,
-  CrewAI discovery package, and CLI are documented as surfaces around the core.
-- **Grounding gate**: PASS. Existing structured facts, D.C. guardrail results,
-  fallback verification placeholders, and billing hooks are documented. Future
-  source anchoring, Bates references, and official citation verification are called
-  out as modernization requirements.
-- **Quality gate**: PASS. Planning artifacts define validation through local API
-  smoke checks, CLI checks, web/add-in builds and linting, Office manifest
-  validation, and manual workflow verification. Python automated tests are
-  identified as a gap.
-
-## Project Structure
-
-### Documentation (this feature)
+## Current Data Flow
 
 ```text
-specs/001-migrate-docs-spec/
-|-- plan.md
-|-- research.md
-|-- data-model.md
-|-- quickstart.md
-|-- contracts/
-|   |-- core-api.md
-|   |-- cli.md
-|   |-- ui-workflows.md
-|   `-- word-addin.md
-|-- checklists/
-|   `-- requirements.md
-`-- spec.md
+Static dashboard
+  -> FastAPI core
+  -> in-memory matters / discovery bridge / drafting bridge
+  -> D.C. guardrail middleware
+  -> static UI display
+
+Lightweight word_plugin
+  -> FastAPI /v1/workspace/draft
+  -> Word insertion or clipboard fallback
+
+Next dashboard
+  -> local static data and demo checkout today
+  -> must be wired to FastAPI core next
+
+Production Vite Word add-in
+  -> Office.js reads document/selection
+  -> mocked api.ts analysis/explain/draft today
+  -> must be wired to FastAPI core next
+
+Legal Discovery AI
+  -> Streamlit or bridge.py
+  -> CrewAI parser/risk/brief workflow
+  -> local exports and normalized bridge facts
 ```
 
-### Source Code (repository root)
+## Quality And Compliance Check
 
-```text
-.
-|-- main.py                         # FastAPI Shared Intelligence Core
-|-- bridge.py                       # Adapter into legal_discovery_ai and Clerk OS drafting
-|-- dc_guardrails.py                # D.C. Rule 28/32 and Ethics 388 middleware
-|-- mercy_context.py                # In-memory matter store and billing reports
-|-- system_prompts.py               # D.C. Clerk OS prompt and guardrail schema
-|-- tools/
-|   `-- mercy_cli.py                # Local CLI for health, matters, drafting, billing
-|-- standalone_platform/
-|   |-- index.html
-|   |-- app.js                      # Static browser workspace against core API
-|   `-- styles.css
-|-- word_plugin/
-|   |-- manifest.xml
-|   |-- taskpane.html
-|   `-- taskpane.js                 # Lightweight Word taskpane against core API
-|-- legal_discovery_ai/
-|   |-- pyproject.toml
-|   |-- requirements.txt
-|   |-- data/
-|   |   |-- past_cases/
-|   |   `-- uploads/
-|   `-- src/legal_discovery_ai/
-|       |-- app.py                  # Streamlit discovery UI
-|       `-- crew.py                 # CrewAI parser/risk/brief workflow
-|-- mercy-legal-web/
-|   |-- package.json
-|   `-- src/
-|       |-- app/
-|       |-- components/
-|       |-- lib/
-|       `-- store/
-|-- mercy-legal-plugin/
-|   |-- package.json
-|   |-- manifest.xml
-|   |-- scripts/
-|   `-- src/
-|       |-- components/
-|       |-- services/
-|       |-- styles/
-|       |-- types/
-|       `-- utils/
-`-- .specify/
-```
+- **Vision alignment**: PASS. Codebase already targets D.C. small-firm legal AI
+  across dashboard, Word, and discovery surfaces.
+- **Brownfield accuracy**: PASS. This plan acknowledges built surfaces and does
+  not treat Mercy as a new app.
+- **Surface ownership**: PASS. `mercy-legal-web/` is the production Standalone
+  Platform candidate; `mercy-legal-plugin/` is the production Office Add-in
+  candidate; root FastAPI is the Shared Intelligence Core.
+- **Guardrails**: PARTIAL. Core middleware exists, but the Next dashboard and
+  production add-in do not yet consume live guardrail metadata.
+- **MoE routing**: PARTIAL. Product requirements and target contract are clear,
+  but code does not yet expose a route envelope or router endpoint.
+- **Data handling**: PARTIAL. Local/demo posture exists; production persistence,
+  auth, tenant isolation, and audit controls remain blockers.
+- **Source grounding**: PARTIAL. Discovery and drafting placeholders exist, but
+  official verification and cross-surface source anchors are not implemented.
 
-**Structure Decision**: Keep the current multi-surface repository while treating
-`main.py` and supporting root modules as the canonical Shared Intelligence Core.
-Future implementation plans should avoid adding another product surface unless the
-plan justifies why the existing platform, Word add-in, Next dashboard, discovery
-package, or CLI cannot own the workflow.
+## Major Risks
 
-## Current Architecture
-
-### Component Responsibilities
-
-- **Shared Intelligence Core (`main.py`)**: Defines the FastAPI app, CORS policy,
-  static mounting, matter endpoints, product capabilities, Clerk OS inspection,
-  discovery endpoints, upload handling, drafting endpoint, and billing report
-  endpoint.
-- **Discovery/Drafting Bridge (`bridge.py`)**: Adds the discovery package to
-  `sys.path`, configures CrewAI local runtime directories and telemetry flags,
-  normalizes discovery output, adds premium billing hooks, builds fallback drafts,
-  and calls the configured LLM when credentials are present.
-- **D.C. Guardrails (`dc_guardrails.py`)**: Intercepts JSON responses under
-  `/v1/*`, evaluates Rule 28/32 and Ethics 388 signals, attaches `dc_guardrails`,
-  and defaults `human_review_required` to true.
-- **Matter Context (`mercy_context.py`)**: Maintains local in-memory matters with
-  facts, drafts, and billing events; generates fee caution billing reports; exposes
-  product tier and zero-retention posture.
-- **Clerk OS Prompts (`system_prompts.py`)**: Encodes senior D.C. appellate clerk
-  behavior, no-fabrication rules, verification placeholders, confidentiality, and
-  guardrail schema.
-- **Legal Discovery Package (`legal_discovery_ai`)**: Runs a sequential CrewAI
-  workflow with document parsing, risk scanning, and case brief writing. Uses
-  provider fallback order and optional RAG tools when OpenAI credentials are
-  present.
-- **Standalone Platform (`standalone_platform`)**: Static browser UI for matter
-  creation, discovery by file/path, drafting, guardrail display, billing reports,
-  and copy-to-Word workflows against the core API.
-- **Lightweight Word Plugin (`word_plugin`)**: Office taskpane scaffold that calls
-  the core drafting endpoint and inserts text into Word or copies fallback text.
-- **Mercy Legal Web (`mercy-legal-web`)**: Next.js product/marketing/dashboard app
-  with dashboard modules, pricing, demo checkout fallback, and future auth/payment
-  environment variables.
-- **Mercy Legal Plugin (`mercy-legal-plugin`)**: React/Vite Word add-in with
-  Fluent UI, local mock legal analysis services, Office integration helpers, and
-  production manifest generation/validation scripts.
-- **CLI (`tools/mercy_cli.py`)**: Local HTTP client for health, capabilities,
-  matter creation/listing, drafting, and billing reports.
-
-### Data Flow
-
-```text
-Attorney
-  |-- Browser dashboard -> FastAPI core -> In-memory matter store
-  |                         |-- discovery request -> bridge -> legal_discovery_ai crew
-  |                         |-- draft request -> bridge -> Clerk OS prompt/LLM or fallback
-  |                         `-- JSON response -> D.C. guardrail middleware -> UI
-  |
-  |-- Word taskpane -> FastAPI core -> draft response -> Word insertion/copy fallback
-  |
-  |-- CLI -> FastAPI core -> JSON/table output
-  |
-  `-- Next/Vite product surfaces -> currently demo or mock flows; future core integration
-```
-
-Uploaded PDFs are written to `legal_discovery_ai/data/uploads` for processing.
-Matter facts, drafts, and billing events are held in process memory and are lost on
-restart. RAG over `legal_discovery_ai/data/past_cases` is available only when the
-required provider credentials and tools are usable.
-
-### Modernization Opportunities
-
-1. **Shared Contract Layer**: Move request/response models and guardrail schemas
-   into reusable contracts consumed by FastAPI, CLI, dashboard, and add-ins.
-2. **Persistence Boundary**: Introduce encrypted, tenant-scoped persistence only
-   after retention/deletion/audit policies are specified.
-3. **Authentication and Tenant Isolation**: Gate all external matter/document
-   workflows before production deployment.
-4. **Source Anchoring**: Add document chunk IDs, Bates/record references, page
-   ranges, and official-source links to discovery and drafting outputs.
-5. **Citation Verification**: Separate advisory placeholder checks from true
-   authority verification against official D.C./federal sources.
-6. **Async Job Model**: Convert long discovery/indexing work into tracked jobs
-   with progress, cancellation, and retry semantics.
-7. **Unified Word Add-in Strategy**: Decide whether `word_plugin/` remains a
-   local scaffold only and `mercy-legal-plugin/` becomes the production add-in, or
-   merge them behind shared services.
-8. **Core Integration for Product Apps**: Replace mock analysis services in
-   `mercy-legal-plugin/` and demo-only dashboard surfaces with authenticated core
-   API calls.
-9. **Centralized Testing**: Add Python endpoint/guardrail tests, contract tests,
-   and browser/Office workflow checks in addition to existing TS build/lint gates.
-10. **Configuration Hygiene**: Consolidate environment documentation and enforce
-    explicit local/demo/production modes.
-
-## Complexity Tracking
-
-No constitution violations are introduced by this planning feature. Existing
-complexity is documented rather than expanded.
-
+| Risk | Current Evidence | Mitigation |
+|------|------------------|------------|
+| Production dashboard is visually built but not live-core integrated | `mercy-legal-web/src/lib/data.ts` drives dashboard mocks. | Add typed FastAPI client and replace mock data slice by slice. |
+| Production Word add-in is polished but uses mock AI services | `mercy-legal-plugin/src/services/api.ts` returns delayed hardcoded responses. | Replace with configurable core API calls and keep preview fallback. |
+| Duplicate surface logic can drift | Static dashboard, lightweight taskpane, Next dashboard, and Vite add-in each have local behavior. | Converge on shared core route/guardrail/source envelope. |
+| MoE routing is specified but not implemented | Existing endpoints are discovery/draft/matter specific. | Add brownfield route metadata around existing handlers before adding new skills. |
+| Client-data production readiness is incomplete | No auth, tenant isolation, encrypted persistence, or retention controls in active core. | Keep local/demo posture until production gates are implemented. |
+| Legal outputs need stronger source status | Guardrails and placeholders exist, but official verification is not live. | Make source-anchor and verification status mandatory in shared response contracts. |

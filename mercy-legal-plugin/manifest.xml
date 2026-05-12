@@ -59,6 +59,66 @@
                     <SourceLocation resid="Taskpane.Url" />
                   </Action>
                 </Control>
+                <Control xsi:type="Button" id="MercyLegal.CiteAndVerify">
+                  <Label resid="MercyLegal.CiteAndVerify.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.CiteAndVerify.Label" />
+                    <Description resid="MercyLegal.CiteAndVerify.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>citeAndVerify</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.CheckEthics">
+                  <Label resid="MercyLegal.CheckEthics.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.CheckEthics.Label" />
+                    <Description resid="MercyLegal.CheckEthics.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>checkDcEthics</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.UpdateMatter">
+                  <Label resid="MercyLegal.UpdateMatter.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.UpdateMatter.Label" />
+                    <Description resid="MercyLegal.UpdateMatter.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>updateMatterContext</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.ExportWord">
+                  <Label resid="MercyLegal.ExportWord.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.ExportWord.Label" />
+                    <Description resid="MercyLegal.ExportWord.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>exportToWord</FunctionName>
+                  </Action>
+                </Control>
               </Group>
             </OfficeTab>
           </ExtensionPoint>
@@ -80,10 +140,18 @@
         <bt:String id="GetStarted.Title" DefaultValue="Mercy Legal is ready" />
         <bt:String id="MercyLegal.GroupLabel" DefaultValue="Mercy Legal" />
         <bt:String id="MercyLegal.OpenTaskpane.Label" DefaultValue="Open Mercy Legal" />
+        <bt:String id="MercyLegal.CiteAndVerify.Label" DefaultValue="Verify Cite" />
+        <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Ethics Check" />
+        <bt:String id="MercyLegal.UpdateMatter.Label" DefaultValue="Update Matter" />
+        <bt:String id="MercyLegal.ExportWord.Label" DefaultValue="Export" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Open the Mercy Legal sidebar to analyze contracts, explain clauses, draft DC-specific revisions, and generate risk reports." />
         <bt:String id="MercyLegal.OpenTaskpane.Tooltip" DefaultValue="Launch the DC-focused legal AI assistant for this Word document." />
+        <bt:String id="MercyLegal.CiteAndVerify.Tooltip" DefaultValue="Run the cite_and_verify MCP skill on the current Word selection." />
+        <bt:String id="MercyLegal.CheckEthics.Tooltip" DefaultValue="Run the check_dc_ethics MCP skill on the active Word document." />
+        <bt:String id="MercyLegal.UpdateMatter.Tooltip" DefaultValue="Update Mercy matter context from the selected Word text." />
+        <bt:String id="MercyLegal.ExportWord.Tooltip" DefaultValue="Create an Office.js-ready export payload for the selected text." />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

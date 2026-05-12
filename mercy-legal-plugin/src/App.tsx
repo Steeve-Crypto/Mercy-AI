@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge, Divider, Tab, TabList, Text } from "@fluentui/react-components";
 import { Chat24Regular, DocumentBulletList24Regular, Library24Regular, ShieldCheckmark24Regular } from "@fluentui/react-icons";
@@ -8,9 +8,10 @@ import { ClauseLibrary } from "./components/clauses/ClauseLibrary";
 import { DocumentActions } from "./components/document/DocumentActions";
 import { SidebarShell } from "./components/layout/SidebarShell";
 import { RiskSummary } from "./components/risk/RiskSummary";
+import { McpSkillPanel } from "./components/skills/McpSkillPanel";
 import { api } from "./services/api";
 import { insertTextAtCursor, readDocumentText, readSelectedText } from "./services/word";
-import { AnalysisResult, Clause, ProcessingState, SidebarView } from "./types";
+import { AgentActionResult, AnalysisResult, Clause, ProcessingState, SidebarView } from "./types";
 
 const views: Array<{ value: SidebarView; label: string; icon: JSX.Element }> = [
   { value: "risk", label: "Risk", icon: <ShieldCheckmark24Regular /> },
@@ -24,8 +25,21 @@ export function App() {
   const [processing, setProcessing] = useState<ProcessingState>("idle");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastAgentAction, setLastAgentAction] = useState<AgentActionResult | null>(null);
 
   const isThinking = processing !== "idle";
+
+  useEffect(() => {
+    const sync = async () => {
+      const synced = await api.syncOfflineAgentQueue();
+      if (synced) {
+        setSuccessMessage(`${synced} queued agent request${synced === 1 ? "" : "s"} synced`);
+      }
+    };
+    window.addEventListener("online", sync);
+    void sync();
+    return () => window.removeEventListener("online", sync);
+  }, []);
 
   const handleAnalyzeDocument = async () => {
     setProcessing("analyzing");
@@ -35,6 +49,7 @@ export function App() {
       const documentText = await readDocumentText();
       const result = await api.analyzeDocument(documentText);
       setAnalysis(result);
+      setLastAgentAction({ title: "document analysis", content: result.summary, core: result.core! });
       setActiveView("risk");
       setSuccessMessage("Document analysis complete");
     } finally {
@@ -67,6 +82,15 @@ export function App() {
     } finally {
       window.setTimeout(() => setProcessing("idle"), 220);
     }
+  };
+
+  const handleBusyChange = (busy: boolean) => {
+    setProcessing(busy ? "skill" : "idle");
+  };
+
+  const handleAgentAction = (result: AgentActionResult) => {
+    setLastAgentAction(result);
+    setSuccessMessage(`${result.title} complete`);
   };
 
   const content = useMemo(() => {
@@ -110,17 +134,19 @@ export function App() {
         </div>
         <div className="heroStats">
           <div>
-            <Text className="statValue">{analysis ? analysis.score : "--"}</Text>
-            <Text className="statLabel">Risk score</Text>
+            <Text className="statValue">{analysis?.core?.route ? Math.round(analysis.core.route.confidence * 100) : "--"}</Text>
+            <Text className="statLabel">Route confidence</Text>
           </div>
           <div>
-            <Text className="statValue">{analysis ? analysis.findings.length : "0"}</Text>
-            <Text className="statLabel">Findings</Text>
+            <Text className="statValue">{lastAgentAction?.core.cacheStatus === "queued" ? "Q" : analysis?.core?.guardrailStatus ?? "--"}</Text>
+            <Text className="statLabel">Reliability</Text>
           </div>
         </div>
       </section>
 
       <DocumentActions analysis={analysis} onAnalyzeDocument={handleAnalyzeDocument} isBusy={isThinking} compact />
+
+      <McpSkillPanel isBusy={isThinking} onBusyChange={handleBusyChange} onResult={handleAgentAction} />
 
       <TabList
         className="viewTabs"

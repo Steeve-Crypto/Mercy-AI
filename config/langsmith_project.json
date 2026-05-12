@@ -1,0 +1,27 @@
+{
+  "project_name": "mercy-legal-core-dev",
+  "endpoint": "https://api.smith.langchain.com",
+  "environment_variables": {
+    "LANGSMITH_TRACING": "true",
+    "LANGSMITH_ENDPOINT": "https://api.smith.langchain.com",
+    "LANGSMITH_PROJECT": "mercy-legal-core-dev",
+    "LANGSMITH_API_KEY": "<set locally>"
+  },
+  "local_observability_endpoint": "/v1/observability/trace",
+  "trace_categories": [
+    "router",
+    "rag",
+    "rag_eval",
+    "matter_context",
+    "discovery",
+    "drafting",
+    "guardrail"
+  ],
+  "dashboard_panels": [
+    "Router decisions + confidence",
+    "RAG retrieval quality",
+    "Guardrail violations",
+    "End-to-end latency by surface",
+    "LangSmith UI readiness"
+  ]
+}

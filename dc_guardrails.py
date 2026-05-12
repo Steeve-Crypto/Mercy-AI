@@ -4,11 +4,14 @@ import json
 import re
 from typing import Any
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
-
 from system_prompts import DC_LOCAL_RULE_SCHEMA
+
+try:
+    from fastapi import Request
+    from starlette.middleware.base import BaseHTTPMiddleware
+except Exception:
+    Request = Any
+    BaseHTTPMiddleware = object
 
 
 CITATION_PATTERN = re.compile(
@@ -98,6 +101,8 @@ class DCGuardrailMiddleware(BaseHTTPMiddleware):
     """Attach D.C. Rule 28/32 and Ethics Opinion 388 checks to JSON API output."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        from starlette.responses import JSONResponse, Response
+
         response = await call_next(request)
         content_type = response.headers.get("content-type", "")
         if not request.url.path.startswith("/v1/") or "application/json" not in content_type:

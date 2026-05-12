@@ -1,0 +1,55 @@
+# Purpose: Keep local dependencies, caches, runtime state, and sensitive
+# environment files out of Docker build contexts for the Mercy repository.
+# This file is maintained as part of Spec Kit implementation setup checks.
+# Related plan: specs/001-migrate-docs-spec/plan.md
+
+.git/
+.gitignore
+.specify/
+.agents/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Python dependencies, caches, and build output
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+
+# Node dependencies and frontend build output
+node_modules/
+**/node_modules/
+build/
+**/build/
+dist/
+**/dist/
+.next/
+**/.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Runtime data and local processing artifacts
+.districtdraft_runtime/
+legal_discovery_ai/data/uploads/
+legal_discovery_ai/data/analysis_history.json
+
+# Logs and local editor/OS state
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

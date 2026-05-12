@@ -3,8 +3,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import type { CoreIntakeSummary, CoreMatterContext, CoreRouterEnvelope } from "@/lib/core-client";
 
-export function AiAssistantPanel() {
+type AiAssistantPanelProps = {
+  router?: CoreRouterEnvelope | null;
+  matterContext?: CoreMatterContext | null;
+  intakeSummary?: CoreIntakeSummary | null;
+};
+
+export function AiAssistantPanel({ router, matterContext, intakeSummary }: AiAssistantPanelProps) {
+  const route = router?.route;
+  const envelope = router?.response_envelope;
+
   return (
     <Card id="assistant" className="overflow-hidden">
       <CardHeader className="border-b bg-white">
@@ -13,7 +23,7 @@ export function AiAssistantPanel() {
             <CardTitle>AI Legal Assistant</CardTitle>
             <CardDescription>Ask across matters, documents, and DC-specific drafting context.</CardDescription>
           </div>
-          <Badge variant="gold">Live context</Badge>
+          <Badge variant="gold">{route ? route.expert_label : "Live context"}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 bg-[#fbfcfe] p-5">
@@ -34,13 +44,61 @@ export function AiAssistantPanel() {
               The amendment creates a broader tenant indemnity than your preferred position. I would narrow it to claims arising from tenant-controlled acts, preserve landlord negligence carveouts, and add DC venue language.
             </p>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              {["3 source excerpts", "2 drafting options", "1 negotiation note"].map((item) => (
+              {[
+                route ? `${Math.round(route.confidence * 100)}% route confidence` : "3 source excerpts",
+                envelope ? `guardrails ${envelope.guardrail_status}` : "2 drafting options",
+                envelope ? `${envelope.citations.length} citation marker` : "1 negotiation note",
+              ].map((item) => (
                 <div key={item} className="flex items-center gap-2 rounded-md bg-secondary px-3 py-2 text-xs text-mercy-navy">
                   <CheckCircle2 className="size-3.5 text-[#9b740e]" />
                   {item}
                 </div>
               ))}
             </div>
+            {route && (
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                Router: {route.route_mode.replace(/_/g, " ")} via {route.selected_capability}. {route.next_action}
+                {envelope
+                  ? ` Audit ${new Date(envelope.audit_timestamp).toLocaleString()} | matter ${envelope.matter_context_snapshot.hash}.`
+                  : ""}
+              </p>
+            )}
+            {matterContext && (
+              <div className="mt-3 grid gap-2 rounded-md bg-secondary/70 p-3 text-xs text-mercy-navy sm:grid-cols-2">
+                <div>
+                  <span className="font-semibold">Matter</span>
+                  <p className="mt-1 text-muted-foreground">{matterContext.name}</p>
+                </div>
+                <div>
+                  <span className="font-semibold">Context</span>
+                  <p className="mt-1 text-muted-foreground">
+                    {matterContext.jurisdiction} / {matterContext.client_role ?? "role pending"}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-semibold">Documents</span>
+                  <p className="mt-1 text-muted-foreground">{matterContext.documents?.length ?? 0} linked</p>
+                </div>
+                <div>
+                  <span className="font-semibold">Updated</span>
+                  <p className="mt-1 text-muted-foreground">
+                    {matterContext.last_updated ? new Date(matterContext.last_updated).toLocaleString() : "pending"}
+                  </p>
+                </div>
+                {intakeSummary && (
+                  <>
+                    <div>
+                      <span className="font-semibold">Conflict</span>
+                      <p className="mt-1 text-muted-foreground">{intakeSummary.conflict_status.replace(/_/g, " ")}</p>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Scope</span>
+                      <p className="mt-1 text-muted-foreground">{intakeSummary.scope_status.replace(/_/g, " ")}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="rounded-lg border bg-white p-3">

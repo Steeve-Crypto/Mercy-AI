@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Mercy Source-of-Truth Product Specification
+# Specification Quality Checklist: Mercy Legal AI Product Source of Truth
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-11
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: 2026-05-11  
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,8 +31,9 @@
 
 ## Notes
 
-- Validation iteration 1 passed.
-- The specification intentionally names product surfaces such as "shared
-  intelligence core", "standalone platform", and "Word add-in" because those are
-  user-facing product boundaries in the migrated documentation, not implementation
-  instructions.
+- Validation iteration 1 passed after consolidating legacy product, architecture,
+  compliance, guardrail, web, Word add-in, discovery, and Spec Kit artifacts into
+  the product source-of-truth specification.
+- Product architecture names such as Shared Intelligence Core, Standalone
+  Platform, Word Drafting Sidekick, Product Dashboard, and Legal Discovery Engine
+  are user-facing product boundaries, not implementation instructions.

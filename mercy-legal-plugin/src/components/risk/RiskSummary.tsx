@@ -2,6 +2,7 @@ import { Badge, Button, Card, ProgressBar, Text } from "@fluentui/react-componen
 import { CheckmarkCircle24Regular, Library24Regular, Sparkle24Regular } from "@fluentui/react-icons";
 import { motion } from "framer-motion";
 import { AnalysisResult, RiskLevel } from "../../types";
+import { ReliabilitySignals } from "../metadata/ReliabilitySignals";
 import "./RiskSummary.css";
 
 interface RiskSummaryProps {
@@ -58,6 +59,40 @@ export function RiskSummary({ analysis, isBusy, onAnalyzeDocument }: RiskSummary
         </div>
         <ProgressBar value={analysis.score / 100} thickness="large" />
         <Text className="muted">{analysis.summary}</Text>
+        {analysis.core?.route && (
+          <Text className="muted">
+            Router: {analysis.core.route.expert_label} / {analysis.core.route.route_mode.replace(/_/g, " ")} /{" "}
+            {Math.round(analysis.core.route.confidence * 100)}% confidence. Guardrails:{" "}
+            {analysis.core.guardrailStatus ?? analysis.core.route.guardrail_status}.
+          </Text>
+        )}
+        {analysis.core?.citations?.length ? (
+          <Text className="muted">
+            Citation status: {analysis.core.citations.map((citation) => citation.verification_status).join(", ")}.
+          </Text>
+        ) : null}
+        {analysis.core?.envelope && (
+          <Text className="muted">
+            Ethics: Opinion {analysis.core.envelope.dc_ethics_metadata.dc_bar_ethics_opinion}; matter{" "}
+            {analysis.core.envelope.matter_context_snapshot.hash}; audit{" "}
+            {new Date(analysis.core.envelope.audit_timestamp).toLocaleString()}.
+          </Text>
+        )}
+        {analysis.core?.matterContext && (
+          <Text className="muted">
+            Current matter: {analysis.core.matterContext.name} / {analysis.core.matterContext.jurisdiction} /{" "}
+            {analysis.core.matterContext.documents?.length ?? 0} document reference.
+          </Text>
+        )}
+        {analysis.core?.intakeSummary && (
+          <Text className="muted">
+            Intake: conflict {analysis.core.intakeSummary.conflict_status.replace(/_/g, " ")}, scope{" "}
+            {analysis.core.intakeSummary.scope_status.replace(/_/g, " ")},{" "}
+            {analysis.core.intakeSummary.missing_information_count} open item
+            {analysis.core.intakeSummary.missing_information_count === 1 ? "" : "s"}.
+          </Text>
+        )}
+        <ReliabilitySignals core={analysis.core} />
       </div>
 
       {analysis.findings.map((finding, index) => (

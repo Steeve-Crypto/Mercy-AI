@@ -73,6 +73,15 @@ def run_discovery(document_path: str, document_text: str | None = None) -> dict[
         "engine": "legal_discovery_ai.run_crew",
         "document_path": document_path,
         "facts": facts,
+        "citations": [
+            {
+                "label": Path(document_path).name,
+                "source_type": "user_provided_document",
+                "verification_status": "source_supplied_unverified",
+                "note": "Document facts are user-supplied and require attorney verification against the source file.",
+                "provenance": {"document_path": document_path},
+            }
+        ],
         "premium_billing_hook": _billing_hook("discovery_analysis", 180, 15),
     }
 
@@ -165,6 +174,15 @@ def draft_from_facts(
         "draft_type": draft_type,
         "draft": draft,
         "human_review_required": True,
+        "citations": [
+            {
+                "label": "[VERIFY CITE]",
+                "source_type": "placeholder",
+                "verification_status": "missing_required",
+                "note": "Draft output must be checked against official authority and record citations.",
+                "provenance": {"engine": "clerk_os", "draft_type": draft_type},
+            }
+        ],
         "premium_billing_hook": _billing_hook("appellate_drafting", 240, 30),
     }
 

@@ -1,0 +1,9 @@
+# Purpose: Keep generated dependencies and build artifacts out of ESLint scans
+# for the Mercy production-oriented Word add-in.
+# Related setup check: specs/001-migrate-docs-spec/tasks.md PD002
+
+node_modules/
+dist/
+build/
+coverage/
+*.min.js

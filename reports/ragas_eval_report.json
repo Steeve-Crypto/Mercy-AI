@@ -1,0 +1,901 @@
+{
+  "aggregate": {
+    "answer_correctness": 0.6697,
+    "answer_relevancy": 0.4414,
+    "context_precision": 0.3167,
+    "context_recall": 1.0,
+    "failed": 0,
+    "faithfulness": 0.9938,
+    "overall": 0.6843,
+    "pass_rate": 1.0
+  },
+  "ci": {
+    "note": "Deterministic RAGAS-style metrics; can be replaced by the external ragas package when CI secrets and model access are configured.",
+    "requires_llm": false,
+    "requires_network": false,
+    "runnable_locally": true
+  },
+  "dataset_path": "C:\\Users\\12404\\Downloads\\Mercy AI\\datasets\\dc_golden_dataset.jsonl",
+  "dataset_size": 24,
+  "eval_version": "ragas-eval-1.0",
+  "generated_at": "2026-05-12T12:36:50.095080+00:00",
+  "metrics": [
+    "faithfulness",
+    "answer_relevancy",
+    "context_precision",
+    "context_recall",
+    "answer_correctness"
+  ],
+  "pass_threshold": 0.2,
+  "passed": true,
+  "rows": [
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "id": "dc-golden-001",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6625,
+        "answer_relevancy": 0.4533,
+        "context_precision": 0.6,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What D.C. ethics controls should apply before using AI-generated legal drafting with a client?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_admin_record_review",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.1"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_1_competence"
+      ],
+      "id": "dc-golden-002",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7429,
+        "answer_relevancy": 0.4771,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "Which D.C. professional responsibility rule is most directly tied to attorney competence when reviewing AI-assisted legal work?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_6_confidentiality",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality"
+      ],
+      "id": "dc-golden-003",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.625,
+        "answer_relevancy": 0.4057,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What confidentiality rule should guide handling selected Word text and matter facts in a D.C. legal AI workflow?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_1_1_competence",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_5_3_supervision",
+        "dc_circuit_brief_verification"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "expected_source_ids": [
+        "dc_rule_5_3_supervision"
+      ],
+      "id": "dc-golden-004",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.5667,
+        "answer_relevancy": 0.5815,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "Why should Mercy require lawyer supervision before external use of AI-assisted legal work in D.C.?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. administrative record verification",
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_admin_record_review",
+        "dc_circuit_brief_verification"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification.",
+      "expected_citations": [
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "expected_source_ids": [
+        "dc_circuit_brief_verification"
+      ],
+      "id": "dc-golden-005",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7,
+        "answer_relevancy": 0.3927,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 0.9714
+      },
+      "pass_threshold": true,
+      "question": "What verification tasks should be flagged for a D.C. Circuit brief generated with AI assistance?",
+      "retrieved_citations": [
+        "D.C. Cir. Rules and Handbook",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_circuit_brief_verification",
+        "dc_rule_5_3_supervision",
+        "dc_admin_record_review",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook.",
+      "expected_citations": [
+        "D.C. administrative record verification"
+      ],
+      "expected_source_ids": [
+        "dc_admin_record_review"
+      ],
+      "id": "dc-golden-006",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6727,
+        "answer_relevancy": 0.37,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 0.9714
+      },
+      "pass_threshold": true,
+      "question": "How should unsupported factual assertions be handled in D.C. administrative-record drafting?",
+      "retrieved_citations": [
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "retrieved_source_ids": [
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality",
+        "dc_circuit_brief_verification",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-007",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6824,
+        "answer_relevancy": 0.42,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What sources should ground a D.C. legal AI confidentiality warning for client documents?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_1_1_competence",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_5_3_supervision",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-008",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.8615,
+        "answer_relevancy": 0.5745,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What D.C. source supports a warning that AI citations and quotes need attorney verification?",
+      "retrieved_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_circuit_brief_verification",
+        "dc_rule_1_1_competence",
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook. Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1.",
+      "expected_citations": [
+        "D.C. Cir. Rules and Handbook",
+        "D.C. administrative record verification"
+      ],
+      "expected_source_ids": [
+        "dc_circuit_brief_verification",
+        "dc_admin_record_review"
+      ],
+      "id": "dc-golden-009",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7692,
+        "answer_relevancy": 0.3422,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should the router retrieve for a D.C. Circuit record-reference review?",
+      "retrieved_citations": [
+        "D.C. Cir. Rules and Handbook",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "retrieved_source_ids": [
+        "dc_circuit_brief_verification",
+        "dc_admin_record_review",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-010",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6824,
+        "answer_relevancy": 0.5745,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What D.C. ethics source should be retrieved for fee reasonableness concerns in AI-assisted work?",
+      "retrieved_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_rule_1_6_confidentiality",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-011",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6526,
+        "answer_relevancy": 0.4836,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should a D.C. AI drafting workflow say about training use and confidentiality posture?",
+      "retrieved_citations": [
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "retrieved_source_ids": [
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality",
+        "dc_ethics_opinion_388_ai",
+        "dc_circuit_brief_verification",
+        "dc_rule_5_3_supervision"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality"
+      ],
+      "id": "dc-golden-012",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7231,
+        "answer_relevancy": 0.37,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 0.9643
+      },
+      "pass_threshold": true,
+      "question": "Which D.C. rule supports treating matter context as confidential by default?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_circuit_brief_verification",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-013",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7818,
+        "answer_relevancy": 0.3508,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should the RAG system retrieve for a question about competent attorney review of AI output?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-014",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.6824,
+        "answer_relevancy": 0.4771,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What source should support a reminder that AI work is not final legal advice without lawyer review?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "expected_source_ids": [
+        "dc_rule_5_3_supervision"
+      ],
+      "id": "dc-golden-015",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.5667,
+        "answer_relevancy": 0.495,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "Which source should be retrieved for D.C. nonlawyer-assistance supervision in an AI workflow?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook. Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "expected_source_ids": [
+        "dc_circuit_brief_verification"
+      ],
+      "id": "dc-golden-016",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7818,
+        "answer_relevancy": 0.4533,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 0.9714
+      },
+      "pass_threshold": true,
+      "question": "For a D.C. appellate drafting task, what should be verified before filing?",
+      "retrieved_citations": [
+        "D.C. Cir. Rules and Handbook",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_circuit_brief_verification",
+        "dc_admin_record_review",
+        "dc_rule_5_3_supervision",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6.",
+      "expected_citations": [
+        "D.C. administrative record verification"
+      ],
+      "expected_source_ids": [
+        "dc_admin_record_review"
+      ],
+      "id": "dc-golden-017",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.56,
+        "answer_relevancy": 0.4836,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should a RAG answer do when the only support is an internal administrative-record control?",
+      "retrieved_citations": [
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "retrieved_source_ids": [
+        "dc_admin_record_review",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_circuit_brief_verification"
+      ],
+      "id": "dc-golden-018",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7,
+        "answer_relevancy": 0.7033,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What source should support a D.C. legal AI warning about verifying authorities and record support?",
+      "retrieved_citations": [
+        "D.C. administrative record verification",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_admin_record_review",
+        "dc_circuit_brief_verification",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-019",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.5412,
+        "answer_relevancy": 0.4836,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "Which D.C. source should ground an AI workflow warning for selected confidential client text?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-020",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.7,
+        "answer_relevancy": 0.37,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What retrieval grounding should support a D.C. AI billing report warning?",
+      "retrieved_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "retrieved_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_admin_record_review",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_5_3_supervision"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3. Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_5_3_supervision"
+      ],
+      "id": "dc-golden-021",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.72,
+        "answer_relevancy": 0.3422,
+        "context_precision": 0.8,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What sources should be retrieved for a general D.C. legal AI governance prompt?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_6_confidentiality",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. Client and matter data must be treated as confidential by default. Source: D.C. R. Prof'l Conduct 1.6. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_rule_1_6_confidentiality",
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-022",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.4923,
+        "answer_relevancy": 0.2867,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should be retrieved for a D.C. tenant lease clause review involving confidential selected text?",
+      "retrieved_citations": [
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. Bar Ethics Op. 388",
+        "D.C. administrative record verification"
+      ],
+      "retrieved_source_ids": [
+        "dc_rule_1_1_competence",
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_5_3_supervision",
+        "dc_ethics_opinion_388_ai",
+        "dc_admin_record_review"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Administrative-record drafting should tie facts to record support and flag missing support. Source: D.C. administrative record verification. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. D.C. Circuit briefs need verified authorities, quotes, record references, and procedure checks. Source: D.C. Cir. Rules and Handbook.",
+      "expected_citations": [
+        "D.C. administrative record verification",
+        "D.C. Cir. Rules and Handbook"
+      ],
+      "expected_source_ids": [
+        "dc_admin_record_review",
+        "dc_circuit_brief_verification"
+      ],
+      "id": "dc-golden-023",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.64,
+        "answer_relevancy": 0.4836,
+        "context_precision": 0.4,
+        "context_recall": 1.0,
+        "faithfulness": 0.973
+      },
+      "pass_threshold": true,
+      "question": "What should be retrieved when drafting a D.C. administrative appeal argument from agency findings?",
+      "retrieved_citations": [
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. Cir. Rules and Handbook",
+        "D.C. R. Prof'l Conduct 1.6",
+        "D.C. R. Prof'l Conduct 5.3"
+      ],
+      "retrieved_source_ids": [
+        "dc_admin_record_review",
+        "dc_rule_1_1_competence",
+        "dc_circuit_brief_verification",
+        "dc_rule_1_6_confidentiality",
+        "dc_rule_5_3_supervision"
+      ],
+      "verification_status": "warn"
+    },
+    {
+      "answer": "Generative AI legal work requires attorney supervision, confidentiality, source verification, and fee review. Source: D.C. Bar Ethics Op. 388. Attorney competence remains required when using AI-assisted legal work. Source: D.C. R. Prof'l Conduct 1.1. AI-assisted legal work should remain under lawyer supervision. Source: D.C. R. Prof'l Conduct 5.3.",
+      "expected_citations": [
+        "D.C. Bar Ethics Op. 388"
+      ],
+      "expected_source_ids": [
+        "dc_ethics_opinion_388_ai"
+      ],
+      "id": "dc-golden-024",
+      "issues": [],
+      "metrics": {
+        "answer_correctness": 0.5667,
+        "answer_relevancy": 0.22,
+        "context_precision": 0.2,
+        "context_recall": 1.0,
+        "faithfulness": 1.0
+      },
+      "pass_threshold": true,
+      "question": "What should the system retrieve before producing a source-grounded D.C. research answer?",
+      "retrieved_citations": [
+        "D.C. Bar Ethics Op. 388",
+        "D.C. R. Prof'l Conduct 1.1",
+        "D.C. R. Prof'l Conduct 5.3",
+        "D.C. administrative record verification",
+        "D.C. R. Prof'l Conduct 1.6"
+      ],
+      "retrieved_source_ids": [
+        "dc_ethics_opinion_388_ai",
+        "dc_rule_1_1_competence",
+        "dc_rule_5_3_supervision",
+        "dc_admin_record_review",
+        "dc_rule_1_6_confidentiality"
+      ],
+      "verification_status": "warn"
+    }
+  ]
+}
