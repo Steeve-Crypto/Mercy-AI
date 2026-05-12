@@ -6,7 +6,7 @@ from typing import Any
 
 from dc_knowledge_rag import retrieve_dc_knowledge
 from dc_guardrails import evaluate_dc_guardrails
-from mercy_context import get_matter_context
+from mercy_context import get_langgraph_runtime, get_matter_context
 from observability import record_guardrail_trace, record_route_trace
 from response_envelope import normalize_guardrail_status
 
@@ -686,6 +686,7 @@ def _knowledge_context_for_route(matter_context: dict[str, Any]) -> dict[str, An
             "available": False,
             "results": [],
             "verification": {"status": "not_requested"},
+            "agent_graph": get_langgraph_runtime(),
         }
     return {
         "available": bool(knowledge.get("results")),
@@ -694,6 +695,7 @@ def _knowledge_context_for_route(matter_context: dict[str, Any]) -> dict[str, An
         "verification": knowledge.get("verification"),
         "backend_status": knowledge.get("backend_status"),
         "graph_context": knowledge.get("graph_context"),
+        "agent_graph": get_langgraph_runtime(),
     }
 
 

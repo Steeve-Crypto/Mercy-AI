@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import os
 import unittest
+
+os.environ.setdefault("MERCY_ENV", "local")
 
 from agent_network import (
     AGENT_NETWORK_VERSION,
+    LANGGRAPH_AVAILABLE,
+    _local_langgraph_fallback_allowed,
     check_dc_ethics,
     cite_and_verify,
     execute_agent_task,
+    langgraph_runtime_metadata,
     mcp_skill_manifest,
 )
 from legal_task_router import delegate_to_agent_network
@@ -22,6 +28,11 @@ class AgentNetworkTests(unittest.TestCase):
         agent_names = {agent["name"] for agent in manifest["agents"]}
 
         self.assertEqual(manifest["agent_network_version"], AGENT_NETWORK_VERSION)
+        self.assertIn("available", manifest["langgraph"])
+        self.assertIn("runtime", manifest["langgraph"])
+        if LANGGRAPH_AVAILABLE:
+            self.assertTrue(manifest["langgraph"]["available"])
+            self.assertEqual(manifest["langgraph"]["runtime"], "native_state_graph")
         self.assertIn("ResearchAgent", agent_names)
         self.assertIn("DraftingAgent", agent_names)
         self.assertIn("ComplianceAgent", agent_names)
@@ -66,6 +77,15 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertIn("cite_and_verify", result["mcp_skills_used"])
         self.assertTrue(result["citations"])
         self.assertTrue(result["grounding_policy"]["strict_grounding"])
+        self.assertIn("available", result["langgraph_runtime"])
+
+    def test_langgraph_runtime_policy_is_fail_closed_outside_local(self) -> None:
+        self.assertTrue(_local_langgraph_fallback_allowed())
+        runtime = langgraph_runtime_metadata(graph_compiled=LANGGRAPH_AVAILABLE)
+        self.assertIn("fallback_allowed", runtime)
+        if not LANGGRAPH_AVAILABLE:
+            self.assertTrue(runtime["fallback_active"])
+            self.assertEqual(runtime["runtime"], "compatible_deterministic_state_graph")
 
     def test_intake_agent_updates_shared_matter_context(self) -> None:
         matter_id = "test-agent-network-matter"

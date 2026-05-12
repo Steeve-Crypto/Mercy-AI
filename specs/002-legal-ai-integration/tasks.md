@@ -88,9 +88,10 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Added `get_current_tenant_user`, protected core `/v1/*` legal endpoints, threaded tenant/user context into matter context, router, RAG, and agent execution, and added cross-tenant denial audit traces.
    - **Dependencies**: PD003, PD006, PD028.
 
-3. [ ] PD030 [Core Agents] Activate real LangGraph runtime with local-only fallback.
+3. [X] PD030 [Core Agents] Activate real LangGraph runtime with local-only fallback.
    - **Target Paths**: `requirements.txt`, `agent_network.py`, `tests/test_agent_network.py`, `.env.example`.
    - **Definition of Done**: `langgraph` is an installed core dependency, native `StateGraph` execution is used when available, non-local startup fails closed if LangGraph is unavailable, and tests cover native and local fallback modes.
+   - **Result**: Added LangGraph dependencies, installed them in the core venv, compiled a native `StateGraph` when available, blocked non-local startup without LangGraph, kept fallback local/dev only, and exposed runtime/version metadata through `/v1/agent/skills`.
    - **Dependencies**: PD026.
 
 4. [ ] PD031 [Core RAG] Connect configured vector and graph backend adapters.

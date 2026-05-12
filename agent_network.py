@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from importlib import metadata
 from typing import Any, Callable
 
 from dc_guardrails import evaluate_dc_guardrails
 from dc_knowledge_rag import retrieve_dc_knowledge
-from mercy_context import get_matter_context, update_matter_context as persist_matter_context
+from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from observability import trace_event, trace_span
 from ragas_eval import METRICS as RAGAS_METRICS
 
@@ -15,10 +17,12 @@ try:
     from langgraph.graph import END, StateGraph  # type: ignore
 
     LANGGRAPH_AVAILABLE = True
+    LANGGRAPH_IMPORT_ERROR = None
 except Exception:
     END = "__end__"
     StateGraph = None
     LANGGRAPH_AVAILABLE = False
+    LANGGRAPH_IMPORT_ERROR = "langgraph_import_failed"
 
 
 AGENT_NETWORK_VERSION = "agent-network-langgraph-1.0"
@@ -30,6 +34,59 @@ SUPPORTED_EXPERTS = {
     "intake": "IntakeAgent",
     "citation_verifier": "CitationVerifierAgent",
 }
+
+
+class LangGraphRuntimeUnavailable(RuntimeError):
+    pass
+
+
+def _local_langgraph_fallback_allowed() -> bool:
+    return os.getenv("MERCY_ENV") == "local" or os.getenv("MERCY_AUTH_MODE") == "dev"
+
+
+def _package_version(package_name: str) -> str | None:
+    try:
+        return metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def langgraph_runtime_metadata(graph_compiled: bool = False) -> dict[str, Any]:
+    fallback_allowed = _local_langgraph_fallback_allowed()
+    if LANGGRAPH_AVAILABLE:
+        return {
+            "available": True,
+            "runtime": "native_state_graph" if graph_compiled else "native_state_graph_imported",
+            "version": _package_version("langgraph"),
+            "checkpoint_version": _package_version("langgraph-checkpoint"),
+            "langchain_core_version": _package_version("langchain-core"),
+            "fallback_allowed": fallback_allowed,
+            "fallback_active": False,
+            "compile_status": "compiled" if graph_compiled else "pending",
+        }
+    return {
+        "available": False,
+        "runtime": "compatible_deterministic_state_graph" if fallback_allowed else "unavailable",
+        "version": None,
+        "checkpoint_version": _package_version("langgraph-checkpoint"),
+        "langchain_core_version": _package_version("langchain-core"),
+        "fallback_allowed": fallback_allowed,
+        "fallback_active": fallback_allowed,
+        "compile_status": "fallback" if fallback_allowed else "blocked",
+        "error": LANGGRAPH_IMPORT_ERROR,
+    }
+
+
+def _enforce_langgraph_runtime_policy() -> None:
+    if LANGGRAPH_AVAILABLE or _local_langgraph_fallback_allowed():
+        return
+    raise LangGraphRuntimeUnavailable(
+        "LangGraph is required when MERCY_ENV is not 'local' and MERCY_AUTH_MODE is not 'dev'. "
+        "Install langgraph, langgraph-checkpoint, and langchain-core or run only in explicit local/dev mode."
+    )
+
+
+_enforce_langgraph_runtime_policy()
 
 
 @dataclass
@@ -531,6 +588,7 @@ class CitationVerifierAgent(BaseLegalAgent):
 
 class AgentNetwork:
     def __init__(self) -> None:
+        _enforce_langgraph_runtime_policy()
         self.skills = _skill_registry()
         self.agents: dict[str, BaseLegalAgent] = {
             "research": ResearchAgent(self.skills),
@@ -540,15 +598,14 @@ class AgentNetwork:
             "citation_verifier": CitationVerifierAgent(self.skills),
         }
         self._graph = self._build_langgraph()
+        self._langgraph_runtime = langgraph_runtime_metadata(graph_compiled=self._graph is not None)
+        set_langgraph_runtime(self._langgraph_runtime)
 
     def manifest(self) -> dict[str, Any]:
         return {
             "manifest_version": MCP_MANIFEST_VERSION,
             "agent_network_version": AGENT_NETWORK_VERSION,
-            "langgraph": {
-                "available": LANGGRAPH_AVAILABLE,
-                "runtime": "native_state_graph" if LANGGRAPH_AVAILABLE else "compatible_deterministic_state_graph",
-            },
+            "langgraph": dict(self._langgraph_runtime),
             "agents": [agent.metadata() for agent in self.agents.values()],
             "skills": [skill.metadata() for skill in self.skills.values()],
             "strict_grounding": True,
@@ -576,6 +633,8 @@ class AgentNetwork:
         expert = str(route.get("expert") or "compliance_guardrails")
         agent = self.agents.get(expert) or self.agents["compliance_guardrails"]
 
+        context["langgraph_runtime"] = dict(self._langgraph_runtime)
+
         with trace_span("agent_network_execute", str(context.get("surface_context") or "agent_network"), "agent", route=route, matter_reference=context.get("matter_id")) as span:
             state = {
                 "task": task,
@@ -589,7 +648,7 @@ class AgentNetwork:
             status = str(result.get("status") or "warn")
             response = {
                 "agent_network_version": AGENT_NETWORK_VERSION,
-                "langgraph_runtime": self.manifest()["langgraph"],
+                "langgraph_runtime": dict(self._langgraph_runtime),
                 "selected_agent": agent.name,
                 "selected_expert": expert,
                 "task": task,
@@ -604,7 +663,13 @@ class AgentNetwork:
             }
             span["route"] = route
             span["rag"] = result.get("rag") if isinstance(result.get("rag"), dict) else None
-            span["metadata"] = {"agent": agent.name, "status": status, "skill_count": len(response["mcp_skills_used"])}
+            span["metadata"] = {
+                "agent": agent.name,
+                "status": status,
+                "skill_count": len(response["mcp_skills_used"]),
+                "langgraph_runtime": self._langgraph_runtime.get("runtime"),
+                "langgraph_available": self._langgraph_runtime.get("available"),
+            }
             trace_event(
                 name="agent_network_result",
                 surface_context=str(context.get("surface_context") or "agent_network"),
@@ -621,12 +686,24 @@ class AgentNetwork:
         if not LANGGRAPH_AVAILABLE or StateGraph is None:
             return None
         try:
-            graph = StateGraph(dict)
-            graph.add_node("agent", lambda state: {**state, "agent_result": state["agent"].execute(state)})
-            graph.set_entry_point("agent")
-            graph.add_edge("agent", END)
-            return graph.compile()
-        except Exception:
+            with trace_span("langgraph_compile", "agent_network", "agent_graph", metadata=langgraph_runtime_metadata()) as span:
+                graph = StateGraph(dict)
+                graph.add_node("agent", lambda state: {**state, "agent_result": state["agent"].execute(state)})
+                graph.set_entry_point("agent")
+                graph.add_edge("agent", END)
+                compiled = graph.compile()
+                span["metadata"] = langgraph_runtime_metadata(graph_compiled=True)
+                return compiled
+        except Exception as exc:
+            if not _local_langgraph_fallback_allowed():
+                raise LangGraphRuntimeUnavailable("LangGraph compilation failed in non-local mode.") from exc
+            trace_event(
+                name="langgraph_compile_fallback",
+                surface_context="agent_network",
+                category="agent_graph",
+                guardrail_status="warn",
+                metadata={**langgraph_runtime_metadata(), "error": str(exc)},
+            )
             return None
 
     def _run_graph(self, state: dict[str, Any], agent: BaseLegalAgent) -> dict[str, Any]:
@@ -635,8 +712,9 @@ class AgentNetwork:
                 graph_state = self._graph.invoke({**state, "agent": agent})
                 if isinstance(graph_state, dict) and isinstance(graph_state.get("agent_result"), dict):
                     return graph_state["agent_result"]
-            except Exception:
-                pass
+            except Exception as exc:
+                if not _local_langgraph_fallback_allowed():
+                    raise LangGraphRuntimeUnavailable("LangGraph execution failed in non-local mode.") from exc
         return agent.execute(state)
 
 

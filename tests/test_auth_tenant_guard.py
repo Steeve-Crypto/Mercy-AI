@@ -4,6 +4,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+os.environ.setdefault("MERCY_ENV", "local")
+
 try:
     from fastapi.testclient import TestClient
 

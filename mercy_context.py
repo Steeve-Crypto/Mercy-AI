@@ -11,6 +11,12 @@ from observability import trace_event
 PRODUCT_NAME = "Mercy"
 CORE_NAME = "Mercy Shared Intelligence Core"
 DEFAULT_TIER = "free"
+_LANGGRAPH_RUNTIME: dict[str, Any] = {
+    "available": False,
+    "runtime": "not_initialized",
+    "version": None,
+    "fallback_allowed": False,
+}
 
 
 @dataclass
@@ -72,6 +78,15 @@ def tenant_context_payload(tenant_context: dict[str, Any] | None) -> dict[str, A
         "tenant_id": auth["tenant_id"],
         "user_id": auth["user_id"],
     }
+
+
+def set_langgraph_runtime(runtime: dict[str, Any]) -> None:
+    _LANGGRAPH_RUNTIME.clear()
+    _LANGGRAPH_RUNTIME.update(dict(runtime))
+
+
+def get_langgraph_runtime() -> dict[str, Any]:
+    return dict(_LANGGRAPH_RUNTIME)
 
 
 def _audit_access_denied(matter_id: str, tenant_context: dict[str, Any] | None, owner_tenant_id: str | None) -> None:
