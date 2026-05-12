@@ -1,7 +1,9 @@
 import unittest
 
 from legal_task_router import moe_route
-from mercy_context import get_matter_context, update_matter_context
+from mercy_context import MatterTenantAccessError, get_matter_context, update_matter_context
+
+TEST_AUTH = {"tenant_id": "tenant-test", "user_id": "user-test", "auth_mode": "unit_test"}
 
 
 class MatterContextTests(unittest.TestCase):
@@ -20,10 +22,11 @@ class MatterContextTests(unittest.TestCase):
                 "documents": [{"document_id": "doc-001", "title": "Lease amendment"}],
                 "missing_information": ["insurance schedule"],
                 "source": "unit_test",
-            }
+            },
+            tenant_context=TEST_AUTH,
         )
 
-        stored = get_matter_context(matter_id)
+        stored = get_matter_context(matter_id, tenant_context=TEST_AUTH)
 
         self.assertIsNotNone(stored)
         self.assertEqual(updated["matter_id"], matter_id)
@@ -48,18 +51,37 @@ class MatterContextTests(unittest.TestCase):
                 "documents": [{"document_id": "agency-order", "title": "Final agency order"}],
                 "requested_relief": "vacatur and remand",
                 "source": "unit_test",
-            }
+            },
+            tenant_context=TEST_AUTH,
         )
 
         decision = moe_route(
             query="Draft a concise D.C. Circuit argument section.",
-            matter_context={"matter_id": matter_id, "surface_context": "unit_test"},
+            matter_context={"matter_id": matter_id, "surface_context": "unit_test", "auth_context": TEST_AUTH},
             user_type="solo",
         )
 
         self.assertEqual(decision.expert, "drafting")
         self.assertNotIn("facts_or_document_context", decision.missing_inputs)
         self.assertIn(decision.guardrail_status, {"pass", "warn"})
+
+    def test_cross_tenant_matter_context_access_is_blocked(self) -> None:
+        matter_id = "test-cross-tenant-context"
+        update_matter_context(
+            {
+                "matter_id": matter_id,
+                "client_id": "client-tenant-a",
+                "matter_name": "Tenant A matter",
+                "source": "unit_test",
+            },
+            tenant_context=TEST_AUTH,
+        )
+
+        with self.assertRaises(MatterTenantAccessError):
+            get_matter_context(
+                matter_id,
+                tenant_context={"tenant_id": "other-tenant", "user_id": "other-user", "auth_mode": "unit_test"},
+            )
 
 
 if __name__ == "__main__":

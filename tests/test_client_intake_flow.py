@@ -6,6 +6,8 @@ from client_intake_flow import run_full_intake_flow
 from legal_task_router import moe_route
 from prompts.intake import build_intake_prompt_library
 
+TEST_AUTH = {"tenant_id": "tenant-intake", "user_id": "user-intake", "auth_mode": "unit_test"}
+
 
 class ClientIntakeFlowTests(unittest.TestCase):
     def test_prompt_library_contains_required_dc_intake_prompts(self) -> None:
@@ -46,6 +48,7 @@ class ClientIntakeFlowTests(unittest.TestCase):
                 },
                 "requested_relief": "Narrow indemnity and venue provisions.",
                 "surface_context": "unit_test_full_intake",
+                "auth_context": TEST_AUTH,
             }
         )
 

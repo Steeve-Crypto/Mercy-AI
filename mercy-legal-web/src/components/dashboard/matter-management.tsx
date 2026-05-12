@@ -10,9 +10,16 @@ type MatterManagementProps = {
   coreOnline?: boolean;
   currentMatter?: CoreMatter | null;
   intakeSummary?: CoreIntakeSummary | null;
+  demoOnly?: boolean;
 };
 
-export function MatterManagement({ coreMatters = [], coreOnline = false, currentMatter, intakeSummary }: MatterManagementProps) {
+export function MatterManagement({
+  coreMatters = [],
+  coreOnline = false,
+  currentMatter,
+  intakeSummary,
+  demoOnly = false,
+}: MatterManagementProps) {
   const hasLiveMatters = coreOnline && coreMatters.length > 0;
   const displayedMatters = hasLiveMatters
     ? coreMatters.map((matter) => ({
@@ -43,11 +50,19 @@ export function MatterManagement({ coreMatters = [], coreOnline = false, current
       <CardContent className="space-y-3">
         {currentMatter && (
           <div className="rounded-md border border-[#d9c27a] bg-[#fffaf0] p-4 text-sm text-mercy-navy">
-            <p className="font-semibold">Current context: {currentMatter.name}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold">Current context: {currentMatter.name}</p>
+              {demoOnly && <Badge variant="outline">Demo-only</Badge>}
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {currentMatter.client_name ?? currentMatter.client_id} / {currentMatter.client_role ?? "role pending"} /{" "}
               {currentMatter.requested_relief ?? "requested relief pending"}
             </p>
+            {demoOnly && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Local sample context only. Dashboard render did not create or update a core matter.
+              </p>
+            )}
             {intakeSummary && (
               <p className="mt-2 text-xs text-muted-foreground">
                 Intake: conflict {intakeSummary.conflict_status.replace(/_/g, " ")}, scope{" "}

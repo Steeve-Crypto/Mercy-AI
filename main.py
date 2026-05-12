@@ -7,18 +7,20 @@ from typing import Any
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
 from dc_knowledge_rag import retrieve_dc_knowledge
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from bridge import draft_from_facts, run_discovery
+from auth_context import TenantUser, get_current_tenant_user
 from dc_guardrails import DCGuardrailMiddleware
 from legal_task_router import moe_route
 from mercy_context import (
     MATTERS,
     CORE_NAME,
+    MatterTenantAccessError,
     PRODUCT_NAME,
     build_billing_report,
     get_matter_context,
@@ -183,8 +185,23 @@ class AgentExecuteRequest(BaseModel):
     surface_context: str = Field("core_agent", description="Calling surface name.")
 
 
-def _matter_context(matter_id: str | None) -> dict[str, Any]:
-    return get_matter_context(matter_id) or {}
+def _tenant_context(tenant_user: TenantUser) -> dict[str, Any]:
+    return tenant_user.to_context()
+
+
+def _auth_metadata(tenant_user: TenantUser) -> dict[str, Any]:
+    return {
+        "tenant_id": tenant_user.tenant_id,
+        "user_id": tenant_user.user_id,
+        "auth_mode": tenant_user.auth_mode,
+    }
+
+
+def _matter_context(matter_id: str | None, tenant_user: TenantUser) -> dict[str, Any]:
+    try:
+        return get_matter_context(matter_id, tenant_context=_tenant_context(tenant_user)) or {}
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
 
 
 def _route_payload(decision: Any) -> dict[str, Any]:
@@ -194,14 +211,18 @@ def _route_payload(decision: Any) -> dict[str, Any]:
 def _attach_route(
     result: dict[str, Any],
     route: dict[str, Any],
+    tenant_user: TenantUser,
     matter_id: str | None = None,
     matter_context: dict[str, Any] | None = None,
     source: str = "core",
 ) -> dict[str, Any]:
-    context = matter_context or _matter_context(matter_id)
+    context = matter_context or _matter_context(matter_id, tenant_user)
     wrapped = attach_response_envelope(result, route, context, source=source)
     if matter_id:
-        MATTERS.attach_route(matter_id, route)
+        try:
+            MATTERS.attach_route(matter_id, route, tenant_context=_tenant_context(tenant_user))
+        except MatterTenantAccessError as exc:
+            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
     return wrapped
 
 
@@ -211,12 +232,15 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/v1/product/capabilities")
-async def capabilities() -> dict[str, Any]:
+async def capabilities(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
     return product_capabilities()
 
 
 @app.post("/v1/matters")
-async def create_matter(request: MatterCreateRequest) -> dict[str, Any]:
+async def create_matter(
+    request: MatterCreateRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
     tier = request.tier if request.tier in {"free", "premium"} else "free"
     return MATTERS.create(
         name=request.name,
@@ -224,20 +248,31 @@ async def create_matter(request: MatterCreateRequest) -> dict[str, Any]:
         client_id=request.client_id,
         client_name=request.client_name,
         matter_type=request.matter_type,
+        tenant_context=_tenant_context(tenant_user),
     )
 
 
 @app.post("/v1/matter/intake")
-async def matter_intake(request: MatterIntakeRequest) -> dict[str, Any]:
-    with trace_span("matter_intake_endpoint", request.surface_context, "matter_context") as span:
+async def matter_intake(
+    request: MatterIntakeRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span("matter_intake_endpoint", request.surface_context, "matter_context", metadata=_auth_metadata(tenant_user)) as span:
         payload = request.dict(exclude_none=True)
         payload["source"] = request.surface_context
-        updated_context = update_matter_context(payload)
-        span["metadata"] = {"matter_id": updated_context.get("matter_id")}
+        try:
+            updated_context = update_matter_context(payload, tenant_context=_tenant_context(tenant_user))
+        except MatterTenantAccessError as exc:
+            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        span["metadata"] = {"matter_id": updated_context.get("matter_id"), **_auth_metadata(tenant_user)}
         route = _route_payload(
             moe_route(
                 query="Update matter intake context with client, jurisdiction, parties, deadlines, documents, requested relief, and confidentiality flags.",
-                matter_context={**updated_context, "surface_context": request.surface_context},
+                matter_context={
+                    **updated_context,
+                    "surface_context": request.surface_context,
+                    "auth_context": _tenant_context(tenant_user),
+                },
                 user_type=request.user_type,
             )
         )
@@ -249,6 +284,7 @@ async def matter_intake(request: MatterIntakeRequest) -> dict[str, Any]:
                 "updated": True,
             },
             route,
+            tenant_user,
             updated_context["matter_id"],
             updated_context,
             source="matter_intake",
@@ -256,16 +292,30 @@ async def matter_intake(request: MatterIntakeRequest) -> dict[str, Any]:
 
 
 @app.post("/v1/matter/intake/full")
-async def matter_intake_full(request: FullMatterIntakeRequest) -> dict[str, Any]:
-    with trace_span("matter_intake_full_endpoint", request.surface_context, "matter_context", matter_reference=request.matter_id) as span:
+async def matter_intake_full(
+    request: FullMatterIntakeRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "matter_intake_full_endpoint",
+        request.surface_context,
+        "matter_context",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         payload = request.dict(exclude_none=True)
         payload["surface_context"] = request.surface_context
-        result = run_full_intake_flow(payload)
+        payload["auth_context"] = _tenant_context(tenant_user)
+        try:
+            result = run_full_intake_flow(payload)
+        except MatterTenantAccessError as exc:
+            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
         updated_context = result["matter_context"]
         span["metadata"] = {
             "matter_id": updated_context.get("matter_id"),
             "conflict_status": result["conflict_check"]["status"],
             "scope_status": result["scope_confirmation"]["status"],
+            **_auth_metadata(tenant_user),
         }
         route = _route_payload(
             moe_route(
@@ -278,6 +328,7 @@ async def matter_intake_full(request: FullMatterIntakeRequest) -> dict[str, Any]
                     "conflict_check": result["conflict_check"],
                     "scope_confirmation": result["scope_confirmation"],
                     "surface_context": request.surface_context,
+                    "auth_context": _tenant_context(tenant_user),
                 },
                 user_type=request.user_type,
             )
@@ -286,6 +337,7 @@ async def matter_intake_full(request: FullMatterIntakeRequest) -> dict[str, Any]
         return _attach_route(
             result,
             route,
+            tenant_user,
             updated_context["matter_id"],
             updated_context,
             source="matter_intake_full",
@@ -293,31 +345,43 @@ async def matter_intake_full(request: FullMatterIntakeRequest) -> dict[str, Any]
 
 
 @app.get("/v1/matters")
-async def list_matters() -> list[dict[str, Any]]:
-    return MATTERS.list()
+async def list_matters(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> list[dict[str, Any]]:
+    return MATTERS.list(tenant_context=_tenant_context(tenant_user))
 
 
 @app.get("/v1/matters/{matter_id}")
-async def get_matter(matter_id: str) -> dict[str, Any]:
-    matter = MATTERS.get(matter_id)
+async def get_matter(
+    matter_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        matter = MATTERS.get(matter_id, tenant_context=_tenant_context(tenant_user))
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
     if not matter:
         raise HTTPException(status_code=404, detail="Matter not found.")
     return matter
 
 
 @app.get("/v1/matters/{matter_id}/billing-report")
-async def matter_billing_report(matter_id: str) -> dict[str, Any]:
-    matter = MATTERS.get(matter_id)
+async def matter_billing_report(
+    matter_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        matter = MATTERS.get(matter_id, tenant_context=_tenant_context(tenant_user))
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
     if not matter:
         raise HTTPException(status_code=404, detail="Matter not found.")
     route = _route_payload(
         moe_route(
             query="Generate a billing report with D.C. fee reasonableness warnings.",
-            matter_context={**matter, "surface_context": "core_billing"},
+            matter_context={**matter, "surface_context": "core_billing", "auth_context": _tenant_context(tenant_user)},
             user_type="solo",
         )
     )
-    return _attach_route(build_billing_report(matter), route, matter_id, matter, source="billing_report")
+    return _attach_route(build_billing_report(matter), route, tenant_user, matter_id, matter, source="billing_report")
 
 
 @app.get("/")
@@ -331,11 +395,11 @@ async def dashboard() -> FileResponse:
 
 
 @app.get("/v1/workspace/clerk-os")
-async def clerk_os() -> dict[str, Any]:
+async def clerk_os(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
     route = _route_payload(
         moe_route(
             query="Review D.C. legal AI operating rules and compliance guardrails.",
-            matter_context={"surface_context": "core_clerk_os"},
+            matter_context={"surface_context": "core_clerk_os", "auth_context": _tenant_context(tenant_user)},
             user_type="solo",
         )
     )
@@ -344,16 +408,26 @@ async def clerk_os() -> dict[str, Any]:
         "system_prompt": DC_CLERK_OPERATING_SYSTEM.strip(),
         "human_review_required": True,
     }
-    return _attach_route(payload, route, source="clerk_os")
+    return _attach_route(payload, route, tenant_user, source="clerk_os")
 
 
 @app.post("/v1/router/inspect")
-async def router_inspect(request: RouterInspectRequest) -> dict[str, Any]:
-    with trace_span("router_inspect_endpoint", request.surface_context, "router", matter_reference=request.matter_id) as span:
+async def router_inspect(
+    request: RouterInspectRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "router_inspect_endpoint",
+        request.surface_context,
+        "router",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         context = {
-            **_matter_context(request.matter_id),
+            **_matter_context(request.matter_id, tenant_user),
             **request.matter_context,
             "surface_context": request.surface_context,
+            "auth_context": _tenant_context(tenant_user),
         }
         if request.selected_text:
             context["selected_text"] = request.selected_text
@@ -370,7 +444,10 @@ async def router_inspect(request: RouterInspectRequest) -> dict[str, Any]:
         route = _route_payload(decision)
         span["route"] = route
         if request.matter_id:
-            MATTERS.attach_route(request.matter_id, route)
+            try:
+                MATTERS.attach_route(request.matter_id, route, tenant_context=_tenant_context(tenant_user))
+            except MatterTenantAccessError as exc:
+                raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
         envelope = build_response_envelope(route, context, source="router")
         return {
             "response_envelope": envelope,
@@ -388,12 +465,22 @@ async def router_inspect(request: RouterInspectRequest) -> dict[str, Any]:
 
 
 @app.post("/v1/rag/retrieve")
-async def rag_retrieve(request: RagRetrieveRequest) -> dict[str, Any]:
-    with trace_span("rag_retrieve_endpoint", request.surface_context, "rag", matter_reference=request.matter_id) as span:
+async def rag_retrieve(
+    request: RagRetrieveRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "rag_retrieve_endpoint",
+        request.surface_context,
+        "rag",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         context = {
-            **_matter_context(request.matter_id),
+            **_matter_context(request.matter_id, tenant_user),
             **request.matter_context,
             "surface_context": request.surface_context,
+            "auth_context": _tenant_context(tenant_user),
         }
         if request.matter_id:
             context["matter_id"] = request.matter_id
@@ -419,16 +506,23 @@ async def rag_retrieve(request: RagRetrieveRequest) -> dict[str, Any]:
             "matter_id": request.matter_id,
             "human_review_required": True,
         }
-        return _attach_route(payload, route, request.matter_id, context, source="rag_retrieve")
+        return _attach_route(payload, route, tenant_user, request.matter_id, context, source="rag_retrieve")
 
 
 @app.post("/v1/rag/evaluate")
-async def rag_evaluate(request: RagEvaluateRequest) -> dict[str, Any]:
-    with trace_span("rag_evaluate_endpoint", request.surface_context, "rag_eval") as span:
+async def rag_evaluate(
+    request: RagEvaluateRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span("rag_evaluate_endpoint", request.surface_context, "rag_eval", metadata=_auth_metadata(tenant_user)) as span:
         route = _route_payload(
             moe_route(
                 query="Evaluate D.C. knowledge RAG retrieval with RAGAS-style metrics and citation provenance.",
-                matter_context={"surface_context": request.surface_context, "jurisdiction": "District of Columbia"},
+                matter_context={
+                    "surface_context": request.surface_context,
+                    "jurisdiction": "District of Columbia",
+                    "auth_context": _tenant_context(tenant_user),
+                },
                 user_type="solo",
             )
         )
@@ -442,7 +536,11 @@ async def rag_evaluate(request: RagEvaluateRequest) -> dict[str, Any]:
             write_report=request.write_report,
             report_path=request.report_path or DEFAULT_REPORT_PATH,
         )
-        span["metadata"] = {"dataset_size": report["dataset_size"], "overall": report["aggregate"]["overall"]}
+        span["metadata"] = {
+            "dataset_size": report["dataset_size"],
+            "overall": report["aggregate"]["overall"],
+            **_auth_metadata(tenant_user),
+        }
         payload = {
             "evaluation": report,
             "dataset_path": report["dataset_path"],
@@ -464,37 +562,61 @@ async def rag_evaluate(request: RagEvaluateRequest) -> dict[str, Any]:
                 }
             ],
         }
-        return _attach_route(payload, route, matter_context={"surface_context": request.surface_context}, source="rag_evaluate")
+        return _attach_route(
+            payload,
+            route,
+            tenant_user,
+            matter_context={"surface_context": request.surface_context, "auth_context": _tenant_context(tenant_user)},
+            source="rag_evaluate",
+        )
 
 
 @app.get("/v1/observability/trace")
-async def observability_trace(limit: int = 100) -> dict[str, Any]:
+async def observability_trace(
+    limit: int = 100,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    trace_event(name="observability_trace_view", surface_context="core_observability", category="auth", metadata=_auth_metadata(tenant_user))
     return observability_dashboard(limit=limit)
 
 
 @app.post("/v1/observability/trace")
-async def create_observability_trace(request: ObservabilityTraceRequest) -> dict[str, Any]:
+async def create_observability_trace(
+    request: ObservabilityTraceRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
     trace_event(
         name=request.name,
         surface_context=request.surface_context,
         category=request.category,
-        metadata=request.metadata,
+        metadata={**request.metadata, **_auth_metadata(tenant_user)},
     )
     return observability_dashboard(limit=request.limit)
 
 
 @app.get("/v1/agent/skills")
-async def agent_skills() -> dict[str, Any]:
+async def agent_skills(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    trace_event(name="agent_skills_manifest_view", surface_context="core_agent", category="auth", metadata=_auth_metadata(tenant_user))
     return mcp_skill_manifest()
 
 
 @app.post("/v1/agent/execute")
-async def agent_execute(request: AgentExecuteRequest) -> dict[str, Any]:
-    with trace_span("agent_execute_endpoint", request.surface_context, "agent", matter_reference=request.matter_id) as span:
+async def agent_execute(
+    request: AgentExecuteRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "agent_execute_endpoint",
+        request.surface_context,
+        "agent",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         context = {
-            **_matter_context(request.matter_id),
+            **_matter_context(request.matter_id, tenant_user),
             **request.matter_context,
             "surface_context": request.surface_context,
+            "auth_context": _tenant_context(tenant_user),
         }
         if request.matter_id:
             context["matter_id"] = request.matter_id
@@ -502,6 +624,7 @@ async def agent_execute(request: AgentExecuteRequest) -> dict[str, Any]:
         params = {
             **request.params,
             "surface_context": request.surface_context,
+            "auth_context": _tenant_context(tenant_user),
         }
         if request.matter_id:
             params.setdefault("matter_id", request.matter_id)
@@ -519,19 +642,30 @@ async def agent_execute(request: AgentExecuteRequest) -> dict[str, Any]:
         span["metadata"] = {
             "agent": result.get("selected_agent"),
             "skill_count": len(result.get("mcp_skills_used") or []),
+            **_auth_metadata(tenant_user),
         }
-        return _attach_route(result, route, request.matter_id, context, source="agent_execute")
+        return _attach_route(result, route, tenant_user, request.matter_id, context, source="agent_execute")
 
 
 @app.post("/v1/workspace/discovery")
-async def workspace_discovery(request: DiscoveryRequest) -> dict[str, Any]:
-    with trace_span("workspace_discovery_endpoint", "core_discovery", "discovery", matter_reference=request.matter_id) as span:
+async def workspace_discovery(
+    request: DiscoveryRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "workspace_discovery_endpoint",
+        "core_discovery",
+        "discovery",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         matter_context = {
-            **_matter_context(request.matter_id),
+            **_matter_context(request.matter_id, tenant_user),
             "matter_id": request.matter_id,
             "document_path": request.document_path,
             "document_text": request.document_text,
             "surface_context": "core_discovery",
+            "auth_context": _tenant_context(tenant_user),
         }
         route = _route_payload(
             moe_route(
@@ -552,10 +686,14 @@ async def workspace_discovery(request: DiscoveryRequest) -> dict[str, Any]:
 
         if request.matter_id:
             result["matter_id"] = request.matter_id
-            MATTERS.attach_facts(request.matter_id, result.get("facts", {}))
+            MATTERS.attach_facts(request.matter_id, result.get("facts", {}), tenant_context=_tenant_context(tenant_user))
             if "premium_billing_hook" in result:
-                MATTERS.attach_billing_event(request.matter_id, result["premium_billing_hook"])
-        return _attach_route(result, route, request.matter_id, matter_context, source="discovery")
+                MATTERS.attach_billing_event(
+                    request.matter_id,
+                    result["premium_billing_hook"],
+                    tenant_context=_tenant_context(tenant_user),
+                )
+        return _attach_route(result, route, tenant_user, request.matter_id, matter_context, source="discovery")
 
 
 @app.post("/v1/workspace/discovery/upload")
@@ -563,6 +701,7 @@ async def workspace_discovery_upload(
     file: UploadFile = File(...),
     document_text: str | None = Form(None),
     matter_id: str | None = Form(None),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Upload a PDF document.")
@@ -571,11 +710,12 @@ async def workspace_discovery_upload(
     destination = UPLOAD_DIR / Path(file.filename).name
     destination.write_bytes(await file.read())
     matter_context = {
-        **_matter_context(matter_id),
+        **_matter_context(matter_id, tenant_user),
         "matter_id": matter_id,
         "document_path": str(destination),
         "document_text": document_text,
         "surface_context": "core_discovery_upload",
+        "auth_context": _tenant_context(tenant_user),
     }
     route = _route_payload(
         moe_route(
@@ -596,22 +736,32 @@ async def workspace_discovery_upload(
 
     if matter_id:
         result["matter_id"] = matter_id
-        MATTERS.attach_facts(matter_id, result.get("facts", {}))
+        MATTERS.attach_facts(matter_id, result.get("facts", {}), tenant_context=_tenant_context(tenant_user))
         if "premium_billing_hook" in result:
-            MATTERS.attach_billing_event(matter_id, result["premium_billing_hook"])
-    return _attach_route(result, route, matter_id, matter_context, source="discovery_upload")
+            MATTERS.attach_billing_event(matter_id, result["premium_billing_hook"], tenant_context=_tenant_context(tenant_user))
+    return _attach_route(result, route, tenant_user, matter_id, matter_context, source="discovery_upload")
 
 
 @app.post("/v1/workspace/draft")
-async def workspace_draft(request: DraftRequest) -> dict[str, Any]:
-    with trace_span("workspace_draft_endpoint", request.surface_context, "drafting", matter_reference=request.matter_id) as span:
+async def workspace_draft(
+    request: DraftRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    with trace_span(
+        "workspace_draft_endpoint",
+        request.surface_context,
+        "drafting",
+        matter_reference=request.matter_id,
+        metadata=_auth_metadata(tenant_user),
+    ) as span:
         matter_context = {
-            **_matter_context(request.matter_id),
+            **_matter_context(request.matter_id, tenant_user),
             "matter_id": request.matter_id,
             "facts": request.facts,
             "draft_type": request.draft_type,
             "requested_relief": request.requested_relief,
             "surface_context": request.surface_context,
+            "auth_context": _tenant_context(tenant_user),
         }
         route = _route_payload(
             moe_route(
@@ -634,7 +784,11 @@ async def workspace_draft(request: DraftRequest) -> dict[str, Any]:
 
         if request.matter_id:
             result["matter_id"] = request.matter_id
-            MATTERS.attach_draft(request.matter_id, result)
+            MATTERS.attach_draft(request.matter_id, result, tenant_context=_tenant_context(tenant_user))
             if "premium_billing_hook" in result:
-                MATTERS.attach_billing_event(request.matter_id, result["premium_billing_hook"])
-        return _attach_route(result, route, request.matter_id, matter_context, source="drafting")
+                MATTERS.attach_billing_event(
+                    request.matter_id,
+                    result["premium_billing_hook"],
+                    tenant_context=_tenant_context(tenant_user),
+                )
+        return _attach_route(result, route, tenant_user, request.matter_id, matter_context, source="drafting")

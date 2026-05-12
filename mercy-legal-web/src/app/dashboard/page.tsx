@@ -17,6 +17,8 @@ export default async function DashboardPage() {
       ? { ...stat, value: coreSnapshot.online ? String(coreSnapshot.matters.length) : stat.value }
       : stat,
   );
+  const currentMatter = coreSnapshot.intake?.matter_context ?? coreSnapshot.demoMatterContext;
+  const currentIntakeSummary = coreSnapshot.intake?.intake_summary ?? coreSnapshot.demoIntakeSummary;
 
   return (
     <div className="px-5 py-5 lg:px-8">
@@ -77,8 +79,9 @@ export default async function DashboardPage() {
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <AiAssistantPanel
           router={coreSnapshot.router}
-          matterContext={coreSnapshot.intake?.matter_context}
-          intakeSummary={coreSnapshot.intake?.intake_summary}
+          matterContext={currentMatter}
+          intakeSummary={currentIntakeSummary}
+          demoOnly={!coreSnapshot.intake}
         />
         <ContractAnalyzer />
       </section>
@@ -92,8 +95,9 @@ export default async function DashboardPage() {
         <MatterManagement
           coreMatters={coreSnapshot.matters}
           coreOnline={coreSnapshot.online}
-          currentMatter={coreSnapshot.intake?.matter_context}
-          intakeSummary={coreSnapshot.intake?.intake_summary}
+          currentMatter={currentMatter}
+          intakeSummary={currentIntakeSummary}
+          demoOnly={!coreSnapshot.intake}
         />
         <ActivityFeed />
       </section>

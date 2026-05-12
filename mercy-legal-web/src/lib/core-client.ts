@@ -77,6 +77,9 @@ export type CoreSnapshot = {
   matters: CoreMatter[];
   router: CoreRouterEnvelope | null;
   intake: CoreFullMatterIntakeEnvelope | null;
+  demoMatterContext: CoreMatterContext;
+  demoIntakeSummary: CoreIntakeSummary;
+  usingDemoContext: boolean;
   error: string | null;
 };
 
@@ -236,6 +239,70 @@ export type CoreFullMatterIntakeEnvelope = CoreMatterIntakeEnvelope & {
   next_steps: string[];
 };
 
+const DASHBOARD_DEMO_MATTER_CONTEXT: CoreMatterContext = {
+  matter_id: "demo-only-shaw-lease-review",
+  name: "Shaw lease amendment review",
+  client_id: "demo-only-client",
+  client_name: "Demo commercial tenant",
+  matter_type: "commercial lease review",
+  jurisdiction: "District of Columbia",
+  client_role: "tenant",
+  opposing_parties: ["Demo landlord"],
+  deadlines: [
+    {
+      label: "Demo client review target",
+      date: "2026-05-20",
+      source: "local_dashboard_demo",
+    },
+  ],
+  requested_relief: "Narrow indemnity language and preserve D.C. venue protections.",
+  key_facts: {
+    selected_clause: "Demo clause: tenant indemnifies landlord for broad claims.",
+    workflow: "dashboard_demo_only",
+  },
+  documents: [
+    {
+      document_id: "demo-only-lease-amendment",
+      title: "Demo lease amendment excerpt",
+      source: "local_dashboard_demo",
+    },
+  ],
+  sensitivity_flags: ["demo_only"],
+  missing_information: ["counterparty negligence carveout", "insurance limits"],
+  history: [
+    {
+      event: "local_demo_context_loaded",
+      source: "mercy_legal_web",
+    },
+  ],
+  tier: "free",
+  created_at: "2026-05-12T00:00:00.000Z",
+  last_updated: "2026-05-12T00:00:00.000Z",
+  facts: {
+    selected_clause: "Demo clause: tenant indemnifies landlord for broad claims.",
+  },
+  drafts: [],
+  billing_events: [],
+  route_history: [],
+};
+
+const DASHBOARD_DEMO_INTAKE_SUMMARY: CoreIntakeSummary = {
+  version: "local-dashboard-demo",
+  matter_id: DASHBOARD_DEMO_MATTER_CONTEXT.matter_id,
+  matter_name: DASHBOARD_DEMO_MATTER_CONTEXT.name,
+  client_name: DASHBOARD_DEMO_MATTER_CONTEXT.client_name,
+  jurisdiction: DASHBOARD_DEMO_MATTER_CONTEXT.jurisdiction,
+  client_role: DASHBOARD_DEMO_MATTER_CONTEXT.client_role,
+  requested_relief: DASHBOARD_DEMO_MATTER_CONTEXT.requested_relief,
+  document_count: DASHBOARD_DEMO_MATTER_CONTEXT.documents?.length ?? 0,
+  deadline_count: DASHBOARD_DEMO_MATTER_CONTEXT.deadlines?.length ?? 0,
+  missing_information_count: DASHBOARD_DEMO_MATTER_CONTEXT.missing_information?.length ?? 0,
+  conflict_status: "demo_not_checked",
+  scope_status: "demo_not_confirmed",
+  ready_for_attorney_review: false,
+  last_updated: DASHBOARD_DEMO_MATTER_CONTEXT.last_updated,
+};
+
 async function coreFetch<T>(path: string, init?: RequestInit): Promise<CoreClientResult<T>> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
@@ -274,78 +341,16 @@ async function coreFetch<T>(path: string, init?: RequestInit): Promise<CoreClien
 }
 
 export async function getCoreSnapshot(): Promise<CoreSnapshot> {
-  const intakePayload = {
-    matter_id: "mercy-web-dashboard-context",
-    client: {
-      client_id: "demo-client-dc-001",
-      client_name: "Shaw Commercial Tenant",
-    },
-    matter: {
-      matter_name: "Shaw lease amendment review",
-      matter_type: "commercial lease review",
-      jurisdiction: "District of Columbia",
-      client_role: "tenant",
-      opposing_parties: ["Landlord"],
-    },
-    conflicts: {
-      checked: false,
-      status: "ready_for_review",
-      opposing_parties: ["Landlord"],
-      related_parties: ["Landlord property manager"],
-    },
-    scope: {
-      confirmed: false,
-      scope_of_work: "Review lease amendment indemnity and D.C. venue language.",
-      excluded_work: ["tax advice", "insurance coverage opinion"],
-      client_responsibilities: ["provide full lease", "confirm insurance limits"],
-    },
-    requested_relief: "Narrow indemnity language and preserve D.C. venue protections.",
-    key_facts: {
-      selected_clause: "Tenant indemnifies landlord for all claims regardless of fault.",
-      workflow: "dashboard_ai_assistant",
-    },
-    documents: [
-      {
-        document_id: "lease-amendment-demo",
-        title: "Lease amendment excerpt",
-        source: "dashboard_session",
-      },
-    ],
-    deadlines: [
-      {
-        label: "Client review target",
-        date: "2026-05-20",
-        source: "dashboard_session",
-      },
-    ],
-    missing_information: ["counterparty negligence carveout", "insurance limits"],
-    surface_context: "mercy_legal_web",
-  };
-
-  const [health, capabilities, intake] = await Promise.all([
+  const [health, capabilities] = await Promise.all([
     coreFetch<CoreHealth>("/health"),
     coreFetch<CoreCapabilities>("/v1/product/capabilities"),
-    submitFullMatterIntake(intakePayload),
   ]);
 
-  const [matters, router] = health.ok
-    ? await Promise.all([
-        coreFetch<CoreMatter[]>("/v1/matters"),
-        routeLegalTask({
-          query: "Compare D.C. indemnity language and draft attorney review notes.",
-          matter_id: intake.data?.matter_id ?? intakePayload.matter_id,
-          matter_context: {
-            surface_context: "mercy_legal_web",
-          },
-          surface_context: "mercy_legal_web",
-        }),
-      ])
-    : [
-        { ok: false, data: null, error: health.error },
-        { ok: false, data: null, error: health.error },
-      ];
+  const matters = health.ok
+    ? await coreFetch<CoreMatter[]>("/v1/matters")
+    : { ok: false, data: null, error: health.error };
 
-  const firstError = health.error || capabilities.error || intake.error || matters.error || router.error;
+  const firstError = health.error || capabilities.error || matters.error;
 
   return {
     coreUrl: MERCY_CORE_API_URL,
@@ -353,8 +358,11 @@ export async function getCoreSnapshot(): Promise<CoreSnapshot> {
     health: health.data,
     capabilities: capabilities.data,
     matters: matters.data ?? [],
-    router: router.data,
-    intake: intake.data,
+    router: null,
+    intake: null,
+    demoMatterContext: DASHBOARD_DEMO_MATTER_CONTEXT,
+    demoIntakeSummary: DASHBOARD_DEMO_INTAKE_SUMMARY,
+    usingDemoContext: true,
     error: firstError,
   };
 }

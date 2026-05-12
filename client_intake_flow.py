@@ -221,7 +221,7 @@ def run_full_intake_flow(payload: dict[str, Any]) -> dict[str, Any]:
     scope_confirmation = _scope_confirmation(scope, requested_relief)
     context_payload["missing_information"] = _missing_information(context_payload, conflicts, scope)
 
-    updated_context = update_matter_context(context_payload)
+    updated_context = update_matter_context(context_payload, tenant_context=_as_dict(payload.get("auth_context")))
     prompt_library = build_intake_prompt_library(updated_context)
     intake_summary = _summary(updated_context, conflict_check, scope_confirmation)
     next_steps = [
@@ -259,4 +259,3 @@ def run_full_intake_flow(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = ["INTAKE_FLOW_VERSION", "run_full_intake_flow"]
-

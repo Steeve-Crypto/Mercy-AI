@@ -16,7 +16,6 @@ import {
   CoreResponseMetadata,
   RiskFinding
 } from "../types";
-import { buildClauseExplanationPrompt, buildContractAnalysisPrompt, buildDraftingPrompt } from "../utils/prompts";
 
 const DEFAULT_CORE_URL = "http://127.0.0.1:8000";
 const viteEnv = (import.meta as ImportMeta & { env?: { VITE_MERCY_CORE_API_URL?: string } }).env;
@@ -24,11 +23,7 @@ const CORE_API_URL = (viteEnv?.VITE_MERCY_CORE_API_URL || DEFAULT_CORE_URL).repl
 const MATTER_ID = "word-addin-session-matter";
 const CACHE_PREFIX = "mercy-agent-cache:";
 const QUEUE_KEY = "mercy-agent-offline-queue";
-
-type CoreGuardrails = {
-  status?: string;
-  review_flags?: string[];
-};
+let unsafeStoragePurged = false;
 
 type CoreIntakeResponse = {
   matter_context: CoreMatterContext;
@@ -71,7 +66,53 @@ type QueuedAgentRequest = {
   id: string;
   createdAt: string;
   cacheKey: string;
+  action: string;
   request: AgentRequest;
+  redaction: StorageRedactionSummary;
+};
+
+type StorageRedactionSummary = {
+  status: "redacted";
+  removedPaths: string[];
+  originalContentRequired: boolean;
+};
+
+const SENSITIVE_STORAGE_KEYS = new Set([
+  "content",
+  "context",
+  "document_excerpt",
+  "document_text",
+  "draft",
+  "facts",
+  "instruction",
+  "key_facts",
+  "law_or_case",
+  "new_facts",
+  "selected_text",
+  "text",
+  "word_addin_note"
+]);
+
+const SAFE_STORAGE_STRING_KEYS = new Set([
+  "format",
+  "jurisdiction",
+  "matter_id",
+  "source",
+  "surface_context",
+  "top_k",
+  "user_type"
+]);
+
+const STORAGE_SAFE_AGENT_RESULT = {
+  status: "warn",
+  answer: "Cached metadata only. Reconnect to the Mercy core and rerun the action with the active document open.",
+  grounding_policy: {
+    status: "warn",
+    strict_grounding: true,
+    no_unverified_output: false,
+    issues: ["local_cache_redacted"],
+    instruction: "Local cache excludes confidential document text and generated legal content."
+  }
 };
 
 function isOnline(): boolean {
@@ -111,17 +152,136 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-function cacheKey(action: string, text: string): string {
-  return `${CACHE_PREFIX}${action}:${text.slice(0, 180)}`;
+function purgeUnsafeStoredAgentData(): void {
+  const store = storage();
+  if (!store || unsafeStoragePurged) {
+    return;
+  }
+  unsafeStoragePurged = true;
+
+  try {
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < store.length; index += 1) {
+      const key = store.key(index);
+      if (key?.startsWith(CACHE_PREFIX) && key !== `${CACHE_PREFIX}skills`) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => store.removeItem(key));
+
+    const queue = readJson<QueuedAgentRequest[]>(QUEUE_KEY, []);
+    const safeQueue = queue.filter((item) => item.redaction?.status === "redacted");
+    if (safeQueue.length !== queue.length) {
+      writeJson(QUEUE_KEY, safeQueue);
+    }
+  } catch {
+    return;
+  }
 }
 
-function queueRequest(cacheKeyValue: string, request: AgentRequest): void {
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function cacheKey(action: string, request: AgentRequest): string {
+  const fingerprint = {
+    action,
+    matter_id: request.matter_id ?? MATTER_ID,
+    surface_context: request.surface_context ?? "mercy_legal_plugin",
+    user_type: request.user_type ?? "solo",
+    task_class: action,
+    param_keys: Object.keys(request.params ?? {}).sort(),
+    context_keys: Object.keys(request.matter_context ?? {}).sort()
+  };
+  return `${CACHE_PREFIX}${action}:${stableHash(JSON.stringify(fingerprint))}`;
+}
+
+function shouldRedactValue(path: string, value: unknown): boolean {
+  const key = path.split(".").pop() ?? path;
+  if (SENSITIVE_STORAGE_KEYS.has(key)) {
+    return true;
+  }
+  if (typeof value === "string" && !SAFE_STORAGE_STRING_KEYS.has(key)) {
+    return value.length > 80 || /client|tenant|landlord|clause|agreement|contract|liability|indemn/i.test(value);
+  }
+  return false;
+}
+
+function redactForStorage(value: unknown, path = "request", removedPaths: string[] = []): unknown {
+  if (shouldRedactValue(path, value)) {
+    removedPaths.push(path);
+    return "[REDACTED_CONFIDENTIAL]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => redactForStorage(item, `${path}.${index}`, removedPaths));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        redactForStorage(nestedValue, `${path}.${key}`, removedPaths)
+      ])
+    );
+  }
+  return value;
+}
+
+function storageSafeRequest(action: string, request: AgentRequest): { request: AgentRequest; redaction: StorageRedactionSummary } {
+  const removedPaths: string[] = [];
+  const redacted = redactForStorage(
+    {
+      ...request,
+      task: `Offline ${action.replace(/_/g, " ")} request. Confidential source content was redacted before local storage.`
+    },
+    "request",
+    removedPaths
+  ) as AgentRequest;
+
+  return {
+    request: redacted,
+    redaction: {
+      status: "redacted",
+      removedPaths: Array.from(new Set(removedPaths)).sort(),
+      originalContentRequired: removedPaths.length > 0
+    }
+  };
+}
+
+function storageSafeResponse(response: CoreAgentResponse): CoreAgentResponse {
+  return {
+    agent_network_version: response.agent_network_version,
+    selected_agent: response.selected_agent,
+    selected_expert: response.selected_expert,
+    task: "Cached metadata only. Confidential task text was not persisted.",
+    agent_result: STORAGE_SAFE_AGENT_RESULT,
+    mcp_skills_used: response.mcp_skills_used ?? [],
+    mcp_skill_results: response.mcp_skill_results?.map((result) => redactForStorage(result) as CoreMcpSkillResult) ?? [],
+    citations: response.response_envelope?.citations ?? response.citations ?? [],
+    grounding_policy: response.grounding_policy,
+    human_review_required: response.human_review_required ?? true,
+    trace_id: response.trace_id,
+    langsmith_project_url: response.langsmith_project_url,
+    route: response.route,
+    response_envelope: response.response_envelope,
+    guardrail_status: response.response_envelope?.guardrail_status ?? response.guardrail_status ?? "warn"
+  };
+}
+
+function queueRequest(action: string, cacheKeyValue: string, request: AgentRequest): void {
   const queue = readJson<QueuedAgentRequest[]>(QUEUE_KEY, []);
+  const safe = storageSafeRequest(action, request);
   queue.push({
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
+    action,
     cacheKey: cacheKeyValue,
-    request
+    request: safe.request,
+    redaction: safe.redaction
   });
   writeJson(QUEUE_KEY, queue.slice(-20));
 }
@@ -131,7 +291,7 @@ function cachedAgent(cacheKeyValue: string): CoreAgentResponse | null {
 }
 
 function saveCachedAgent(cacheKeyValue: string, response: CoreAgentResponse): void {
-  writeJson(cacheKeyValue, response);
+  writeJson(cacheKeyValue, storageSafeResponse(response));
 }
 
 async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -207,9 +367,10 @@ async function postAgent(request: AgentRequest): Promise<CoreAgentResponse> {
 }
 
 async function agentExecute(action: string, request: AgentRequest, fallbackText: string): Promise<CoreAgentResponse> {
-  const key = cacheKey(action, `${request.task}:${JSON.stringify(request.params ?? {})}`);
+  purgeUnsafeStoredAgentData();
+  const key = cacheKey(action, request);
   if (!isOnline()) {
-    queueRequest(key, request);
+    queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
       return { ...cached, guardrail_status: cached.guardrail_status ?? "warn" };
@@ -222,7 +383,7 @@ async function agentExecute(action: string, request: AgentRequest, fallbackText:
     saveCachedAgent(key, response);
     return response;
   } catch (error) {
-    queueRequest(key, request);
+    queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
       return cached;
@@ -382,7 +543,6 @@ function fallbackMetadata(reason: string): CoreResponseMetadata {
 }
 
 function fallbackAnalysis(documentText: string, reason: string): AnalysisResult {
-  console.debug("Mercy fallback analysis prompt", buildContractAnalysisPrompt(documentText));
   return {
     score: 78,
     summary:
@@ -411,6 +571,7 @@ function fallbackMessage(content: string, reason: string): ChatMessage {
 }
 
 export async function getAgentSkills(): Promise<CoreMcpManifest | null> {
+  purgeUnsafeStoredAgentData();
   try {
     const manifest = await coreFetch<CoreMcpManifest>("/v1/agent/skills");
     writeJson(`${CACHE_PREFIX}skills`, manifest);
@@ -421,6 +582,7 @@ export async function getAgentSkills(): Promise<CoreMcpManifest | null> {
 }
 
 export async function syncOfflineAgentQueue(): Promise<number> {
+  purgeUnsafeStoredAgentData();
   if (!isOnline()) {
     return 0;
   }
@@ -444,6 +606,7 @@ export async function syncOfflineAgentQueue(): Promise<number> {
 }
 
 export function queuedAgentRequestCount(): number {
+  purgeUnsafeStoredAgentData();
   return readJson<QueuedAgentRequest[]>(QUEUE_KEY, []).length;
 }
 
@@ -534,7 +697,6 @@ export const api = {
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Agent clause explanation request failed";
-      console.debug("Mercy fallback explanation prompt", buildClauseExplanationPrompt(selectedText));
       return fallbackMessage(
         "Preview fallback: this clause may allocate legal or financial responsibility. Reconnect to the Mercy core for grounded D.C. analysis.",
         reason
@@ -582,7 +744,6 @@ export const api = {
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Agent drafting request failed";
-      console.debug("Mercy fallback drafting prompt", buildDraftingPrompt(instruction, context), error);
       return fallbackMessage(
         "Preview fallback: Party responsibility is limited to direct losses arising from its own breach, negligence, or willful misconduct, subject to applicable District of Columbia law.",
         reason

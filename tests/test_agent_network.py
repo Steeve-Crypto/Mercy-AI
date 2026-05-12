@@ -12,6 +12,8 @@ from agent_network import (
 from legal_task_router import delegate_to_agent_network
 from mercy_context import get_matter_context, update_matter_context
 
+TEST_AUTH = {"tenant_id": "tenant-agent", "user_id": "user-agent", "auth_mode": "unit_test"}
+
 
 class AgentNetworkTests(unittest.TestCase):
     def test_mcp_manifest_exposes_agents_and_json_schemas(self) -> None:
@@ -74,17 +76,18 @@ class AgentNetworkTests(unittest.TestCase):
                 "matter_name": "Agent network matter",
                 "jurisdiction": "District of Columbia",
                 "source": "unit_test",
-            }
+            },
+            tenant_context=TEST_AUTH,
         )
 
         result = execute_agent_task(
             task="Update the matter context with a new intake fact.",
-            params={"matter_id": matter_id, "new_facts": {"new_issue": "Citation verification needed."}},
-            matter_context={"matter_id": matter_id, "surface_context": "unit_test_agent"},
+            params={"matter_id": matter_id, "new_facts": {"new_issue": "Citation verification needed."}, "auth_context": TEST_AUTH},
+            matter_context={"matter_id": matter_id, "surface_context": "unit_test_agent", "auth_context": TEST_AUTH},
             route={"expert": "intake", "route_mode": "intake", "confidence": 0.91, "guardrail_status": "pass"},
         )
 
-        stored = get_matter_context(matter_id)
+        stored = get_matter_context(matter_id, tenant_context=TEST_AUTH)
 
         self.assertEqual(result["selected_agent"], "IntakeAgent")
         self.assertEqual(stored["key_facts"]["new_issue"], "Citation verification needed.")

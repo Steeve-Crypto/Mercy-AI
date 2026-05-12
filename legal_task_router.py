@@ -179,7 +179,8 @@ def inject_current_matter_context(matter_context: dict[str, Any] | None) -> dict
     matter_id = context.get("matter_id")
     if not matter_id:
         return context
-    stored = get_matter_context(str(matter_id))
+    auth_context = context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None
+    stored = get_matter_context(str(matter_id), tenant_context=auth_context)
     if not stored:
         return context
     return _merge_matter_context(stored, context)

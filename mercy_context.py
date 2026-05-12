@@ -18,6 +18,8 @@ class MatterContext:
     matter_id: str
     name: str
     client_id: str
+    tenant_id: str
+    created_by_user_id: str
     tier: str = DEFAULT_TIER
     client_name: str | None = None
     matter_type: str | None = None
@@ -39,6 +41,56 @@ class MatterContext:
     route_history: list[dict[str, Any]] = field(default_factory=list)
 
 
+class MatterTenantAccessError(PermissionError):
+    def __init__(self, matter_id: str, tenant_id: str | None, owner_tenant_id: str | None) -> None:
+        super().__init__("Matter belongs to a different tenant.")
+        self.matter_id = matter_id
+        self.tenant_id = tenant_id
+        self.owner_tenant_id = owner_tenant_id
+
+
+def _tenant_id(tenant_context: dict[str, Any] | None) -> str | None:
+    return str(tenant_context.get("tenant_id")) if isinstance(tenant_context, dict) and tenant_context.get("tenant_id") else None
+
+
+def _user_id(tenant_context: dict[str, Any] | None) -> str | None:
+    return str(tenant_context.get("user_id")) if isinstance(tenant_context, dict) and tenant_context.get("user_id") else None
+
+
+def _require_tenant_context(tenant_context: dict[str, Any] | None) -> dict[str, Any]:
+    tenant = _tenant_id(tenant_context)
+    user = _user_id(tenant_context)
+    if not tenant or not user:
+        raise MatterTenantAccessError("unknown", tenant, None)
+    return {"tenant_id": tenant, "user_id": user, "auth_mode": str((tenant_context or {}).get("auth_mode") or "unknown")}
+
+
+def tenant_context_payload(tenant_context: dict[str, Any] | None) -> dict[str, Any]:
+    auth = _require_tenant_context(tenant_context)
+    return {
+        "auth_context": auth,
+        "tenant_id": auth["tenant_id"],
+        "user_id": auth["user_id"],
+    }
+
+
+def _audit_access_denied(matter_id: str, tenant_context: dict[str, Any] | None, owner_tenant_id: str | None) -> None:
+    trace_event(
+        name="tenant_access_denied",
+        surface_context="core_auth",
+        category="auth",
+        guardrail_status="block",
+        matter_reference=matter_id,
+        metadata={
+            "matter_id": matter_id,
+            "tenant_id": _tenant_id(tenant_context),
+            "user_id": _user_id(tenant_context),
+            "owner_tenant_id": owner_tenant_id,
+            "reason": "cross_tenant_matter_access",
+        },
+    )
+
+
 class InMemoryMatterStore:
     """Stateless-by-default case context for local development.
 
@@ -56,12 +108,16 @@ class InMemoryMatterStore:
         client_id: str | None = None,
         client_name: str | None = None,
         matter_type: str | None = None,
+        tenant_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        auth = _require_tenant_context(tenant_context)
         now = datetime.now(UTC).isoformat()
         matter = MatterContext(
             matter_id=str(uuid4()),
             name=name,
             client_id=client_id or str(uuid4()),
+            tenant_id=auth["tenant_id"],
+            created_by_user_id=auth["user_id"],
             tier=tier,
             client_name=client_name,
             matter_type=matter_type,
@@ -78,47 +134,65 @@ class InMemoryMatterStore:
         self._matters[matter.matter_id] = matter
         return asdict(matter)
 
-    def get(self, matter_id: str) -> dict[str, Any] | None:
-        matter = self._matters.get(matter_id)
-        return asdict(matter) if matter else None
+    def _assert_access(self, matter: MatterContext, tenant_context: dict[str, Any] | None) -> None:
+        tenant = _tenant_id(tenant_context)
+        if not tenant or matter.tenant_id != tenant:
+            _audit_access_denied(matter.matter_id, tenant_context, matter.tenant_id)
+            raise MatterTenantAccessError(matter.matter_id, tenant, matter.tenant_id)
 
-    def list(self) -> list[dict[str, Any]]:
-        return [asdict(matter) for matter in self._matters.values()]
-
-    def attach_facts(self, matter_id: str, facts: dict[str, Any]) -> None:
+    def get(self, matter_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
         matter = self._matters.get(matter_id)
         if matter:
+            self._assert_access(matter, tenant_context)
+        return asdict(matter) if matter else None
+
+    def list(self, tenant_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        auth = _require_tenant_context(tenant_context)
+        return [asdict(matter) for matter in self._matters.values() if matter.tenant_id == auth["tenant_id"]]
+
+    def attach_facts(self, matter_id: str, facts: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
+        matter = self._matters.get(matter_id)
+        if matter:
+            self._assert_access(matter, tenant_context)
             matter.facts = facts
             matter.key_facts = {**matter.key_facts, **facts}
             self._touch(matter, "facts_attached", {"fact_keys": sorted(facts.keys())})
 
-    def attach_draft(self, matter_id: str, draft: dict[str, Any]) -> None:
+    def attach_draft(self, matter_id: str, draft: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         matter = self._matters.get(matter_id)
         if matter:
+            self._assert_access(matter, tenant_context)
             matter.drafts.append(draft)
             self._touch(matter, "draft_attached", {"draft_type": draft.get("draft_type")})
 
-    def attach_billing_event(self, matter_id: str, event: dict[str, Any]) -> None:
+    def attach_billing_event(self, matter_id: str, event: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         matter = self._matters.get(matter_id)
         if matter:
+            self._assert_access(matter, tenant_context)
             matter.billing_events.append(event)
             self._touch(matter, "billing_event_attached", {"task": event.get("task")})
 
-    def attach_route(self, matter_id: str, route: dict[str, Any]) -> None:
+    def attach_route(self, matter_id: str, route: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         matter = self._matters.get(matter_id)
         if matter:
+            self._assert_access(matter, tenant_context)
             matter.route_history.append(route)
             self._touch(matter, "route_attached", {"expert": route.get("expert"), "route_mode": route.get("route_mode")})
 
-    def update_context(self, intake: dict[str, Any]) -> dict[str, Any]:
+    def update_context(self, intake: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+        auth = _require_tenant_context(tenant_context)
         matter_id = str(intake.get("matter_id") or uuid4())
         now = datetime.now(UTC).isoformat()
         matter = self._matters.get(matter_id)
+        if matter is not None:
+            self._assert_access(matter, tenant_context)
         if matter is None:
             matter = MatterContext(
                 matter_id=matter_id,
                 name=str(intake.get("name") or intake.get("matter_name") or "New Matter"),
                 client_id=str(intake.get("client_id") or uuid4()),
+                tenant_id=auth["tenant_id"],
+                created_by_user_id=auth["user_id"],
                 tier=str(intake.get("tier") or DEFAULT_TIER),
                 created_at=now,
                 last_updated=now,
@@ -190,14 +264,14 @@ class InMemoryMatterStore:
 MATTERS = InMemoryMatterStore()
 
 
-def get_matter_context(matter_id: str | None) -> dict[str, Any] | None:
+def get_matter_context(matter_id: str | None, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not matter_id:
         return None
-    return MATTERS.get(matter_id)
+    return MATTERS.get(matter_id, tenant_context=tenant_context)
 
 
-def update_matter_context(intake: dict[str, Any]) -> dict[str, Any]:
-    updated = MATTERS.update_context(intake)
+def update_matter_context(intake: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    updated = MATTERS.update_context(intake, tenant_context=tenant_context)
     trace_event(
         name="matter_context_update",
         surface_context=str(intake.get("source") or "core_intake"),
@@ -206,6 +280,8 @@ def update_matter_context(intake: dict[str, Any]) -> dict[str, Any]:
         metadata={
             "matter_id": updated.get("matter_id"),
             "client_id": updated.get("client_id"),
+            "tenant_id": updated.get("tenant_id"),
+            "user_id": _user_id(tenant_context),
             "document_count": len(updated.get("documents") or []),
             "missing_information_count": len(updated.get("missing_information") or []),
         },

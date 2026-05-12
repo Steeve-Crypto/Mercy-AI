@@ -9,9 +9,10 @@ type AiAssistantPanelProps = {
   router?: CoreRouterEnvelope | null;
   matterContext?: CoreMatterContext | null;
   intakeSummary?: CoreIntakeSummary | null;
+  demoOnly?: boolean;
 };
 
-export function AiAssistantPanel({ router, matterContext, intakeSummary }: AiAssistantPanelProps) {
+export function AiAssistantPanel({ router, matterContext, intakeSummary, demoOnly = false }: AiAssistantPanelProps) {
   const route = router?.route;
   const envelope = router?.response_envelope;
 
@@ -21,9 +22,13 @@ export function AiAssistantPanel({ router, matterContext, intakeSummary }: AiAss
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>AI Legal Assistant</CardTitle>
-            <CardDescription>Ask across matters, documents, and DC-specific drafting context.</CardDescription>
+            <CardDescription>
+              {demoOnly
+                ? "Demo-only matter context. Create or select a live matter before saving legal work."
+                : "Ask across matters, documents, and DC-specific drafting context."}
+            </CardDescription>
           </div>
-          <Badge variant="gold">{route ? route.expert_label : "Live context"}</Badge>
+          <Badge variant="gold">{demoOnly ? "Demo context" : route ? route.expert_label : "Live context"}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 bg-[#fbfcfe] p-5">
@@ -65,6 +70,14 @@ export function AiAssistantPanel({ router, matterContext, intakeSummary }: AiAss
             )}
             {matterContext && (
               <div className="mt-3 grid gap-2 rounded-md bg-secondary/70 p-3 text-xs text-mercy-navy sm:grid-cols-2">
+                {demoOnly && (
+                  <div className="sm:col-span-2">
+                    <span className="font-semibold">Demo-only</span>
+                    <p className="mt-1 text-muted-foreground">
+                      This context is local dashboard sample data and was not created or updated in the core.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <span className="font-semibold">Matter</span>
                   <p className="mt-1 text-muted-foreground">{matterContext.name}</p>

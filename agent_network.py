@@ -87,8 +87,32 @@ def _grounding_policy(status: str, issues: list[str] | None = None) -> dict[str,
     }
 
 
-def _matter_context(matter_id: str | None, context: dict[str, Any] | None = None) -> dict[str, Any]:
-    stored = get_matter_context(matter_id) if matter_id else None
+def _auth_context_from(context: dict[str, Any] | None, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    for candidate in (params, context):
+        if isinstance(candidate, dict) and isinstance(candidate.get("auth_context"), dict):
+            return candidate["auth_context"]
+    if isinstance(context, dict) and context.get("tenant_id") and context.get("user_id"):
+        return {
+            "tenant_id": context["tenant_id"],
+            "user_id": context["user_id"],
+            "auth_mode": context.get("auth_mode") or "unknown",
+        }
+    if isinstance(params, dict) and params.get("tenant_id") and params.get("user_id"):
+        return {
+            "tenant_id": params["tenant_id"],
+            "user_id": params["user_id"],
+            "auth_mode": params.get("auth_mode") or "unknown",
+        }
+    return None
+
+
+def _matter_context(
+    matter_id: str | None,
+    context: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    auth_context = _auth_context_from(context, params)
+    stored = get_matter_context(matter_id, tenant_context=auth_context) if matter_id else None
     return {**(stored or {}), **(context or {})}
 
 
@@ -180,7 +204,11 @@ def check_dc_ethics(query: str, draft: str) -> dict[str, Any]:
         return result
 
 
-def update_matter_context(matter_id: str, new_facts: dict[str, Any]) -> dict[str, Any]:
+def update_matter_context(
+    matter_id: str,
+    new_facts: dict[str, Any],
+    auth_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     with trace_span("mcp_update_matter_context", "agent_network", "agent_skill", matter_reference=matter_id) as span:
         updated = persist_matter_context(
             {
@@ -195,7 +223,8 @@ def update_matter_context(matter_id: str, new_facts: dict[str, Any]) -> dict[str
                         "source": "update_matter_context",
                     }
                 ],
-            }
+            },
+            tenant_context=auth_context,
         )
         result = {
             "skill_name": "update_matter_context",
@@ -206,7 +235,12 @@ def update_matter_context(matter_id: str, new_facts: dict[str, Any]) -> dict[str
             "grounding_policy": _grounding_policy("pass"),
             "human_review_required": True,
         }
-        span["metadata"] = {"skill": "update_matter_context", "matter_id": matter_id}
+        span["metadata"] = {
+            "skill": "update_matter_context",
+            "matter_id": matter_id,
+            "tenant_id": (auth_context or {}).get("tenant_id"),
+            "user_id": (auth_context or {}).get("user_id"),
+        }
         return result
 
 
@@ -289,6 +323,7 @@ def _skill_registry() -> dict[str, MCPSkill]:
                 {
                     "matter_id": {"type": "string", "minLength": 1},
                     "new_facts": {"type": "object"},
+                    "auth_context": {"type": "object"},
                 },
                 ["matter_id", "new_facts"],
             ),
@@ -457,7 +492,12 @@ class IntakeAgent(BaseLegalAgent):
                 "grounding_policy": _grounding_policy("block", ["matter_id_required"]),
                 "missing_inputs": ["matter_id"],
             }
-        update_result = self._call_skill("update_matter_context", matter_id=matter_id, new_facts=new_facts)
+        update_result = self._call_skill(
+            "update_matter_context",
+            matter_id=matter_id,
+            new_facts=new_facts,
+            auth_context=_auth_context_from(state["matter_context"], state["params"]),
+        )
         return {
             "agent": self.name,
             "status": update_result["status"],
@@ -526,7 +566,11 @@ class AgentNetwork:
         from legal_task_router import moe_route
 
         params = params or {}
-        context = _matter_context(str(params.get("matter_id") or (matter_context or {}).get("matter_id") or ""), matter_context)
+        context = _matter_context(
+            str(params.get("matter_id") or (matter_context or {}).get("matter_id") or ""),
+            matter_context,
+            params,
+        )
         context.setdefault("surface_context", params.get("surface_context") or "agent_network")
         route = route or moe_route(task, context, user_type=user_type).to_dict()
         expert = str(route.get("expert") or "compliance_guardrails")
@@ -675,4 +719,3 @@ __all__ = [
     "mcp_skill_manifest",
     "update_matter_context",
 ]
-
