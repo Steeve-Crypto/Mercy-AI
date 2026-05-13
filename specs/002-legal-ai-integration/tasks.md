@@ -112,9 +112,10 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Expanded the dataset to 45 D.C.-specific cases, added official-source eval fixtures, improved DC/authority/date metadata filtering and ranking, added per-case LangSmith trace links, and generated a passing report with `overall=0.9213` and `pass_rate=1.0`.
    - **Dependencies**: PD031, PD032.
 
-7. [ ] PD034 [Verification] Normalize smoke and CI checks for hardening.
+7. [X] PD034 [Verification] Normalize smoke and CI checks for hardening.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if created, package scripts where appropriate.
    - **Definition of Done**: One documented verification sequence covers Python legal core tests, compile checks, RAGAS eval, web typecheck/lint/build, add-in lint/build/manifest, dashboard no-mutation, auth guards, and RAG backend fallback checks.
+   - **Result**: Added `scripts/verify.py`, `scripts/core_smoke.py`, `scripts/ragas_quick_check.py`, `pyrightconfig.json`, and `make verify`; README now documents the canonical `.\legal_discovery_ai\.venv\Scripts\python.exe scripts\verify.py` health check. End-to-end verification passed with all components green.
    - **Dependencies**: PD028-PD033.
 
 8. [ ] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.

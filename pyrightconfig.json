@@ -1,0 +1,42 @@
+{
+  "include": [
+    "auth_context.py",
+    "agent_network.py",
+    "bridge.py",
+    "client_intake_flow.py",
+    "dc_guardrails.py",
+    "dc_knowledge_rag.py",
+    "legal_task_router.py",
+    "main.py",
+    "mercy_context.py",
+    "observability.py",
+    "ragas_eval.py",
+    "response_envelope.py",
+    "tests",
+    "scripts"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "legal_discovery_ai/.venv",
+    "mercy-legal-web",
+    "mercy-legal-plugin",
+    "standalone_platform",
+    "word_plugin"
+  ],
+  "venvPath": "legal_discovery_ai",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false,
+  "reportMissingImports": "error",
+  "reportArgumentType": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportInvalidTypeForm": "none",
+  "reportIndexIssue": "none",
+  "reportCallIssue": "none",
+  "reportOptionalIterable": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportPossiblyUnboundVariable": "none",
+  "reportPrivateImportUsage": "none"
+}

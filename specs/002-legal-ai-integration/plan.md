@@ -139,29 +139,10 @@ Legal endpoints should return or preserve the standard `response_envelope` contr
 
 ## Quick Verification
 
-Use the repo virtualenv for FastAPI smoke checks:
+Use the canonical health check for backend, core smoke, RAGAS subset, Standalone Platform, and Office add-in verification:
 
 ```powershell
-.\legal_discovery_ai\.venv\Scripts\python.exe -m unittest tests.test_agent_network tests.test_client_intake_flow tests.test_dc_knowledge_rag tests.test_legal_task_router tests.test_matter_context tests.test_observability tests.test_ragas_eval tests.test_response_envelope
-.\legal_discovery_ai\.venv\Scripts\python.exe -m py_compile main.py legal_task_router.py agent_network.py response_envelope.py mercy_context.py dc_knowledge_rag.py ragas_eval.py observability.py client_intake_flow.py dc_guardrails.py
-```
-
-Web:
-
-```powershell
-cd mercy-legal-web
-npm run typecheck
-npm run lint
-npm run build
-```
-
-Office add-in:
-
-```powershell
-cd mercy-legal-plugin
-npm run lint
-npm run build
-npm run validate:manifest
+.\legal_discovery_ai\.venv\Scripts\python.exe scripts\verify.py
 ```
 
 ## Project Structure
@@ -215,9 +196,9 @@ tools/
 
 ## Immediate Known Risks
 
-- Plain system `py` may not have FastAPI installed; use `legal_discovery_ai\.venv` for core smoke checks.
-- `unittest discover` from repo root may find zero tests; run explicit modules or fix discovery configuration.
-- Current RAGAS-style report fails threshold: 24 cases, `overall=0.6843`, `pass_rate=0.1667`, 20 failed rows.
+- Use `legal_discovery_ai\.venv` or set `MERCY_PYTHON` for the canonical verifier.
+- `unittest discover` must be run with `-s tests -p "test_*.py"`; the canonical verifier uses this pattern.
+- The current RAGAS-style release report passes threshold with the expanded 45-case dataset; the canonical verifier runs a fast 8-case subset.
 - LangGraph and MCP are compatibility layers until real runtime/transport dependencies are activated.
 - `mercy-legal-web` still contains demo/mock dashboard panels.
 - Production client data use remains blocked until security and persistence gates are designed and implemented.

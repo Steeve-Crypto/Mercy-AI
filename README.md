@@ -33,6 +33,40 @@ GEMINI_API_KEY=
 
 Without a configured model key, Mercy returns structured fallback drafts with attorney verification placeholders.
 
+## Canonical Verification
+
+Use this command as the single source of truth for "is Mercy healthy?":
+
+```powershell
+.\legal_discovery_ai\.venv\Scripts\python.exe scripts\verify.py
+```
+
+If you are not using the checked-in project venv path, set `MERCY_PYTHON` to the Python executable for the environment that has `requirements.txt` installed:
+
+```powershell
+$env:MERCY_PYTHON="C:\path\to\python.exe"
+py scripts\verify.py
+```
+
+Prerequisites:
+
+- Python dependencies installed in the selected environment: `python -m pip install -r requirements.txt`
+- Node dependencies installed in `mercy-legal-web/` and `mercy-legal-plugin/`: `npm install`
+- Network access for Office manifest validation.
+- Local smoke auth is self-contained; the verifier sets temporary test auth values for protected endpoint checks.
+
+The verifier runs:
+
+| Component | Checks |
+| --- | --- |
+| Backend Python | `unittest discover`, `py_compile`, `pyright`, and `ruff` syntax/undefined-name lint checks. |
+| Core smoke | `/health`, protected auth rejection, `/v1/rag/status`, `/v1/agent/skills`, `/v1/agent/execute`, tenant isolation, and `/v1/rag/evaluate`. |
+| RAGAS | Fast 8-case D.C. golden dataset release-gate subset. |
+| Standalone Platform | `npm run typecheck`, `npm run lint`, `npm run build` in `mercy-legal-web/`. |
+| Office Add-in | `npm run lint`, `npm run build`, `npm run validate:manifest` in `mercy-legal-plugin/`. |
+
+`make verify` is also available on systems with `make`; on Windows, the Python command above is the canonical command.
+
 ## Main Project Areas
 
 | Path | Purpose |

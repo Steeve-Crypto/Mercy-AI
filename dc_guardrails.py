@@ -9,8 +9,10 @@ from system_prompts import DC_LOCAL_RULE_SCHEMA
 try:
     from fastapi import Request
     from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import Response
 except Exception:
     Request = Any
+    Response = Any
     BaseHTTPMiddleware = object
 
 
@@ -101,7 +103,7 @@ class DCGuardrailMiddleware(BaseHTTPMiddleware):
     """Attach D.C. Rule 28/32 and Ethics Opinion 388 checks to JSON API output."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        from starlette.responses import JSONResponse, Response
+        from starlette.responses import JSONResponse
 
         response = await call_next(request)
         content_type = response.headers.get("content-type", "")

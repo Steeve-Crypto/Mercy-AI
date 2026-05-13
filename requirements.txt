@@ -9,4 +9,6 @@ qdrant-client
 langchain-qdrant
 neo4j
 langchain-neo4j
+pyright
+ruff
 -r legal_discovery_ai/requirements.txt
