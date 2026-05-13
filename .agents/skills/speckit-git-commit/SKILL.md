@@ -15,12 +15,14 @@ Automatically stage and commit all changes after a Spec Kit command completes.
 
 This command is invoked as a hook after (or before) core commands. It:
 
-1. Determines the event name from the hook context (e.g., if invoked as an `after_specify` hook, the event is `after_specify`; if `before_plan`, the event is `before_plan`)
-2. Checks `.specify/extensions/git/git-config.yml` for the `auto_commit` section
-3. Looks up the specific event key to see if auto-commit is enabled
-4. Falls back to `auto_commit.default` if no event-specific key exists
-5. Uses the per-command `message` if configured, otherwise a default message
-6. If enabled and there are uncommitted changes, runs `git add .` + `git commit`
+1. Determine the event name from the hook context (e.g., if invoked as an `after_specify` hook, the event is `after_specify`; if `before_plan`, the event is `before_plan`).
+2. Read the `.specify/extensions/git/git-config.yml` `auto_commit` section.
+3. Resolve the enabled setting in order of precedence:
+   - If `auto_commit.<event_name>` is defined, use that value.
+   - Otherwise, use `auto_commit.default`.
+   - If both the global default and the event-specific key are defined, the event-specific key takes precedence.
+4. Use the per-command `message` if configured, otherwise use a default message.
+5. If auto-commit is enabled and there are uncommitted changes, run `git add .` and `git commit`.
 
 ## Execution
 
@@ -37,7 +39,7 @@ In `.specify/extensions/git/git-config.yml`:
 
 ```yaml
 auto_commit:
-  default: false          # Global toggle — set true to enable for all commands
+  default: true          # Global toggle — set true to enable for all commands
   after_specify:
     enabled: true          # Override per-command
     message: "[Spec Kit] Add specification"
