@@ -16,6 +16,7 @@ CORE_FILES = [
     "agent_network.py",
     "response_envelope.py",
     "mercy_context.py",
+    "mercy_storage.py",
     "dc_knowledge_rag.py",
     "ragas_eval.py",
     "observability.py",

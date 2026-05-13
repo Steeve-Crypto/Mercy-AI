@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -33,66 +34,73 @@ def main() -> int:
     os.environ["MERCY_ENV"] = "verify"
     os.environ.pop("MERCY_AUTH_MODE", None)
     os.environ["MERCY_API_TOKEN"] = "verify-token"
+    temp_dir = tempfile.TemporaryDirectory()
+    os.environ["POSTGRES_URL"] = f"sqlite+pysqlite:///{Path(temp_dir.name) / 'mercy-core-smoke.db'}"
 
     from main import app
+    from mercy_storage import reset_storage_for_tests
 
-    client = TestClient(app)
+    try:
+        client = TestClient(app)
 
-    _assert_status(client.get("/health"), 200, "health")
-    _assert_status(client.get("/v1/rag/status"), 401, "protected rag status without auth")
+        _assert_status(client.get("/health"), 200, "health")
+        _assert_status(client.get("/v1/rag/status"), 401, "protected rag status without auth")
 
-    rag_status = _assert_status(client.get("/v1/rag/status", headers=_headers()), 200, "authenticated rag status")
-    if not rag_status.get("tenant_isolated"):
-        raise AssertionError("rag status did not report tenant isolation")
+        rag_status = _assert_status(client.get("/v1/rag/status", headers=_headers()), 200, "authenticated rag status")
+        if not rag_status.get("tenant_isolated"):
+            raise AssertionError("rag status did not report tenant isolation")
 
-    skills = _assert_status(client.get("/v1/agent/skills", headers=_headers()), 200, "agent skills")
-    if not skills.get("skills"):
-        raise AssertionError("agent skills response did not include discoverable MCP skills")
+        skills = _assert_status(client.get("/v1/agent/skills", headers=_headers()), 200, "agent skills")
+        if not skills.get("skills"):
+            raise AssertionError("agent skills response did not include discoverable MCP skills")
 
-    agent_payload = {
-        "task": "Check D.C. ethics and citation reliability for an AI-assisted draft.",
-        "params": {
-            "query": "Check D.C. ethics and citation reliability.",
-            "draft": "Attorney must verify citations and confidential matter facts before use.",
-        },
-        "matter_context": {
-            "jurisdiction": "District of Columbia",
-            "matter_type": "verification smoke test",
-        },
-        "surface_context": "verify_core_smoke",
-    }
-    agent = _assert_status(client.post("/v1/agent/execute", json=agent_payload, headers=_headers()), 200, "agent execute")
-    envelope = agent.get("response_envelope") if isinstance(agent.get("response_envelope"), dict) else {}
-    if not envelope.get("route") or not envelope.get("guardrail_status"):
-        raise AssertionError("agent execute response did not include response envelope route and guardrail metadata")
+        agent_payload = {
+            "task": "Check D.C. ethics and citation reliability for an AI-assisted draft.",
+            "params": {
+                "query": "Check D.C. ethics and citation reliability.",
+                "draft": "Attorney must verify citations and confidential matter facts before use.",
+            },
+            "matter_context": {
+                "jurisdiction": "District of Columbia",
+                "matter_type": "verification smoke test",
+            },
+            "surface_context": "verify_core_smoke",
+        }
+        agent = _assert_status(client.post("/v1/agent/execute", json=agent_payload, headers=_headers()), 200, "agent execute")
+        envelope = agent.get("response_envelope") if isinstance(agent.get("response_envelope"), dict) else {}
+        if not envelope.get("route") or not envelope.get("guardrail_status"):
+            raise AssertionError("agent execute response did not include response envelope route and guardrail metadata")
 
-    matter = _assert_status(
-        client.post(
-            "/v1/matters",
-            json={"name": "Verify Tenant Matter", "client_name": "Verification Client", "matter_type": "smoke"},
-            headers=_headers("verify-tenant-a", "verify-user-a"),
-        ),
-        200,
-        "create matter tenant A",
-    )
-    matter_id = matter.get("matter_id")
-    if not matter_id:
-        raise AssertionError("matter creation did not return matter_id")
+        matter = _assert_status(
+            client.post(
+                "/v1/matters",
+                json={"name": "Verify Tenant Matter", "client_name": "Verification Client", "matter_type": "smoke"},
+                headers=_headers("verify-tenant-a", "verify-user-a"),
+            ),
+            200,
+            "create matter tenant A",
+        )
+        matter_id = matter.get("matter_id")
+        if not matter_id:
+            raise AssertionError("matter creation did not return matter_id")
 
-    _assert_status(
-        client.get(f"/v1/matters/{matter_id}", headers=_headers("verify-tenant-b", "verify-user-b")),
-        403,
-        "cross-tenant matter read blocked",
-    )
+        _assert_status(
+            client.get(f"/v1/matters/{matter_id}", headers=_headers("verify-tenant-b", "verify-user-b")),
+            403,
+            "cross-tenant matter read blocked",
+        )
 
-    _assert_status(
-        client.post("/v1/rag/evaluate", json={"limit": 5, "top_k": 5, "pass_threshold": 0.72}, headers=_headers()),
-        200,
-        "rag evaluate endpoint",
-    )
+        _assert_status(
+            client.post("/v1/rag/evaluate", json={"limit": 5, "top_k": 5, "pass_threshold": 0.72}, headers=_headers()),
+            200,
+            "rag evaluate endpoint",
+        )
 
-    print("Core smoke passed: health, auth guard, tenant isolation, RAG status, agent skills, agent execute, RAGAS endpoint")
-    return 0
+        print("Core smoke passed: health, auth guard, tenant isolation, RAG status, agent skills, agent execute, RAGAS endpoint")
+        return 0
+    finally:
+        reset_storage_for_tests()
+        temp_dir.cleanup()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
+import os
 import unittest
+
+os.environ.setdefault("MERCY_ENV", "local")
 
 from legal_task_router import moe_route
 from mercy_context import MatterTenantAccessError, get_matter_context, update_matter_context

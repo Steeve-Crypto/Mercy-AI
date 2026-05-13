@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import os
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from typing import Any, Iterator
+
+from observability import trace_event, trace_span
+
+from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+
+STORAGE_VERSION = "mercy-storage-pgvector-1.0"
+SQLALCHEMY_AVAILABLE = True
+_ENGINE: Engine | None = None
+_SESSION_FACTORY: sessionmaker[Session] | None = None
+_INITIALIZED = False
+
+
+def configured_database_url() -> str | None:
+    raw = os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL") or os.getenv("MERCY_DATABASE_URL")
+    if not raw:
+        return None
+    return _normalize_database_url(raw)
+
+
+def persistent_storage_configured() -> bool:
+    return bool(configured_database_url())
+
+
+def local_memory_fallback_allowed() -> bool:
+    return os.getenv("MERCY_ENV") == "local" and not persistent_storage_configured()
+
+
+def storage_mode() -> str:
+    if persistent_storage_configured():
+        return "postgres_pgvector"
+    if local_memory_fallback_allowed():
+        return "local_in_memory_fallback"
+    return "unavailable_requires_postgres"
+
+
+def storage_status() -> dict[str, Any]:
+    url = configured_database_url()
+    return {
+        "version": STORAGE_VERSION,
+        "mode": storage_mode(),
+        "persistent": bool(url),
+        "sqlalchemy_available": SQLALCHEMY_AVAILABLE,
+        "database_configured": bool(url),
+        "fallback_allowed": local_memory_fallback_allowed(),
+        "required_env": ["POSTGRES_URL", "SUPABASE_URL"],
+        "optional_backends": ["qdrant", "neo4j"],
+        "tenant_isolation": "tenant_id scoped on matters, rag_sources, rag_chunks, and langgraph checkpoints",
+    }
+
+
+def _normalize_database_url(raw: str) -> str:
+    value = raw.strip()
+    if value.startswith("postgres://"):
+        return "postgresql+psycopg://" + value[len("postgres://") :]
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value[len("postgresql://") :]
+    return value
+
+
+class Base(DeclarativeBase):  # type: ignore[misc]
+    pass
+
+
+class MatterRecord(Base):
+    __tablename__ = "mercy_matters"
+
+    matter_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    tier: Mapped[str] = mapped_column(String(64), nullable=False, default="free")
+    client_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    matter_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, default="District of Columbia")
+    client_role: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    requested_relief: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opposing_parties: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    deadlines: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    key_facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    documents: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    sensitivity_flags: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    missing_information: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    drafts: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    billing_events: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    route_history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class DCRagSourceRecord(Base):
+    __tablename__ = "mercy_dc_sources"
+
+    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    title: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False)
+    citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
+    official_locator: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_anchor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
+    refresh_cadence: Mapped[str] = mapped_column(String(128), nullable=False)
+    local_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DCRagChunkRecord(Base):
+    __tablename__ = "mercy_dc_chunks"
+
+    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    chunk_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_title: Mapped[str] = mapped_column(String(1000), nullable=False)
+    citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    official_locator: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entities: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    relationships: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
+    citation_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
+    practice_area: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    embedding: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LangGraphCheckpointRecord(Base):
+    __tablename__ = "mercy_langgraph_checkpoints"
+
+    checkpoint_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    thread_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+Index("ix_mercy_dc_chunks_tenant_source", DCRagChunkRecord.tenant_id, DCRagChunkRecord.source_id)
+
+
+def get_engine() -> Engine:
+    global _ENGINE, _SESSION_FACTORY
+    if not SQLALCHEMY_AVAILABLE:
+        raise RuntimeError("SQLAlchemy is required for persistent Mercy storage.")
+    url = configured_database_url()
+    if not url:
+        raise RuntimeError("POSTGRES_URL or SUPABASE_URL is required for persistent Mercy storage.")
+    if _ENGINE is None:
+        _ENGINE = create_engine(url, pool_pre_ping=True, future=True)
+        _SESSION_FACTORY = sessionmaker(bind=_ENGINE, expire_on_commit=False, future=True)
+    return _ENGINE
+
+
+def init_storage() -> dict[str, Any]:
+    global _INITIALIZED
+    if _INITIALIZED:
+        return storage_status()
+    if not persistent_storage_configured():
+        if local_memory_fallback_allowed():
+            trace_storage_event("storage_local_memory_fallback", "init", metadata=storage_status())
+            _INITIALIZED = True
+            return storage_status()
+        raise RuntimeError("Persistent storage is required outside MERCY_ENV=local. Set POSTGRES_URL or SUPABASE_URL.")
+    with trace_span("storage_init", "core_storage", "storage", metadata=storage_status()) as span:
+        engine = get_engine()
+        if engine.dialect.name.startswith("postgres"):
+            with engine.begin() as connection:
+                connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        Base.metadata.create_all(engine)
+        _INITIALIZED = True
+        span["metadata"] = {**storage_status(), "initialized": True}
+    return storage_status()
+
+
+@contextmanager
+def session_scope() -> Iterator[Session]:
+    init_storage()
+    if _SESSION_FACTORY is None:
+        raise RuntimeError("Persistent storage session factory is unavailable.")
+    session = _SESSION_FACTORY()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def trace_storage_event(
+    name: str,
+    operation: str,
+    tenant_id: str | None = None,
+    matter_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    trace_event(
+        name=name,
+        surface_context="core_storage",
+        category="storage",
+        matter_reference=matter_id,
+        metadata={
+            "operation": operation,
+            "tenant_id": tenant_id,
+            "storage_mode": storage_mode(),
+            **(metadata or {}),
+        },
+    )
+
+
+def record_langgraph_checkpoint(
+    checkpoint_id: str,
+    tenant_id: str,
+    thread_id: str,
+    state: dict[str, Any],
+    matter_id: str | None = None,
+) -> None:
+    if not persistent_storage_configured():
+        return
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        record = session.get(LangGraphCheckpointRecord, checkpoint_id)
+        if record is None:
+            record = LangGraphCheckpointRecord(
+                checkpoint_id=checkpoint_id,
+                tenant_id=tenant_id,
+                matter_id=matter_id,
+                thread_id=thread_id,
+                state=state,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(record)
+        else:
+            if record.tenant_id != tenant_id:
+                raise PermissionError("LangGraph checkpoint belongs to a different tenant.")
+            record.matter_id = matter_id
+            record.thread_id = thread_id
+            record.state = state
+            record.updated_at = now
+    trace_storage_event("langgraph_checkpoint_persisted", "checkpoint_upsert", tenant_id=tenant_id, matter_id=matter_id)
+
+
+def reset_storage_for_tests() -> None:
+    global _ENGINE, _SESSION_FACTORY, _INITIALIZED
+    if _ENGINE is not None:
+        _ENGINE.dispose()
+    _ENGINE = None
+    _SESSION_FACTORY = None
+    _INITIALIZED = False

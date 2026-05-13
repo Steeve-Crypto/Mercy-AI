@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata
@@ -10,6 +9,7 @@ from typing import Any, Callable
 from dc_guardrails import evaluate_dc_guardrails
 from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
+from mercy_storage import persistent_storage_configured, record_langgraph_checkpoint
 from observability import trace_event, trace_span
 from ragas_eval import METRICS as RAGAS_METRICS
 
@@ -682,6 +682,23 @@ class AgentNetwork:
                 matter_reference=context.get("matter_id"),
                 metadata={"agent": agent.name, "skills": response["mcp_skills_used"]},
             )
+            auth_context = context.get("auth_context") if isinstance(context.get("auth_context"), dict) else {}
+            tenant_id = auth_context.get("tenant_id") or context.get("tenant_id")
+            if persistent_storage_configured() and tenant_id:
+                record_langgraph_checkpoint(
+                    checkpoint_id=str(response.get("executed_at")),
+                    tenant_id=str(tenant_id),
+                    thread_id=str(context.get("matter_id") or params.get("matter_id") or "agent-network"),
+                    matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                    state={
+                        "task": task,
+                        "selected_agent": agent.name,
+                        "selected_expert": expert,
+                        "status": status,
+                        "route": route,
+                        "skills_used": response["mcp_skills_used"],
+                    },
+                )
             return response
 
     def _build_langgraph(self) -> Any:

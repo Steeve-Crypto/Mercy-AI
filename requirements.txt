@@ -5,6 +5,9 @@ python-multipart
 langgraph
 langgraph-checkpoint
 langchain-core
+SQLAlchemy>=2.0
+psycopg[binary]>=3.2
+pgvector>=0.3
 qdrant-client
 langchain-qdrant
 neo4j

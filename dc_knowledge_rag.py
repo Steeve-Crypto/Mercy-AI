@@ -10,6 +10,14 @@ from importlib import metadata
 from typing import Any
 
 from dc_guardrails import evaluate_dc_guardrails
+from mercy_storage import (
+    DCRagChunkRecord,
+    DCRagSourceRecord,
+    init_storage,
+    persistent_storage_configured,
+    session_scope,
+    trace_storage_event,
+)
 from observability import record_rag_trace, trace_event, trace_span
 
 
@@ -283,11 +291,185 @@ class SourceRegistry:
 _OFFICIAL_SOURCE_RECORDS: dict[str, SourceRecord] = {}
 
 
-def _active_source_registry() -> SourceRegistry:
+def _active_source_registry(tenant_id: str | None = None) -> SourceRegistry:
     records = list(_OFFICIAL_SOURCE_RECORDS.values())
+    records.extend(_persistent_source_records(tenant_id))
     if _is_local_env():
         records.extend(_local_demo_source_records())
     return SourceRegistry(records)
+
+
+def _persistent_source_records(tenant_id: str | None) -> list[SourceRecord]:
+    if not persistent_storage_configured() or not tenant_id:
+        return []
+    try:
+        init_storage()
+        with session_scope() as session:
+            records = (
+                session.query(DCRagSourceRecord)
+                .filter(DCRagSourceRecord.tenant_id == tenant_id, DCRagSourceRecord.active.is_(True))
+                .all()
+            )
+            return [
+                SourceRecord(
+                    source_id=record.source_id,
+                    title=record.title,
+                    source_type=record.source_type,
+                    authority_type=record.authority_type,
+                    jurisdiction=record.jurisdiction,
+                    citation_label=record.citation_label,
+                    official_locator=record.official_locator,
+                    url=record.url,
+                    file_anchor=record.file_anchor,
+                    last_checked=record.last_checked,
+                    verification_status=record.verification_status,
+                    refresh_cadence=record.refresh_cadence,
+                    local_demo=bool(record.local_demo),
+                    active=bool(record.active),
+                )
+                for record in records
+            ]
+    except Exception as exc:
+        trace_storage_event("rag_source_load_failed", "rag_source_read", tenant_id=tenant_id, metadata={"error": str(exc)})
+        return []
+
+
+def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
+    if not persistent_storage_configured() or not tenant_id:
+        return []
+    try:
+        init_storage()
+        with session_scope() as session:
+            records = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id == tenant_id).all()
+            chunks = [
+                KnowledgeChunk(
+                    chunk_id=record.chunk_id,
+                    source_id=record.source_id,
+                    text=record.text,
+                    summary=record.summary,
+                    source_title=record.source_title,
+                    citation_label=record.citation_label,
+                    source_type=record.source_type,
+                    authority_type=record.authority_type,
+                    jurisdiction=record.jurisdiction,
+                    official_locator=record.official_locator,
+                    url=record.url,
+                    entities=[str(entity) for entity in record.entities or []],
+                    relationships=[relation for relation in record.relationships or [] if isinstance(relation, dict)],
+                    verification_status=record.verification_status,
+                    citation_required=bool(record.citation_required),
+                    last_checked=record.last_checked,
+                    practice_area=record.practice_area,
+                    source_date=record.source_date,
+                    tenant_id=record.tenant_id,
+                )
+                for record in records
+            ]
+        trace_storage_event("rag_chunks_loaded", "rag_chunk_read", tenant_id=tenant_id, metadata={"chunk_count": len(chunks)})
+        return chunks
+    except Exception as exc:
+        trace_storage_event("rag_chunk_load_failed", "rag_chunk_read", tenant_id=tenant_id, metadata={"error": str(exc)})
+        return []
+
+
+def _persist_ingested_source(source: SourceRecord, chunks: list[KnowledgeChunk], tenant_id: str) -> None:
+    init_storage()
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        source_record = session.get(DCRagSourceRecord, {"tenant_id": tenant_id, "source_id": source.source_id})
+        if source_record is None:
+            source_record = DCRagSourceRecord(
+                tenant_id=tenant_id,
+                source_id=source.source_id,
+                title=source.title,
+                source_type=source.source_type,
+                authority_type=source.authority_type,
+                jurisdiction=source.jurisdiction,
+                citation_label=source.citation_label,
+                official_locator=source.official_locator,
+                url=source.url,
+                file_anchor=source.file_anchor,
+                last_checked=source.last_checked,
+                verification_status=source.verification_status,
+                refresh_cadence=source.refresh_cadence,
+                local_demo=source.local_demo,
+                active=source.active,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(source_record)
+        else:
+            source_record.title = source.title
+            source_record.source_type = source.source_type
+            source_record.authority_type = source.authority_type
+            source_record.jurisdiction = source.jurisdiction
+            source_record.citation_label = source.citation_label
+            source_record.official_locator = source.official_locator
+            source_record.url = source.url
+            source_record.file_anchor = source.file_anchor
+            source_record.last_checked = source.last_checked
+            source_record.verification_status = source.verification_status
+            source_record.refresh_cadence = source.refresh_cadence
+            source_record.local_demo = source.local_demo
+            source_record.active = source.active
+            source_record.updated_at = now
+
+        for chunk in chunks:
+            chunk.tenant_id = tenant_id
+            chunk_record = session.get(DCRagChunkRecord, {"tenant_id": tenant_id, "chunk_id": chunk.chunk_id})
+            embedding = _stable_embedding(_chunk_text(chunk))
+            if chunk_record is None:
+                chunk_record = DCRagChunkRecord(
+                    tenant_id=tenant_id,
+                    chunk_id=chunk.chunk_id,
+                    source_id=chunk.source_id,
+                    text=chunk.text,
+                    summary=chunk.summary,
+                    source_title=chunk.source_title,
+                    citation_label=chunk.citation_label,
+                    source_type=chunk.source_type,
+                    authority_type=chunk.authority_type,
+                    jurisdiction=chunk.jurisdiction,
+                    official_locator=chunk.official_locator,
+                    url=chunk.url,
+                    entities=chunk.entities,
+                    relationships=chunk.relationships,
+                    verification_status=chunk.verification_status,
+                    citation_required=chunk.citation_required,
+                    last_checked=chunk.last_checked,
+                    practice_area=chunk.practice_area,
+                    source_date=chunk.source_date,
+                    embedding=embedding,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(chunk_record)
+            else:
+                chunk_record.source_id = chunk.source_id
+                chunk_record.text = chunk.text
+                chunk_record.summary = chunk.summary
+                chunk_record.source_title = chunk.source_title
+                chunk_record.citation_label = chunk.citation_label
+                chunk_record.source_type = chunk.source_type
+                chunk_record.authority_type = chunk.authority_type
+                chunk_record.jurisdiction = chunk.jurisdiction
+                chunk_record.official_locator = chunk.official_locator
+                chunk_record.url = chunk.url
+                chunk_record.entities = chunk.entities
+                chunk_record.relationships = chunk.relationships
+                chunk_record.verification_status = chunk.verification_status
+                chunk_record.citation_required = chunk.citation_required
+                chunk_record.last_checked = chunk.last_checked
+                chunk_record.practice_area = chunk.practice_area
+                chunk_record.source_date = chunk.source_date
+                chunk_record.embedding = embedding
+                chunk_record.updated_at = now
+    trace_storage_event(
+        "rag_ingestion_persisted",
+        "rag_ingest",
+        tenant_id=tenant_id,
+        metadata={"source_id": source.source_id, "chunk_count": len(chunks)},
+    )
 
 
 @dataclass
@@ -308,7 +490,13 @@ class RetrievalConfig:
         vector_backend = os.getenv("MERCY_RAG_VECTOR_BACKEND", "").lower()
         graph_backend = os.getenv("MERCY_RAG_GRAPH_BACKEND", "").lower()
         if not vector_backend:
-            vector_backend = "qdrant" if os.getenv("MERCY_QDRANT_URL") else "pgvector" if os.getenv("MERCY_PGVECTOR_DSN") else "local"
+            vector_backend = (
+                "qdrant"
+                if os.getenv("MERCY_QDRANT_URL")
+                else "pgvector"
+                if os.getenv("MERCY_PGVECTOR_DSN") or os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL")
+                else "local"
+            )
         if not graph_backend:
             graph_backend = "neo4j" if os.getenv("MERCY_NEO4J_URI") else "local"
         if vector_backend not in SUPPORTED_VECTOR_BACKENDS:
@@ -320,8 +508,8 @@ class RetrievalConfig:
             graph_backend=graph_backend,
             qdrant_url=os.getenv("MERCY_QDRANT_URL"),
             qdrant_collection=os.getenv("MERCY_QDRANT_COLLECTION", "dc_legal_knowledge"),
-            pgvector_dsn=os.getenv("MERCY_PGVECTOR_DSN"),
-            pgvector_table=os.getenv("MERCY_PGVECTOR_TABLE", "dc_legal_knowledge"),
+            pgvector_dsn=os.getenv("MERCY_PGVECTOR_DSN") or os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL"),
+            pgvector_table=os.getenv("MERCY_PGVECTOR_TABLE", "mercy_dc_chunks"),
             neo4j_uri=os.getenv("MERCY_NEO4J_URI"),
             neo4j_database=os.getenv("MERCY_NEO4J_DATABASE"),
             neo4j_user=os.getenv("MERCY_NEO4J_USER"),
@@ -704,24 +892,29 @@ class PgVectorAdapter(VectorRetrievalAdapter):
     name = "pgvector"
 
     def __init__(self, config: RetrievalConfig) -> None:
-        if not config.pgvector_dsn:
-            raise RetrievalBackendError("MERCY_PGVECTOR_DSN is required for pgvector retrieval.")
+        if not config.pgvector_dsn and not persistent_storage_configured():
+            raise RetrievalBackendError("POSTGRES_URL, SUPABASE_URL, or MERCY_PGVECTOR_DSN is required for pgvector retrieval.")
         self.config = config
 
     def search(self, query: str, matter_context: dict[str, Any], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
-        raise RetrievalBackendError(
-            "pgvector adapter boundary is configured but no database driver is wired in this brownfield core. "
-            "Use Qdrant for production vector retrieval or add a psycopg/pgvector implementation."
-        )
+        tenant_id = str(filters.get("tenant_id") or "")
+        if not tenant_id:
+            raise RetrievalBackendError("tenant_id is required for pgvector retrieval.")
+        chunks = _apply_metadata_filters(_persistent_chunks(tenant_id), filters)
+        local_adapter = LocalVectorAdapter(chunks)
+        return [
+            RetrievalHit(hit.chunk, hit.score, self.name, hit.matched_terms)
+            for hit in local_adapter.search(query, matter_context, filters, limit)
+        ]
 
     def status(self) -> dict[str, Any]:
         return {
             "backend": self.name,
-            "connected": False,
-            "mode": "documented_fallback",
+            "connected": persistent_storage_configured(),
+            "mode": "postgres_pgvector_persistent_store",
             "fallback": False,
             "table": self.config.pgvector_table,
-            "note": "Documented fallback adapter boundary; Qdrant is the preferred active vector backend.",
+            "note": "Uses tenant-scoped PostgreSQL storage with pgvector-ready embedding rows; Qdrant remains optional.",
         }
 
 
@@ -801,6 +994,7 @@ class DCKnowledgeRAG:
         context = matter_context or {}
         limit = max(1, min(top_k, 10))
         filters = _metadata_filters(context)
+        self._load_persistent_context(filters)
         with trace_span(
             "rag_retrieve_backend",
             str(context.get("surface_context") or "core_rag"),
@@ -1012,7 +1206,23 @@ class DCKnowledgeRAG:
         return LocalGraphAdapter(self._chunks)
 
     def _blocked_by_environment(self) -> bool:
-        return not _is_local_env() and (self.config.vector_backend == "local" or self.config.graph_backend == "local")
+        if _is_local_env():
+            return False
+        if self.config.vector_backend == "local" and not persistent_storage_configured():
+            return True
+        return False
+
+    def _load_persistent_context(self, filters: dict[str, Any]) -> None:
+        tenant_id = str(filters.get("tenant_id") or "")
+        if not persistent_storage_configured() or not tenant_id:
+            return
+        persistent_chunks = _persistent_chunks(tenant_id)
+        self._chunks = persistent_chunks
+        self._source_registry = _active_source_registry(tenant_id)
+        if self.config.vector_backend == "local":
+            self._vector_adapter = LocalVectorAdapter(self._chunks)
+        if self.config.graph_backend == "local":
+            self._graph_adapter = LocalGraphAdapter(self._chunks)
 
     def _filter_registered_hits(self, hits: list[RetrievalHit]) -> list[RetrievalHit]:
         filtered = [hit for hit in hits if self._source_registry.is_allowed_for_retrieval(hit.chunk.source_id)]
@@ -1084,15 +1294,19 @@ def retrieve_dc_knowledge(
 
 def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     context = matter_context or {}
+    filters = _metadata_filters(context)
+    tenant_id = str(filters.get("tenant_id") or ("local" if _is_local_env() else ""))
     with trace_span(
         "rag_ingest_official_sources",
         str(context.get("surface_context") or "core_rag_ingest"),
         "rag_ingest",
-        metadata=_safe_rag_trace_metadata(context, _metadata_filters(context)),
+        metadata=_safe_rag_trace_metadata(context, filters),
     ) as span:
         try:
             if not _tenant_context_valid(context) and not _is_local_env():
                 raise SourceValidationError("tenant_context_required")
+            if persistent_storage_configured() and not tenant_id:
+                raise SourceValidationError("tenant_id is required for persistent RAG ingestion.")
             source_payload = payload.get("source") if isinstance(payload.get("source"), dict) else payload
             allow_local_demo = _is_local_env()
             source = SourceRecord.from_payload(source_payload, allow_local_demo=allow_local_demo)
@@ -1100,11 +1314,16 @@ def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | 
                 raise SourceValidationError("Production ingestion requires registered official D.C. sources only.")
             chunks_payload = payload.get("chunks") if isinstance(payload.get("chunks"), list) else []
             chunks = [_chunk_from_ingestion_payload(item, source) for item in chunks_payload if isinstance(item, dict)]
+            for chunk in chunks:
+                chunk.tenant_id = tenant_id
             _OFFICIAL_SOURCE_RECORDS[source.source_id] = source
+            if persistent_storage_configured():
+                _persist_ingested_source(source, chunks, tenant_id)
             result = {
                 "ingestion_contract_version": SOURCE_CONTRACT_VERSION,
                 "accepted": True,
                 "source": asdict(source),
+                "tenant_id": tenant_id,
                 "chunk_count": len(chunks),
                 "chunks": [
                     {
@@ -1118,27 +1337,28 @@ def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | 
                 "backend_targets": {
                     "vector_backend": RetrievalConfig.from_env().vector_backend,
                     "graph_backend": RetrievalConfig.from_env().graph_backend,
-                    "indexing_mode": "validated_contract_ready",
+                    "indexing_mode": "persistent_pgvector" if persistent_storage_configured() else "validated_contract_ready",
                 },
                 "ingested_at": datetime.now(UTC).isoformat(),
             }
             span["metadata"] = {
-                **_safe_rag_trace_metadata(context, _metadata_filters(context)),
+                **_safe_rag_trace_metadata(context, filters),
                 "source_id": source.source_id,
                 "chunk_count": len(chunks),
                 "accepted": True,
+                "storage": "persistent" if persistent_storage_configured() else "memory",
             }
             trace_event(
                 name="rag_ingest_source_registered",
                 surface_context=str(context.get("surface_context") or "core_rag_ingest"),
                 category="rag_ingest",
                 matter_reference=str(context.get("matter_id")) if context.get("matter_id") else None,
-                metadata={"source_id": source.source_id, "chunk_count": len(chunks), "tenant_id": _metadata_filters(context).get("tenant_id")},
+                metadata={"source_id": source.source_id, "chunk_count": len(chunks), "tenant_id": tenant_id},
             )
             return result
         except SourceValidationError as exc:
             span["metadata"] = {
-                **_safe_rag_trace_metadata(context, _metadata_filters(context)),
+                **_safe_rag_trace_metadata(context, filters),
                 "accepted": False,
                 "error": str(exc),
             }
@@ -1147,7 +1367,7 @@ def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | 
                 surface_context=str(context.get("surface_context") or "core_rag_ingest"),
                 category="rag_ingest",
                 guardrail_status="block",
-                metadata={"error": str(exc), "tenant_id": _metadata_filters(context).get("tenant_id")},
+                metadata={"error": str(exc), "tenant_id": tenant_id},
             )
             raise
 
@@ -1179,7 +1399,7 @@ def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str
             "langchain_neo4j": _package_version("langchain-neo4j"),
         },
         **status,
-        "ingestion_contract": _active_source_registry().status(),
+        "ingestion_contract": _active_source_registry(_metadata_filters(context).get("tenant_id")).status(),
     }
 
 

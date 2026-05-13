@@ -14,13 +14,13 @@ Mercy now follows a "One Brain, Multiple Surfaces" model:
 3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, and now redacts local offline storage.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
-The implementation is functional for local development and demo workflows. Production hardening remains blocked by auth, tenant isolation, encrypted persistence, official source indexing, real LangGraph runtime activation, real MCP transport, and stronger eval thresholds.
+The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, LangGraph runtime activation, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source coverage, real MCP transport, and deployment operations.
 
 ## Technical Context
 
 **Language/Version**: Python 3.12 local runtime observed; TypeScript/React for web and Office surfaces.
 **Primary Dependencies**: FastAPI, Pydantic, Uvicorn, Next.js 15, React 19 for `mercy-legal-web`, Vite 5, React 18, Fluent UI, Office.js tooling for `mercy-legal-plugin`, CrewAI package under `legal_discovery_ai`.
-**Storage**: In-memory `MatterContext` store by default; local JSON/report artifacts for evaluation and discovery; Office add-in localStorage only for redacted offline queue/cache metadata.
+**Storage**: SQLAlchemy-backed PostgreSQL + pgvector persistent store via `POSTGRES_URL` or `SUPABASE_URL` for matters, official D.C. RAG sources/chunks, and LangGraph checkpoints; local in-memory fallback is allowed only for explicit `MERCY_ENV=local` development.
 **Testing**: Python `unittest` modules under `tests/`; `npm run typecheck`, `npm run build`, and `npm run lint` for TypeScript surfaces; Office manifest validation via `npm run validate:manifest`.
 **Target Platform**: Local Windows development, FastAPI core, Next.js web app, Microsoft Word add-in.
 **Project Type**: Brownfield multi-surface legal AI product with Python API core plus two TypeScript frontend surfaces.
@@ -34,7 +34,7 @@ The implementation is functional for local development and demo workflows. Produ
 
 - **Scope gate**: PASS. Feature serves D.C. appellate, administrative, contract, discovery, intake, and small-firm legal workflows. Non-D.C. use must be labeled general/out-of-scope.
 - **Supervision gate**: PASS. `ResponseEnvelope`, router decisions, RAG payloads, add-in reliability signals, and guardrail metadata preserve attorney-review and verification requirements.
-- **Privacy gate**: PARTIAL PASS. Local core remains in-memory by default, observability redacts high-risk fields, and the Office add-in now redacts offline localStorage. Production persistence, tenant isolation, retention, deletion, and audit boundaries remain not implemented.
+- **Privacy gate**: PARTIAL PASS. Persistent storage is tenant-scoped and local fallback is explicit dev-only; observability redacts high-risk fields and the Office add-in redacts offline localStorage. Encryption, retention, deletion, export, and full audit policy remain future production controls.
 - **Architecture gate**: PASS. `main.py` FastAPI core is the legal brain. `mercy-legal-web/` and `mercy-legal-plugin/` consume the core instead of implementing separate legal behavior.
 - **Grounding gate**: PARTIAL PASS. The response envelope, D.C. RAG provenance, citation metadata, and RAGAS-style eval exist. Current RAG source corpus is local seeded knowledge, not a production official source index.
 - **Quality gate**: PASS for current local checks. Relevant commands are listed in Quick Verification below.
@@ -90,11 +90,11 @@ Local smoke surfaces
 |------|---------------|------------------|
 | MoE Router | `legal_task_router.py` routes to research, drafting, compliance, intake, and citation verifier experts; `/v1/router/inspect` returns route metadata. | Classifier is deterministic/rule-based, not a production LLM classifier. |
 | Response Envelope | `response_envelope.py` standardizes route, expert, confidence, guardrail status, citations, ethics metadata, matter snapshot, and audit timestamp. | `block` can represent missing required inputs, not only ethics blocking. |
-| Matter Context | `mercy_context.py` models matter/client IDs, facts, documents, history, deadlines, sensitivity flags, and route history. | Store is in-memory only. |
+| Matter Context | `mercy_context.py` models matter/client IDs, facts, documents, history, deadlines, sensitivity flags, and route history. | Production-like use requires `POSTGRES_URL` or `SUPABASE_URL`; local in-memory fallback is dev-only. |
 | Full Intake | `client_intake_flow.py` and `prompts/intake.py` support structured D.C. intake and `/v1/matter/intake/full`. | Conflict and scope checks are workflow scaffolds, not real firm conflict systems. |
-| D.C. RAG | `dc_knowledge_rag.py` exposes local hybrid vector/graph-style retrieval and `/v1/rag/retrieve`. | Qdrant/pgvector/Neo4j are configuration placeholders; local seeded corpus is not production legal research coverage. |
+| D.C. RAG | `dc_knowledge_rag.py` exposes tenant-scoped D.C. retrieval from persisted official source/chunk records, with pgvector as the primary DB-backed vector path and optional Qdrant/Neo4j adapters. | Advanced pgvector tuning and full official source coverage remain future hardening. |
 | RAGAS Eval | `ragas_eval.py`, `datasets/dc_golden_dataset.jsonl`, and `/v1/rag/evaluate` produce local reports. | Metrics are deterministic RAGAS-style, and current eval threshold may fail. |
-| Observability | `observability.py` exposes `/v1/observability/trace` and optional LangSmith submission. | LangSmith requires env vars and package availability; local store is in-memory. |
+| Observability | `observability.py` exposes `/v1/observability/trace` and optional LangSmith submission, including storage-operation trace events. | LangSmith requires env vars and package availability; trace buffer remains process-local. |
 | Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist. | LangGraph is optional and currently falls back when package is absent; MCP compatibility is manifest/schema-level, not a served MCP transport. |
 | Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
@@ -103,8 +103,8 @@ Local smoke surfaces
 
 - **RouterDecision / Route Envelope**: expert, route mode, confidence, selected capability, guardrails, missing inputs, citations, fallback, confidentiality metadata.
 - **ResponseEnvelope**: standardized compliance signal attached to legal endpoint outputs.
-- **MatterContext**: local matter state with client identity, matter fields, facts, documents, deadlines, sensitivity flags, history, route history, drafts, and billing events.
-- **KnowledgeChunk / Citation Provenance**: local D.C. knowledge chunk with source title, citation label, verification status, provenance, entities, and relationships.
+- **MatterContext**: tenant-scoped matter state with client identity, matter fields, facts, documents, deadlines, sensitivity flags, history, route history, drafts, and billing events, persisted through the SQLAlchemy repository when database storage is configured.
+- **KnowledgeChunk / Citation Provenance**: tenant-scoped D.C. knowledge chunk with source title, citation label, verification status, provenance, entities, relationships, and pgvector-ready embedding metadata.
 - **GoldenExample / EvaluationRow**: D.C. eval cases and deterministic metric rows.
 - **TraceRecord**: local and optional LangSmith observability events.
 - **MCP Skill Manifest / Agent Result**: discoverable skill schemas and routed agent outputs.
@@ -191,8 +191,8 @@ tools/
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | Optional LangGraph fallback instead of hard dependency | Keeps local development working without adding new dependency failures. | Requiring LangGraph immediately would break current environments until dependency/package policy is resolved. |
-| Local seeded RAG instead of production vector/graph services | Allows deterministic local testing and endpoint integration before official source infrastructure is connected. | Blocking all RAG work on Qdrant/pgvector/Neo4j would prevent cross-surface envelope and router integration from being tested. |
-| In-memory matter store | Preserves zero-retention local posture. | Production persistence requires auth, tenant isolation, encryption, retention, deletion, and audit design first. |
+| Local seeded RAG for explicit local mode | Allows deterministic local testing while production-like retrieval uses tenant-scoped persisted sources/chunks. | Requiring a live external corpus for every local test would make smoke verification brittle. |
+| Dev-only in-memory matter fallback | Keeps local development usable without a database. | Non-local client-data use now fails closed unless persistent storage is configured. |
 
 ## Immediate Known Risks
 
@@ -200,8 +200,7 @@ tools/
 - `unittest discover` must be run with `-s tests -p "test_*.py"`; the canonical verifier uses this pattern.
 - The current RAGAS-style release report passes threshold with the expanded 45-case dataset; the canonical verifier runs a fast 8-case subset.
 - LangGraph and MCP are compatibility layers until real runtime/transport dependencies are activated.
-- `mercy-legal-web` still contains demo/mock dashboard panels.
-- Production client data use remains blocked until security and persistence gates are designed and implemented.
+- Production client data use still needs encryption, retention, deletion, export, and operational audit policy before deployment.
 
 ## High-Priority Risk Resolution Plan
 
@@ -238,6 +237,8 @@ These tasks promote the remaining security, stability, and quality risks from ca
 **Required Change**: Implement an adapter boundary for vector and graph retrieval. Use Qdrant when `MERCY_RAG_VECTOR_BACKEND=qdrant` and `MERCY_QDRANT_URL` are configured. Keep pgvector as a documented fallback path. Use Neo4j when `MERCY_RAG_GRAPH_BACKEND=neo4j` and `MERCY_NEO4J_URI` are configured. Production-like mode must not silently use seeded demo data.
 
 **Acceptance**: Backend status accurately reports connected, fallback, or blocked state. Configured external backends are invoked in tests via mocked clients. Production-like mode blocks retrieval if only seeded demo data is available.
+
+**PD035 update**: PostgreSQL + pgvector-backed persistence is now the primary RAG storage path when `POSTGRES_URL` or `SUPABASE_URL` is present; Qdrant and Neo4j remain optional advanced adapters.
 
 ### PD032: Add Official D.C. Source Registry and Ingestion Contract
 
