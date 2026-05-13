@@ -5,21 +5,29 @@ import os
 import re
 import hashlib
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, date
 from importlib import metadata
 from typing import Any
 
 from dc_guardrails import evaluate_dc_guardrails
-from observability import record_rag_trace, trace_span
+from observability import record_rag_trace, trace_event, trace_span
 
 
 RAG_VERSION = "dc-knowledge-rag-1.0"
 TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_.-]{1,}")
 SUPPORTED_VECTOR_BACKENDS = {"local", "qdrant", "pgvector"}
 SUPPORTED_GRAPH_BACKENDS = {"local", "neo4j", "llamaindex_property_graph"}
+SUPPORTED_SOURCE_TYPES = {"official_source", "statute", "rule", "case", "regulation", "ethics_opinion", "court_rule_reference"}
+SUPPORTED_AUTHORITY_TYPES = {"statute", "rule", "case", "regulation", "ethics_opinion", "court_rule", "administrative_order"}
+SUPPORTED_VERIFICATION_STATUSES = {"official_verified", "official_metadata_unquoted", "official_registered"}
+SOURCE_CONTRACT_VERSION = "dc-official-source-contract-1.0"
 
 
 class RetrievalBackendError(RuntimeError):
+    pass
+
+
+class SourceValidationError(ValueError):
     pass
 
 
@@ -32,6 +40,20 @@ def _package_version(package_name: str) -> str | None:
         return metadata.version(package_name)
     except metadata.PackageNotFoundError:
         return None
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_jurisdiction(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"dc", "d.c.", "district of columbia"}:
+        return "District of Columbia"
+    return str(value or "").strip()
 
 
 @dataclass
@@ -49,8 +71,86 @@ class KnowledgeProvenance:
 
 
 @dataclass
+class SourceRecord:
+    source_id: str
+    title: str
+    source_type: str
+    authority_type: str
+    jurisdiction: str
+    citation_label: str
+    official_locator: str
+    url: str | None = None
+    file_anchor: str | None = None
+    last_checked: str = field(default_factory=lambda: date.today().isoformat())
+    verification_status: str = "official_metadata_unquoted"
+    refresh_cadence: str = "manual_review"
+    local_demo: bool = False
+    active: bool = True
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any], *, allow_local_demo: bool = False) -> "SourceRecord":
+        record = cls(
+            source_id=str(payload.get("source_id") or "").strip(),
+            title=str(payload.get("title") or payload.get("source_title") or "").strip(),
+            source_type=str(payload.get("source_type") or "").strip(),
+            authority_type=str(payload.get("authority_type") or "").strip(),
+            jurisdiction=_normalize_jurisdiction(payload.get("jurisdiction")),
+            citation_label=str(payload.get("citation_label") or "").strip(),
+            official_locator=str(payload.get("official_locator") or "").strip(),
+            url=_optional_text(payload.get("url")),
+            file_anchor=_optional_text(payload.get("file_anchor")),
+            last_checked=str(payload.get("last_checked") or "").strip(),
+            verification_status=str(payload.get("verification_status") or "").strip(),
+            refresh_cadence=str(payload.get("refresh_cadence") or "manual_review").strip(),
+            local_demo=bool(payload.get("local_demo")),
+            active=bool(payload.get("active", True)),
+        )
+        record.validate(allow_local_demo=allow_local_demo)
+        return record
+
+    def validate(self, *, allow_local_demo: bool = False) -> None:
+        missing = [
+            field_name
+            for field_name in (
+                "source_id",
+                "title",
+                "source_type",
+                "authority_type",
+                "jurisdiction",
+                "citation_label",
+                "official_locator",
+                "last_checked",
+                "verification_status",
+            )
+            if not getattr(self, field_name)
+        ]
+        if missing:
+            raise SourceValidationError(f"Missing required source fields: {', '.join(missing)}.")
+        if self.jurisdiction != "District of Columbia":
+            raise SourceValidationError("Only District of Columbia sources may be registered.")
+        if self.authority_type not in SUPPORTED_AUTHORITY_TYPES:
+            raise SourceValidationError(f"Unsupported authority_type: {self.authority_type}.")
+        if not self.local_demo and self.source_type not in SUPPORTED_SOURCE_TYPES:
+            raise SourceValidationError(f"Unsupported source_type for official source registry: {self.source_type}.")
+        if self.verification_status not in SUPPORTED_VERIFICATION_STATUSES:
+            raise SourceValidationError(f"Unsupported verification_status: {self.verification_status}.")
+        if not (self.url or self.file_anchor):
+            raise SourceValidationError("Source must include either url or file_anchor.")
+        try:
+            date.fromisoformat(self.last_checked)
+        except ValueError as exc:
+            raise SourceValidationError("last_checked must be an ISO date: YYYY-MM-DD.") from exc
+        if self.local_demo and not allow_local_demo:
+            raise SourceValidationError("local_demo sources are allowed only in local development.")
+
+    def official(self) -> bool:
+        return self.active and not self.local_demo and self.verification_status in SUPPORTED_VERIFICATION_STATUSES
+
+
+@dataclass
 class KnowledgeChunk:
     chunk_id: str
+    source_id: str
     text: str
     summary: str
     source_title: str
@@ -77,7 +177,7 @@ class KnowledgeChunk:
         retrieval_method: str,
     ) -> dict[str, Any]:
         provenance = KnowledgeProvenance(
-            source_id=self.chunk_id,
+            source_id=self.source_id,
             source_title=self.source_title,
             citation_label=self.citation_label,
             source_type=self.source_type,
@@ -90,6 +190,7 @@ class KnowledgeChunk:
         )
         return {
             "chunk_id": self.chunk_id,
+            "source_id": self.source_id,
             "text": self.text,
             "summary": self.summary,
             "vector_score": round(vector_score, 4),
@@ -121,6 +222,72 @@ class RetrievalHit:
     score: float
     backend: str
     matched_terms: list[str] = field(default_factory=list)
+
+
+class SourceRegistry:
+    def __init__(self, records: list[SourceRecord] | None = None) -> None:
+        self._records: dict[str, SourceRecord] = {}
+        for record in records or []:
+            self.register(record)
+
+    def register(self, record: SourceRecord) -> None:
+        self._records[record.source_id] = record
+
+    def get(self, source_id: str) -> SourceRecord | None:
+        return self._records.get(source_id)
+
+    def is_registered_official(self, source_id: str) -> bool:
+        record = self.get(source_id)
+        return bool(record and record.official())
+
+    def is_allowed_for_retrieval(self, source_id: str) -> bool:
+        record = self.get(source_id)
+        if not record or not record.active:
+            return False
+        if record.local_demo:
+            return _is_local_env()
+        return record.official()
+
+    def official_sources(self) -> list[dict[str, Any]]:
+        return [asdict(record) for record in self._records.values() if record.official()]
+
+    def local_demo_sources(self) -> list[dict[str, Any]]:
+        return [asdict(record) for record in self._records.values() if record.local_demo]
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "contract_version": SOURCE_CONTRACT_VERSION,
+            "official_source_count": len(self.official_sources()),
+            "local_demo_source_count": len(self.local_demo_sources()),
+            "local_demo_active": _is_local_env() and bool(self.local_demo_sources()),
+            "active_official_sources": self.official_sources(),
+            "required_fields": [
+                "source_id",
+                "title",
+                "source_type",
+                "authority_type",
+                "jurisdiction",
+                "citation_label",
+                "official_locator",
+                "url_or_file_anchor",
+                "last_checked",
+                "verification_status",
+                "refresh_cadence",
+            ],
+            "supported_authority_types": sorted(SUPPORTED_AUTHORITY_TYPES),
+            "supported_source_types": sorted(SUPPORTED_SOURCE_TYPES),
+            "supported_verification_statuses": sorted(SUPPORTED_VERIFICATION_STATUSES),
+        }
+
+
+_OFFICIAL_SOURCE_RECORDS: dict[str, SourceRecord] = {}
+
+
+def _active_source_registry() -> SourceRegistry:
+    records = list(_OFFICIAL_SOURCE_RECORDS.values())
+    if _is_local_env():
+        records.extend(_local_demo_source_records())
+    return SourceRegistry(records)
 
 
 @dataclass
@@ -165,10 +332,73 @@ class RetrievalConfig:
         return self.vector_backend == "local" and self.graph_backend == "local" and _is_local_env()
 
 
+def _local_demo_source_records() -> list[SourceRecord]:
+    records = [
+        {
+            "source_id": "local_demo_dc_ethics_opinion_388",
+            "title": "D.C. Bar Ethics Opinion 388",
+            "source_type": "local_demo_official_metadata",
+            "authority_type": "ethics_opinion",
+            "jurisdiction": "District of Columbia",
+            "citation_label": "D.C. Bar Ethics Op. 388",
+            "official_locator": "D.C. Bar Legal Ethics Opinions database",
+            "url": "https://www.dcbar.org/For-Lawyers/Legal-Ethics/Ethics-Opinions-210-Present",
+            "last_checked": "2026-05-12",
+            "verification_status": "official_metadata_unquoted",
+            "refresh_cadence": "manual_review",
+            "local_demo": True,
+        },
+        {
+            "source_id": "local_demo_dc_rules_professional_conduct",
+            "title": "D.C. Rules of Professional Conduct",
+            "source_type": "local_demo_official_metadata",
+            "authority_type": "rule",
+            "jurisdiction": "District of Columbia",
+            "citation_label": "D.C. Rules of Professional Conduct",
+            "official_locator": "D.C. Bar Rules of Professional Conduct",
+            "url": "https://www.dcbar.org/For-Lawyers/Legal-Ethics/Rules-of-Professional-Conduct",
+            "last_checked": "2026-05-12",
+            "verification_status": "official_metadata_unquoted",
+            "refresh_cadence": "manual_review",
+            "local_demo": True,
+        },
+        {
+            "source_id": "local_demo_dc_circuit_rules",
+            "title": "D.C. Circuit Rules and Handbook",
+            "source_type": "local_demo_official_metadata",
+            "authority_type": "court_rule",
+            "jurisdiction": "District of Columbia",
+            "citation_label": "D.C. Cir. Rules and Handbook",
+            "official_locator": "U.S. Court of Appeals for the D.C. Circuit rules and handbook pages",
+            "url": "https://www.cadc.uscourts.gov/internet/home.nsf/Content/Rules+and+Operating+Procedures",
+            "last_checked": "2026-05-12",
+            "verification_status": "official_metadata_unquoted",
+            "refresh_cadence": "manual_review",
+            "local_demo": True,
+        },
+        {
+            "source_id": "local_demo_dc_admin_record_control",
+            "title": "D.C. administrative record verification practice note",
+            "source_type": "local_demo_internal_control",
+            "authority_type": "administrative_order",
+            "jurisdiction": "District of Columbia",
+            "citation_label": "D.C. administrative record verification",
+            "official_locator": "Internal Mercy control derived from D.C. appellate/admin practice requirements",
+            "file_anchor": "local_demo:dc_admin_record_review",
+            "last_checked": "2026-05-12",
+            "verification_status": "official_metadata_unquoted",
+            "refresh_cadence": "manual_review",
+            "local_demo": True,
+        },
+    ]
+    return [SourceRecord.from_payload(record, allow_local_demo=True) for record in records]
+
+
 def _seed_chunks() -> list[KnowledgeChunk]:
     return [
         KnowledgeChunk(
             chunk_id="dc_ethics_opinion_388_ai",
+            source_id="local_demo_dc_ethics_opinion_388",
             text=(
                 "D.C. Bar Ethics Opinion 388 addresses lawyer use of generative AI. "
                 "Mercy treats it as requiring competent attorney supervision, confidentiality safeguards, "
@@ -204,6 +434,7 @@ def _seed_chunks() -> list[KnowledgeChunk]:
         ),
         KnowledgeChunk(
             chunk_id="dc_rule_1_1_competence",
+            source_id="local_demo_dc_rules_professional_conduct",
             text=(
                 "D.C. Rule of Professional Conduct 1.1 concerns competence. "
                 "Legal AI outputs should be reviewed by a competent attorney before client use."
@@ -220,6 +451,7 @@ def _seed_chunks() -> list[KnowledgeChunk]:
         ),
         KnowledgeChunk(
             chunk_id="dc_rule_1_6_confidentiality",
+            source_id="local_demo_dc_rules_professional_conduct",
             text=(
                 "D.C. Rule of Professional Conduct 1.6 concerns confidentiality of information. "
                 "Matter context, selected text, documents, and client facts should be handled as confidential by default."
@@ -236,6 +468,7 @@ def _seed_chunks() -> list[KnowledgeChunk]:
         ),
         KnowledgeChunk(
             chunk_id="dc_rule_5_3_supervision",
+            source_id="local_demo_dc_rules_professional_conduct",
             text=(
                 "D.C. Rule of Professional Conduct 5.3 concerns lawyer responsibilities for nonlawyer assistance. "
                 "Mercy treats AI-assisted workflows as requiring lawyer supervision and review before external use."
@@ -252,6 +485,7 @@ def _seed_chunks() -> list[KnowledgeChunk]:
         ),
         KnowledgeChunk(
             chunk_id="dc_circuit_brief_verification",
+            source_id="local_demo_dc_circuit_rules",
             text=(
                 "D.C. Circuit appellate drafting requires careful verification of record references, authorities, "
                 "quotes, and procedural requirements. Mercy flags these as attorney-verification tasks."
@@ -271,6 +505,7 @@ def _seed_chunks() -> list[KnowledgeChunk]:
         ),
         KnowledgeChunk(
             chunk_id="dc_admin_record_review",
+            source_id="local_demo_dc_admin_record_control",
             text=(
                 "D.C. administrative-record work depends on matching factual assertions to the record and identifying "
                 "missing or unsupported record citations before drafting."
@@ -543,7 +778,8 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
 class DCKnowledgeRAG:
     def __init__(self, config: RetrievalConfig | None = None, chunks: list[KnowledgeChunk] | None = None) -> None:
         self.config = config or RetrievalConfig.from_env()
-        self._chunks = chunks or _seed_chunks()
+        self._source_registry = _active_source_registry()
+        self._chunks = chunks if chunks is not None else (_seed_chunks() if self.config.local_demo_allowed() else [])
         self._vector_adapter = self._build_vector_adapter()
         self._graph_adapter = self._build_graph_adapter()
 
@@ -579,10 +815,20 @@ class DCKnowledgeRAG:
                     "blocked_reason": "external_backend_required_in_non_local_mode",
                 }
                 return payload
+            if not _is_local_env() and not self._source_registry.official_sources():
+                payload = self._blocked_payload(query, context, route, "registered_official_sources_required")
+                span["rag"] = payload
+                span["metadata"] = {
+                    **_safe_rag_trace_metadata(context, filters),
+                    "blocked_reason": "registered_official_sources_required",
+                }
+                return payload
 
             try:
                 vector_hits = self._vector_adapter.search(query, context, filters, limit)
                 graph_hits = self._graph_adapter.search(query, context, filters, limit)
+                vector_hits = self._filter_registered_hits(vector_hits)
+                graph_hits = self._filter_registered_hits(graph_hits)
                 merged = self._merge_hits(vector_hits, graph_hits, limit)
                 results = [
                     chunk.to_result(vector_score, graph_score, combined_score, retrieval_method=self._retrieval_method())
@@ -728,6 +974,7 @@ class DCKnowledgeRAG:
             "neo4j_database": self.config.neo4j_database if self.config.graph_backend == "neo4j" else None,
             "local_demo_allowed": self.config.local_demo_allowed(),
             "production_blocked": self._blocked_by_environment(),
+            "source_registry": self._source_registry.status(),
         }
 
     def _retrieval_method(self) -> str:
@@ -747,6 +994,12 @@ class DCKnowledgeRAG:
 
     def _blocked_by_environment(self) -> bool:
         return not _is_local_env() and (self.config.vector_backend == "local" or self.config.graph_backend == "local")
+
+    def _filter_registered_hits(self, hits: list[RetrievalHit]) -> list[RetrievalHit]:
+        filtered = [hit for hit in hits if self._source_registry.is_allowed_for_retrieval(hit.chunk.source_id)]
+        if not _is_local_env() and hits and not filtered:
+            raise RetrievalBackendError("registered_official_sources_required")
+        return filtered
 
     def _blocked_payload(
         self,
@@ -810,6 +1063,76 @@ def retrieve_dc_knowledge(
     )
 
 
+def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    context = matter_context or {}
+    with trace_span(
+        "rag_ingest_official_sources",
+        str(context.get("surface_context") or "core_rag_ingest"),
+        "rag_ingest",
+        metadata=_safe_rag_trace_metadata(context, _metadata_filters(context)),
+    ) as span:
+        try:
+            if not _tenant_context_valid(context) and not _is_local_env():
+                raise SourceValidationError("tenant_context_required")
+            source_payload = payload.get("source") if isinstance(payload.get("source"), dict) else payload
+            allow_local_demo = _is_local_env()
+            source = SourceRecord.from_payload(source_payload, allow_local_demo=allow_local_demo)
+            if not _is_local_env() and not source.official():
+                raise SourceValidationError("Production ingestion requires registered official D.C. sources only.")
+            chunks_payload = payload.get("chunks") if isinstance(payload.get("chunks"), list) else []
+            chunks = [_chunk_from_ingestion_payload(item, source) for item in chunks_payload if isinstance(item, dict)]
+            _OFFICIAL_SOURCE_RECORDS[source.source_id] = source
+            result = {
+                "ingestion_contract_version": SOURCE_CONTRACT_VERSION,
+                "accepted": True,
+                "source": asdict(source),
+                "chunk_count": len(chunks),
+                "chunks": [
+                    {
+                        "chunk_id": chunk.chunk_id,
+                        "source_id": chunk.source_id,
+                        "citation_label": chunk.citation_label,
+                        "verification_status": chunk.verification_status,
+                    }
+                    for chunk in chunks
+                ],
+                "backend_targets": {
+                    "vector_backend": RetrievalConfig.from_env().vector_backend,
+                    "graph_backend": RetrievalConfig.from_env().graph_backend,
+                    "indexing_mode": "validated_contract_ready",
+                },
+                "ingested_at": datetime.now(UTC).isoformat(),
+            }
+            span["metadata"] = {
+                **_safe_rag_trace_metadata(context, _metadata_filters(context)),
+                "source_id": source.source_id,
+                "chunk_count": len(chunks),
+                "accepted": True,
+            }
+            trace_event(
+                name="rag_ingest_source_registered",
+                surface_context=str(context.get("surface_context") or "core_rag_ingest"),
+                category="rag_ingest",
+                matter_reference=str(context.get("matter_id")) if context.get("matter_id") else None,
+                metadata={"source_id": source.source_id, "chunk_count": len(chunks), "tenant_id": _metadata_filters(context).get("tenant_id")},
+            )
+            return result
+        except SourceValidationError as exc:
+            span["metadata"] = {
+                **_safe_rag_trace_metadata(context, _metadata_filters(context)),
+                "accepted": False,
+                "error": str(exc),
+            }
+            trace_event(
+                name="rag_ingest_source_rejected",
+                surface_context=str(context.get("surface_context") or "core_rag_ingest"),
+                category="rag_ingest",
+                guardrail_status="block",
+                metadata={"error": str(exc), "tenant_id": _metadata_filters(context).get("tenant_id")},
+            )
+            raise
+
+
 def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     context = matter_context or {}
     try:
@@ -837,6 +1160,7 @@ def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str
             "langchain_neo4j": _package_version("langchain-neo4j"),
         },
         **status,
+        "ingestion_contract": _active_source_registry().status(),
     }
 
 
@@ -940,6 +1264,7 @@ def _stable_embedding(text: str, dimensions: int = 384) -> list[float]:
 def _chunk_from_payload(payload: dict[str, Any], fallback_id: str) -> KnowledgeChunk:
     return KnowledgeChunk(
         chunk_id=str(payload.get("chunk_id") or payload.get("id") or fallback_id),
+        source_id=str(payload.get("source_id") or payload.get("chunk_id") or payload.get("id") or fallback_id),
         text=str(payload.get("text") or payload.get("page_content") or payload.get("content") or ""),
         summary=str(payload.get("summary") or payload.get("text") or payload.get("content") or "Candidate source requires review.")[:500],
         source_title=str(payload.get("source_title") or payload.get("title") or "External D.C. knowledge source"),
@@ -954,6 +1279,38 @@ def _chunk_from_payload(payload: dict[str, Any], fallback_id: str) -> KnowledgeC
         verification_status=str(payload.get("verification_status") or "external_metadata_unquoted"),
         practice_area=str(payload.get("practice_area") or "professional_responsibility"),
         source_date=payload.get("source_date"),
+        tenant_id=payload.get("tenant_id"),
+    )
+
+
+def _chunk_from_ingestion_payload(payload: dict[str, Any], source: SourceRecord) -> KnowledgeChunk:
+    chunk_id = str(payload.get("chunk_id") or "").strip()
+    text = str(payload.get("text") or "").strip()
+    if not chunk_id:
+        raise SourceValidationError("Chunk is missing chunk_id.")
+    if not text:
+        raise SourceValidationError(f"Chunk {chunk_id} is missing text.")
+    source_id = str(payload.get("source_id") or source.source_id).strip()
+    if source_id != source.source_id:
+        raise SourceValidationError(f"Chunk {chunk_id} source_id does not match registered source.")
+    return KnowledgeChunk(
+        chunk_id=chunk_id,
+        source_id=source.source_id,
+        text=text,
+        summary=str(payload.get("summary") or text[:500]),
+        source_title=source.title,
+        citation_label=source.citation_label,
+        source_type=source.source_type,
+        authority_type=source.authority_type,
+        jurisdiction=source.jurisdiction,
+        official_locator=source.official_locator,
+        url=source.url,
+        entities=[str(entity) for entity in payload.get("entities") or []],
+        relationships=[relation for relation in payload.get("relationships") or [] if isinstance(relation, dict)],
+        verification_status=source.verification_status,
+        last_checked=source.last_checked,
+        practice_area=str(payload.get("practice_area") or source.authority_type),
+        source_date=payload.get("source_date") or source.last_checked,
         tenant_id=payload.get("tenant_id"),
     )
 
@@ -990,8 +1347,11 @@ __all__ = [
     "DCKnowledgeRAG",
     "KnowledgeChunk",
     "KnowledgeProvenance",
+    "SourceRecord",
     "RetrievalConfig",
     "RetrievalBackendError",
+    "SourceValidationError",
+    "ingest_dc_sources",
     "rag_backend_status",
     "retrieve_dc_knowledge",
 ]

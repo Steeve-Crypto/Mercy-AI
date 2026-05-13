@@ -100,9 +100,10 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Added Qdrant/pgvector/Neo4j adapter boundaries, protected seeded local corpus behind local/dev mode, added tenant-aware metadata filters and LangSmith traces, exposed `/v1/rag/status`, and surfaced RAG backend status in agent skills.
    - **Dependencies**: PD015, PD030.
 
-5. [ ] PD032 [Core RAG] Add official D.C. source ingestion and registry contract.
+5. [X] PD032 [Core RAG] Add official D.C. source ingestion and registry contract.
    - **Target Paths**: `dc_knowledge_rag.py`, `datasets/` or `config/` source registry files, `tests/test_dc_knowledge_rag.py`.
    - **Definition of Done**: Source records define authority type, jurisdiction, citation label, official locator, URL/file anchor, last checked, verification status, and refresh cadence; chunks derive from registered sources; seeded chunks are marked `local_demo`.
+   - **Result**: Added official D.C. source and chunk ingestion contract, local-demo source registry isolation, `/v1/rag/ingest`, ingestion tracing, production source validation, and status reporting for active official sources and contract fields.
    - **Dependencies**: PD015, PD031.
 
 6. [ ] PD033 [Core Evaluation] Improve RAGAS-style eval pass rate to release threshold.

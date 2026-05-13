@@ -6,7 +6,7 @@ from typing import Any
 
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
-from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
+from dc_knowledge_rag import SourceValidationError, ingest_dc_sources, rag_backend_status, retrieve_dc_knowledge
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -159,6 +159,13 @@ class RagRetrieveRequest(BaseModel):
     practice_area: str | None = Field(None, description="Optional D.C. practice area metadata filter.")
     date_from: str | None = Field(None, description="Optional source date lower bound.")
     date_to: str | None = Field(None, description="Optional source date upper bound.")
+
+
+class RagIngestRequest(BaseModel):
+    source: dict[str, Any] = Field(..., description="Official D.C. source record.")
+    chunks: list[dict[str, Any]] = Field(default_factory=list, description="Validated chunks derived from the source.")
+    matter_id: str | None = Field(None, description="Optional matter identifier for audit context.")
+    surface_context: str = Field("core_rag_ingest", description="Calling surface name.")
 
 
 class RagEvaluateRequest(BaseModel):
@@ -523,6 +530,34 @@ async def rag_status(tenant_user: TenantUser = Depends(get_current_tenant_user))
     context = {"surface_context": "core_rag_status", "auth_context": _tenant_context(tenant_user)}
     trace_event(name="rag_status_view", surface_context="core_rag_status", category="rag", metadata=_auth_metadata(tenant_user))
     return rag_backend_status(context)
+
+
+@app.post("/v1/rag/ingest")
+async def rag_ingest(
+    request: RagIngestRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    context = {
+        **_matter_context(request.matter_id, tenant_user),
+        "matter_id": request.matter_id,
+        "surface_context": request.surface_context,
+        "auth_context": _tenant_context(tenant_user),
+    }
+    route = _route_payload(
+        moe_route(
+            query="Validate and register official District of Columbia legal source records for RAG ingestion.",
+            matter_context=context,
+            user_type="solo",
+        )
+    )
+    try:
+        result = ingest_dc_sources(
+            {"source": request.source, "chunks": request.chunks},
+            matter_context=context,
+        )
+    except SourceValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _attach_route(result, route, tenant_user, request.matter_id, context, source="rag_ingest")
 
 
 @app.post("/v1/rag/evaluate")

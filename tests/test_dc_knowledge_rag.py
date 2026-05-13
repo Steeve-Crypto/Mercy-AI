@@ -6,7 +6,16 @@ from unittest.mock import patch
 
 os.environ.setdefault("MERCY_ENV", "local")
 
-from dc_knowledge_rag import DCKnowledgeRAG, KnowledgeChunk, RetrievalConfig, RetrievalHit, rag_backend_status, retrieve_dc_knowledge
+from dc_knowledge_rag import (
+    DCKnowledgeRAG,
+    KnowledgeChunk,
+    RetrievalConfig,
+    RetrievalHit,
+    SourceValidationError,
+    ingest_dc_sources,
+    rag_backend_status,
+    retrieve_dc_knowledge,
+)
 from legal_task_router import moe_route
 
 
@@ -65,6 +74,7 @@ class DCKnowledgeRagTests(unittest.TestCase):
     def test_configured_external_adapters_are_invoked(self) -> None:
         chunk = KnowledgeChunk(
             chunk_id="external-dc-source",
+            source_id="local_demo_dc_ethics_opinion_388",
             text="External D.C. source text.",
             summary="External source summary.",
             source_title="External Source",
@@ -114,6 +124,59 @@ class DCKnowledgeRagTests(unittest.TestCase):
         self.assertEqual(status["rag_version"], "dc-knowledge-rag-1.0")
         self.assertTrue(status["tenant_isolated"])
         self.assertIn("qdrant_client", status["packages"])
+        self.assertIn("ingestion_contract", status)
+        self.assertTrue(status["ingestion_contract"]["local_demo_active"])
+
+    def test_ingest_accepts_registered_official_dc_source(self) -> None:
+        result = ingest_dc_sources(
+            {
+                "source": {
+                    "source_id": "official-dc-rule-test",
+                    "title": "Official D.C. Rule Test",
+                    "source_type": "rule",
+                    "authority_type": "rule",
+                    "jurisdiction": "District of Columbia",
+                    "citation_label": "D.C. R. Test",
+                    "official_locator": "Official D.C. rules locator",
+                    "url": "https://example.dc.gov/rule",
+                    "last_checked": "2026-05-12",
+                    "verification_status": "official_verified",
+                    "refresh_cadence": "monthly",
+                },
+                "chunks": [
+                    {
+                        "chunk_id": "official-dc-rule-test-chunk",
+                        "source_id": "official-dc-rule-test",
+                        "text": "Official D.C. rule text metadata for retrieval.",
+                    }
+                ],
+            },
+            {"auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"}, "surface_context": "unit_test_ingest"},
+        )
+
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["chunk_count"], 1)
+
+    def test_ingest_rejects_non_dc_or_unofficial_source(self) -> None:
+        with self.assertRaises(SourceValidationError):
+            ingest_dc_sources(
+                {
+                    "source": {
+                        "source_id": "bad-source",
+                        "title": "Bad Source",
+                        "source_type": "blog",
+                        "authority_type": "rule",
+                        "jurisdiction": "Maryland",
+                        "citation_label": "Bad Cite",
+                        "official_locator": "No official locator",
+                        "url": "https://example.com",
+                        "last_checked": "2026-05-12",
+                        "verification_status": "official_verified",
+                        "refresh_cadence": "monthly",
+                    }
+                },
+                {"auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"}},
+            )
 
 
 if __name__ == "__main__":
