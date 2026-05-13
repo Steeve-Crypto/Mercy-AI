@@ -50,6 +50,8 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState<"research" | "agent" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastAction, setLastAction] = useState<"research" | "agent" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const canRun = Boolean(matterContext?.matter_id && prompt.trim());
   const activeOutput = resultText(agentResult, ragResult);
@@ -60,7 +62,9 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
       return;
     }
     setBusy("research");
+    setLastAction("research");
     setError(null);
+    setNotice("Citation verification in progress. Mercy is checking tenant-scoped official D.C. source metadata.");
     const response = await retrieveRag({
       query: prompt,
       matter_id: matterContext.matter_id,
@@ -76,8 +80,14 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
     setBusy(null);
     if (!response.ok || !response.data) {
       setError(response.error ?? "Research request failed.");
+      setNotice(null);
       return;
     }
+    setNotice(
+      response.data.results.length
+        ? "Grounded in verified official D.C. source metadata. Attorney must verify source text and pinpoint support."
+        : "No D.C. source grounding returned. Add official sources or refine the question before drafting.",
+    );
     onResult({ kind: "research", result: response.data });
   }
 
@@ -87,7 +97,9 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
       return;
     }
     setBusy("agent");
+    setLastAction("agent");
     setError(null);
+    setNotice("Drafting request routed through MoE, RAG, MCP skills, and D.C. guardrails.");
     const response = await executeAgent({
       task: prompt,
       matter_id: matterContext.matter_id,
@@ -108,9 +120,19 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
     setBusy(null);
     if (!response.ok || !response.data) {
       setError(response.error ?? "Agent request failed.");
+      setNotice(null);
       return;
     }
+    setNotice("Draft or analysis ready. This is AI-assisted drafting - attorney must review and verify all content before use.");
     onResult({ kind: "agent", result: response.data });
+  }
+
+  function retryLastAction() {
+    if (lastAction === "research") {
+      void runResearch();
+    } else if (lastAction === "agent") {
+      void runAgent();
+    }
   }
 
   return (
@@ -170,8 +192,21 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
           agent={agentResult}
         />
 
+        {notice && !error && (
+          <div className="rounded-md border border-[#d7e7d0] bg-[#f2fbef] p-3 text-xs leading-5 text-[#285b2f]">
+            {notice}
+          </div>
+        )}
+
         {error && (
-          <div className="rounded-md border border-[#ead08a] bg-[#fff8e1] p-3 text-xs text-[#735b13]">{error}</div>
+          <div className="flex flex-col gap-3 rounded-md border border-[#ead08a] bg-[#fff8e1] p-3 text-xs text-[#735b13] sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            {lastAction ? (
+              <Button variant="outline" size="sm" onClick={retryLastAction} disabled={busy !== null}>
+                Retry
+              </Button>
+            ) : null}
+          </div>
         )}
 
         <div className="rounded-lg border bg-white p-3">
@@ -183,7 +218,7 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
           />
           <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
-              Output requires attorney review. Low-confidence or missing-source responses are intentionally bounded.
+              Output requires attorney review. Tenant isolation, MoE route, RAGAS hooks, and source grounding appear above after every live response.
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" disabled={!canRun || busy !== null} onClick={runResearch}>

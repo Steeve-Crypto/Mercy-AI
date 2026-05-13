@@ -430,17 +430,40 @@ async function coreFetch<T>(path: string, init?: RequestInit, auth?: CoreAuthCon
       return {
         ok: false,
         data: null,
-        error: detail ?? `Core request failed: ${response.status}`,
+        error: detail ?? professionalError(response.status),
       };
     }
 
     return { ok: true, data: data as T, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Core request failed";
-    return { ok: false, data: null, error: message };
+    return { ok: false, data: null, error: professionalNetworkError(message) };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function professionalError(status: number): string {
+  if (status === 401 || status === 403) {
+    return "Authentication or tenant access failed. Confirm your Mercy tenant and sign-in context, then retry.";
+  }
+  if (status === 404) {
+    return "The requested matter or source was not found for this tenant.";
+  }
+  if (status >= 500) {
+    return "Core service temporarily unavailable. Work is not saved until the live core confirms the request.";
+  }
+  return `Core request could not be completed (${status}). Review the request and retry.`;
+}
+
+function professionalNetworkError(message: string): string {
+  if (/abort|timeout/i.test(message)) {
+    return "Core service timed out. Retry once the local FastAPI core is responsive.";
+  }
+  if (/fetch|failed|network/i.test(message)) {
+    return "Core service temporarily unavailable - working in offline review mode. Retry before relying on legal output.";
+  }
+  return message;
 }
 
 export async function getCoreSnapshot(): Promise<CoreSnapshot> {

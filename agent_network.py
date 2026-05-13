@@ -782,17 +782,56 @@ def _grounded_research_summary(retrieval: dict[str, Any]) -> str:
 def _grounded_draft(task: str, context: dict[str, Any], retrieval: dict[str, Any]) -> str:
     results = retrieval.get("results") or []
     if not results:
-        return "[BLOCKED: No verified D.C. grounding retrieved. Attorney must supply sources before drafting.]"
+        return (
+            "DRAFTING BLOCKED\n\n"
+            "This is AI-assisted drafting - attorney must review and verify all content before use.\n\n"
+            "Mercy did not retrieve verified D.C. grounding for this request. Supply official D.C. source material, "
+            "rerun citation verification, and confirm matter facts before preparing client-facing language."
+        )
     facts = context.get("facts") if isinstance(context.get("facts"), dict) else context.get("key_facts", {})
     fact_summary = "; ".join(f"{key}: {value}" for key, value in list((facts or {}).items())[:4]) or "facts pending"
-    authorities = "; ".join(result.get("citation", {}).get("label", "[VERIFY CITE]") for result in results[:3])
+    jurisdiction = str(context.get("jurisdiction") or "District of Columbia")
+    requested_relief = str(context.get("requested_relief") or "client objective pending")
+    matter_type = str(context.get("matter_type") or "D.C. legal matter")
+    authority_lines = []
+    for index, result in enumerate(results[:4], start=1):
+        citation = result.get("citation", {}) if isinstance(result.get("citation"), dict) else {}
+        provenance = citation.get("provenance", {}) if isinstance(citation.get("provenance"), dict) else {}
+        label = citation.get("label") or result.get("source_id") or "[VERIFY CITE]"
+        verification = result.get("verification_status") or citation.get("verification_status") or "verification_required"
+        source_url = provenance.get("url") or result.get("url") or "official locator pending"
+        summary = result.get("summary") or "Candidate D.C. source metadata requires attorney verification."
+        authority_lines.append(
+            f"{index}. {label} - {summary} Verification: {verification}. Official source: {source_url}."
+        )
+    authorities = "\n".join(authority_lines)
+    top_labels = "; ".join(
+        str((result.get("citation") or {}).get("label") or result.get("source_id") or "[VERIFY CITE]")
+        for result in results[:3]
+    )
     return (
-        "Attorney-review draft scaffold:\n"
-        f"Task: {task}\n"
-        f"Matter facts: {fact_summary}\n"
-        f"Grounding to verify: {authorities}\n"
-        "Draft note: Use the retrieved authorities only after attorney verification of official text, current validity, "
-        "pinpoint support, and record citations."
+        "This is AI-assisted drafting - attorney must review and verify all content before use.\n\n"
+        f"Drafting objective: {task}\n"
+        f"Matter posture: {matter_type}; jurisdiction: {jurisdiction}; requested relief/objective: {requested_relief}.\n"
+        f"Known matter facts to confirm: {fact_summary}.\n\n"
+        "Issue\n"
+        "Prepare D.C.-specific attorney-review language responsive to the drafting objective while preserving "
+        "confidentiality, source verification, and professional-responsibility safeguards.\n\n"
+        "Rule and source grounding to verify\n"
+        f"{authorities}\n\n"
+        "Application\n"
+        "Based on the current matter context, frame the analysis around the client objective, the operative document "
+        "language, and any D.C. procedural or ethics constraints. Do not present this section as final legal advice "
+        f"until counsel verifies the official source text, current validity, and pinpoint support for {top_labels}.\n\n"
+        "Conclusion / proposed attorney-review language\n"
+        "[Insert tailored clause, argument paragraph, or client-facing explanation here after attorney verification of "
+        "facts, source text, record support, and client instructions. Preserve D.C. phrasing, avoid overstatement, and "
+        "use citation placeholders only where the official source has been checked.]\n\n"
+        "Citation verification checklist\n"
+        "- Verify each cited D.C. source in its official locator before filing, sending, or billing for final work.\n"
+        "- Confirm the source is current and supports the precise proposition stated.\n"
+        "- Confirm the matter facts and procedural posture match the drafted language.\n"
+        "- Keep the attorney-review warning with any draft exported to Word or shared for review."
     )
 
 

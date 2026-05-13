@@ -20,6 +20,25 @@ function tone(status?: string): "success" | "warning" | "danger" | "important" |
   return "subtle";
 }
 
+function actionText(status?: string, type: "guardrail" | "grounding" = "guardrail"): string {
+  if (status === "pass") {
+    return type === "grounding"
+      ? "Grounded in verified official D.C. source metadata. Verify official text and pinpoint support before use."
+      : "No blocking guardrail issue. Attorney review remains mandatory.";
+  }
+  if (status === "block") {
+    return type === "grounding"
+      ? "Grounding blocked. Rerun research with official D.C. sources before drafting."
+      : "Guardrails blocked this output. Resolve the warning before client use.";
+  }
+  if (status === "warn") {
+    return type === "grounding"
+      ? "Candidate grounding requires attorney verification."
+      : "Review warning present. Confirm facts, citations, confidentiality, and scope.";
+  }
+  return type === "grounding" ? "Citation verification in progress." : "Reliability check pending.";
+}
+
 export function ReliabilitySignals({ core, compact = false }: ReliabilitySignalsProps) {
   if (!core) {
     return null;
@@ -32,6 +51,8 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
   const citationCount = core.citations?.length ?? 0;
   const missingInputs = core.route?.missing_inputs ?? [];
   const reviewFlags = core.reviewFlags ?? core.envelope?.dc_ethics_metadata.review_flags ?? [];
+  const lowConfidence = typeof core.route?.confidence === "number" && core.route.confidence < 0.72;
+  const officialGrounding = core.officialSourceGrounding?.includes("official") || core.citations?.some((citation) => citation.verification_status.includes("official"));
 
   return (
     <div className={compact ? "reliabilitySignals compact" : "reliabilitySignals"}>
@@ -56,6 +77,19 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
             RAGAS {core.ragasStatus ?? "pending"}
           </Badge>
         </Tooltip>
+        <Tooltip content="Whether returned citations include official D.C. source metadata." relationship="label">
+          <Badge appearance="tint" color={officialGrounding ? "success" : "warning"}>
+            {officialGrounding ? "Official D.C. sources" : "Verify sources"}
+          </Badge>
+        </Tooltip>
+      </div>
+      <div className="actionGrid">
+        <Text className="actionText">
+          <strong>Guardrail:</strong> {actionText(core.guardrailStatus, "guardrail")}
+        </Text>
+        <Text className="actionText">
+          <strong>Grounding:</strong> {actionText(core.groundingStatus, "grounding")}
+        </Text>
       </div>
       <div className="signalMetricGrid">
         <div>
@@ -67,8 +101,12 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
           <Text className="metricValue">{core.route?.expert ?? core.agent?.selected_expert ?? "pending"}</Text>
         </div>
         <div>
+          <Text className="metricLabel">Confidence</Text>
+          <Text className="metricValue">{typeof core.route?.confidence === "number" ? `${Math.round(core.route.confidence * 100)}%` : "pending"}</Text>
+        </div>
+        <div>
           <Text className="metricLabel">Tenant</Text>
-          <Text className="metricValue">{core.tenantId ?? core.matterContext?.tenant_id ?? "local"}</Text>
+          <Text className="metricValue">{core.tenantId ?? core.matterContext?.tenant_id ?? "tenant scoped"}</Text>
         </div>
         <div>
           <Text className="metricLabel">Official grounding</Text>
@@ -101,6 +139,7 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
       ) : null}
       {missingInputs.length ? <Text className="signalText warningText">Missing input: {missingInputs.join(", ")}.</Text> : null}
       {reviewFlags.length ? <Text className="signalText warningText">Review flags: {reviewFlags.join(", ")}.</Text> : null}
+      {lowConfidence ? <Text className="signalText warningText">Low confidence route. Add matter facts or run source research before drafting.</Text> : null}
       {core.citations?.length ? (
         <div className="citationList">
           {core.citations.slice(0, compact ? 2 : 4).map((citation) => (
@@ -116,7 +155,8 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
       <Text className="attorneyWarning">Requires attorney review before client use.</Text>
       {core.retryWhenOnline ? (
         <Text className="signalText warningText">
-          Retry when online with the active document open. {core.queuedRequestCount ?? 0} queued request
+          Core service temporarily unavailable - working in offline mode. Retry when online with the active document open.{" "}
+          {core.queuedRequestCount ?? 0} queued request
           {(core.queuedRequestCount ?? 0) === 1 ? "" : "s"}.
         </Text>
       ) : null}

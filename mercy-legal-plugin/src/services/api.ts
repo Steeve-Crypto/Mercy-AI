@@ -464,7 +464,7 @@ function fallbackAgentResponse(action: string, task: string, content: string): C
     task,
     agent_result: {
       status: "warn",
-      answer: content,
+      answer: addReviewDisclaimer(content),
       grounding_policy: {
         status: "warn",
         strict_grounding: true,
@@ -496,11 +496,19 @@ function fallbackAgentResponse(action: string, task: string, content: string): C
   };
 }
 
+function addReviewDisclaimer(content: string): string {
+  const disclaimer = "This is AI-assisted drafting - attorney must review and verify all content before use.";
+  if (content.includes(disclaimer)) {
+    return content;
+  }
+  return `${disclaimer}\n\n${content}`;
+}
+
 function agentContent(response: CoreAgentResponse): string {
   const result = response.agent_result ?? {};
   const direct = result.draft ?? result.answer ?? result.summary;
   if (typeof direct === "string" && direct.trim()) {
-    return direct;
+    return addReviewDisclaimer(direct);
   }
   const compliance = result.compliance;
   if (typeof compliance === "object" && compliance !== null) {
@@ -511,7 +519,7 @@ function agentContent(response: CoreAgentResponse): string {
     const citation = (verification as { verified_citation?: { label?: string } }).verified_citation;
     return `Citation verification: ${citation?.label ?? "[VERIFY CITE]"}`;
   }
-  return "Mercy agent response requires attorney review.";
+  return addReviewDisclaimer("Mercy agent response requires attorney review.");
 }
 
 function metadataFromAgent(
@@ -533,7 +541,7 @@ function metadataFromAgent(
   const auth = authContext();
   const citationStatuses = response.response_envelope?.citations ?? response.citations ?? route?.citations ?? [];
   const officialGrounding = citationStatuses.some((citation) => citation.verification_status.includes("official"))
-    ? "official D.C. source metadata present"
+    ? "Grounded in verified official D.C. source metadata"
     : citationStatuses.length
       ? "candidate citations require official-source verification"
       : "no source grounding returned";
@@ -610,7 +618,7 @@ function fallbackMetadata(reason: string): CoreResponseMetadata {
     source: "fallback",
     coreUrl: CORE_API_URL,
     humanReviewRequired: true,
-    fallbackReason: reason,
+    fallbackReason: `Core service temporarily unavailable - working in offline mode. ${reason}`,
     guardrailStatus: "warn",
     groundingStatus: "warn",
     cacheStatus: "queued",
@@ -627,7 +635,7 @@ function fallbackAnalysis(documentText: string, reason: string): AnalysisResult 
   return {
     score: 78,
     summary:
-      "Preview fallback: Mercy queued this review for the live agent network. Treat this as a local drafting aid only until sync completes.",
+      "Core service temporarily unavailable - working in offline mode. Mercy queued this review for the live agent network. Treat this as a local drafting aid only until sync completes.",
     findings: [
       {
         id: "offline-risk",
@@ -635,7 +643,7 @@ function fallbackAnalysis(documentText: string, reason: string): AnalysisResult 
         title: "Live grounding unavailable",
         excerpt: documentText.slice(0, 160) || "No document text available.",
         dcContext: "D.C. attorney review, confidentiality, and source verification remain required.",
-        recommendation: "Reconnect to the Mercy core and rerun the agent review before relying on this output."
+        recommendation: "Use Retry queue when online, then rerun the agent review before relying on this output."
       }
     ],
     core: fallbackMetadata(reason)
@@ -872,7 +880,9 @@ export const api = {
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Agent drafting request failed";
       return fallbackMessage(
-        "Preview fallback: drafting was queued for the live Mercy agent network. Reconnect to the Mercy core and rerun with the active document open before relying on any revision.",
+        addReviewDisclaimer(
+          "Core service temporarily unavailable - working in offline mode. Drafting was queued for the live Mercy agent network. Reconnect to the Mercy core and rerun with the active document open before relying on any revision."
+        ),
         reason
       );
     }

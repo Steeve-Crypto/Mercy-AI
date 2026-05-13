@@ -126,6 +126,10 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
                 Core {initialSnapshot.online ? "online" : "unavailable"}
               </Badge>
               <Badge variant="outline">{initialSnapshot.capabilities?.security_posture.mode ?? "auth required"}</Badge>
+              <Badge variant="secondary">Tenant isolated</Badge>
+              <Badge variant={ragResult?.results?.length ? "secondary" : "gold"}>
+                {ragResult?.results?.length ? "Official D.C. grounding active" : "D.C. grounding pending"}
+              </Badge>
               <span className="text-xs text-muted-foreground">
                 {initialSnapshot.health?.clerk_os_version ?? "FastAPI core unreachable"} | {initialSnapshot.coreUrl}
               </span>
@@ -138,7 +142,7 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
             </p>
             {initialSnapshot.error && (
               <p className="mt-2 text-xs text-[#8a6110]">
-                Core notice: {initialSnapshot.error}. Check auth headers or local dev mode before saving legal work.
+                Core service temporarily unavailable - working in offline review mode. {initialSnapshot.error}. Retry before relying on legal output.
               </p>
             )}
           </div>

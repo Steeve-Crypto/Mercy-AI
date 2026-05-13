@@ -26,6 +26,7 @@ export function App() {
   const [processing, setProcessing] = useState<ProcessingState>("idle");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastAgentAction, setLastAgentAction] = useState<AgentActionResult | null>(null);
 
   const isThinking = processing !== "idle";
@@ -45,6 +46,7 @@ export function App() {
   const handleAnalyzeDocument = async () => {
     setProcessing("analyzing");
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     try {
       const documentText = await readDocumentText();
@@ -53,6 +55,8 @@ export function App() {
       setLastAgentAction({ title: "document analysis", content: result.summary, core: result.core! });
       setActiveView("risk");
       setSuccessMessage("Document analysis complete");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Document analysis could not be completed. Retry when Word and the Mercy core are available.");
     } finally {
       setProcessing("idle");
     }
@@ -61,6 +65,7 @@ export function App() {
   const handleExplainSelection = async () => {
     setProcessing("explaining");
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     try {
       const selectedText = await readSelectedText();
@@ -68,6 +73,13 @@ export function App() {
       setActiveView("chat");
       setSuccessMessage("Clause explanation ready");
       return response;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Clause explanation could not be completed. Select text and retry.");
+      return {
+        id: crypto.randomUUID(),
+        role: "assistant" as const,
+        content: "Core service temporarily unavailable - working in offline mode. Retry with the selected clause before relying on this explanation."
+      };
     } finally {
       setProcessing("idle");
     }
@@ -76,10 +88,13 @@ export function App() {
   const handleInsertClause = async (clause: Clause) => {
     setProcessing("inserting");
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     try {
       await insertTextAtCursor(clause.text);
       setSuccessMessage(`${clause.title} inserted`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Word insert failed. Place the cursor in the document and retry.");
     } finally {
       window.setTimeout(() => setProcessing("idle"), 220);
     }
@@ -91,6 +106,7 @@ export function App() {
 
   const handleAgentAction = (result: AgentActionResult) => {
     setLastAgentAction(result);
+    setErrorMessage(null);
     setSuccessMessage(`${result.title} complete`);
   };
 
@@ -185,6 +201,20 @@ export function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {errorMessage && (
+          <motion.div
+            className="errorToast"
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span>{errorMessage}</span>
+            <button type="button" onClick={() => setErrorMessage(null)}>
+              Dismiss
+            </button>
+          </motion.div>
+        )}
         {successMessage && (
           <motion.div
             className="successToast"

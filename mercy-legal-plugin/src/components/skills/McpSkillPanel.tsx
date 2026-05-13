@@ -42,6 +42,7 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
   const [lastResult, setLastResult] = useState<AgentActionResult | null>(null);
   const [queueCount, setQueueCount] = useState(api.queuedAgentRequestCount());
   const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -93,12 +94,15 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
 
   const runSkill = async (skillName: string) => {
     onBusyChange(true);
+    setError(null);
     try {
       const text = skillName === "check_dc_ethics" ? await readDocumentText() : await readSelectedText();
       const result = await api.runMcpSkill(skillName, text);
       setLastResult(result);
       onResult(result);
       setQueueCount(api.queuedAgentRequestCount());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Skill request failed. Retry when Word and the Mercy core are available.");
     } finally {
       onBusyChange(false);
     }
@@ -106,6 +110,7 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
 
   const sync = async () => {
     onBusyChange(true);
+    setError(null);
     try {
       const synced = await api.syncOfflineAgentQueue();
       setQueueCount(api.queuedAgentRequestCount());
@@ -122,6 +127,8 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
           }
         });
       }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Retry queue failed. Check core availability and try again.");
     } finally {
       onBusyChange(false);
     }
@@ -181,6 +188,7 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
       {manifest?.rag_backend?.production_blocked ? (
         <Text className="mcpSubtext warningLine">Production RAG is blocked until official external backends are configured.</Text>
       ) : null}
+      {error ? <Text className="mcpSubtext warningLine">{error}</Text> : null}
       {lastResult ? (
         <div className="mcpResult">
           <Text weight="semibold">{lastResult.title}</Text>

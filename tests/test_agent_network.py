@@ -79,6 +79,23 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertTrue(result["grounding_policy"]["strict_grounding"])
         self.assertIn("available", result["langgraph_runtime"])
 
+    def test_drafting_agent_returns_attorney_review_irac_scaffold(self) -> None:
+        result = execute_agent_task(
+            task="Draft a D.C. attorney review clause about citation verification.",
+            params={"top_k": 2},
+            matter_context={"jurisdiction": "District of Columbia", "surface_context": "unit_test_agent"},
+            route={"expert": "drafting", "route_mode": "dc_drafting", "confidence": 0.9, "guardrail_status": "pass"},
+        )
+
+        draft = result["agent_result"]["draft"]
+
+        self.assertEqual(result["selected_agent"], "DraftingAgent")
+        self.assertIn("This is AI-assisted drafting - attorney must review and verify all content before use.", draft)
+        self.assertIn("Issue", draft)
+        self.assertIn("Rule and source grounding to verify", draft)
+        self.assertIn("Application", draft)
+        self.assertIn("Citation verification checklist", draft)
+
     def test_langgraph_runtime_policy_is_fail_closed_outside_local(self) -> None:
         self.assertTrue(_local_langgraph_fallback_allowed())
         runtime = langgraph_runtime_metadata(graph_compiled=LANGGRAPH_AVAILABLE)
