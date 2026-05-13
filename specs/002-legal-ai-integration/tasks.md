@@ -118,19 +118,22 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Added `scripts/verify.py`, `scripts/core_smoke.py`, `scripts/ragas_quick_check.py`, `pyrightconfig.json`, and `make verify`; README now documents the canonical `.\legal_discovery_ai\.venv\Scripts\python.exe scripts\verify.py` health check. End-to-end verification passed with all components green.
    - **Dependencies**: PD028-PD033.
 
-8. [ ] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+8. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
+   - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-9. [ ] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+9. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
+   - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-10. [ ] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+10. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
+   - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
 11. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
@@ -152,7 +155,8 @@ Pull these in priority order. These are logical next steps from the existing bac
 
 ### Standalone Platform
 
-- [ ] PD009 [Standalone Platform] Connect contract analyzer to live document review.
+- [X] PD009 [Standalone Platform] Connect contract analyzer to live document review.
+  - **Result**: Contract analyzer no longer uses fake risk rows; it reflects the latest live agent or discovery response, guardrail status, review flags, and reliability metadata.
 - [ ] PD010 [Standalone Platform] Connect Stripe/demo checkout to capability metadata.
 
 ### Office / Word Add-in

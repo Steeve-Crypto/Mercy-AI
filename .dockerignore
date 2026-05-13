@@ -51,5 +51,7 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+*.tmp
+*.swp
 .vscode/
 .idea/

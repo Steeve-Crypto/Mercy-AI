@@ -2,7 +2,7 @@
 Purpose: Typed client for the existing Mercy FastAPI Shared Intelligence Core.
 This file is the Standalone Platform bridge for PD001: it lets the Next.js
 dashboard read live core health, product capabilities, and matter state while
-retaining a clear local/demo fallback when the backend is not running.
+retaining explicit error states when the backend is not running.
 
 Related source-of-truth files:
 - specs/001-migrate-docs-spec/spec.md
@@ -23,11 +23,39 @@ export type CoreHealth = {
   clerk_os_version: string;
 };
 
+export type CoreAuthContext = {
+  token?: string | null;
+  tenantId?: string | null;
+  userId?: string | null;
+  roles?: string | null;
+};
+
 export type CoreCapabilities = {
   product: string;
   core: string;
   positioning: string;
   windows: string[];
+  router?: {
+    version: string;
+    experts: string[];
+    endpoint: string;
+    rag_endpoint: string;
+    rag_status_endpoint?: string;
+    rag_ingest_endpoint?: string;
+    rag_eval_endpoint?: string;
+    full_intake_endpoint?: string;
+    agent_execute_endpoint?: string;
+    agent_skills_endpoint?: string;
+    retrieval_backbone: string;
+    eval_backbone: string;
+    agent_network: string;
+  };
+  observability?: {
+    version: string;
+    trace_endpoint: string;
+    langsmith_project_env: string;
+    langsmith_tracing_env: string;
+  };
   tiers: Record<string, string[]>;
   security_posture: {
     mode: string;
@@ -75,11 +103,6 @@ export type CoreSnapshot = {
   health: CoreHealth | null;
   capabilities: CoreCapabilities | null;
   matters: CoreMatter[];
-  router: CoreRouterEnvelope | null;
-  intake: CoreFullMatterIntakeEnvelope | null;
-  demoMatterContext: CoreMatterContext;
-  demoIntakeSummary: CoreIntakeSummary;
-  usingDemoContext: boolean;
   error: string | null;
 };
 
@@ -143,6 +166,100 @@ export type CoreRouteDecision = {
     training_use: string;
     redaction_required_for_observability: boolean;
   };
+};
+
+export type CoreRagResult = {
+  chunk_id: string;
+  source_id: string;
+  text: string;
+  summary: string;
+  combined_score: number;
+  verification_status: string;
+  citation?: CoreCitation;
+  provenance?: Record<string, unknown>;
+  entities?: string[];
+  relationships?: Array<Record<string, string>>;
+  practice_area?: string;
+  source_date?: string;
+};
+
+export type CoreRagEnvelope = {
+  rag_version: string;
+  query: string;
+  results: CoreRagResult[];
+  citations: CoreCitation[];
+  verification: {
+    status: "pass" | "warn" | "block" | string;
+    issues?: string[];
+    human_review_required?: boolean;
+    strict_citation_accuracy?: boolean;
+  };
+  backend_status?: Record<string, unknown>;
+  graph_context?: {
+    entities: string[];
+    relationships: Array<Record<string, string>>;
+  };
+  metadata_filters?: Record<string, unknown>;
+  answer_policy?: Record<string, unknown>;
+  response_envelope: CoreResponseEnvelope;
+  route: CoreRouteDecision;
+  expert: string;
+  confidence_score: number;
+  guardrail_status: string;
+  dc_ethics_metadata: CoreDcEthicsMetadata;
+  matter_context_snapshot: CoreMatterContextSnapshot;
+  audit_timestamp: string;
+  human_review_required: boolean;
+};
+
+export type CoreAgentEnvelope = {
+  agent_network_version: string;
+  langgraph_runtime?: Record<string, unknown>;
+  selected_agent: string;
+  selected_expert: string;
+  task: string;
+  params?: Record<string, unknown>;
+  agent_result?: Record<string, unknown>;
+  mcp_skills_used?: string[];
+  mcp_skill_results?: Array<Record<string, unknown>>;
+  citations: CoreCitation[];
+  grounding_policy?: {
+    status: string;
+    strict_grounding: boolean;
+    no_unverified_output: boolean;
+    issues: string[];
+    instruction: string;
+  };
+  trace_id?: string;
+  langsmith_project_url?: string;
+  response_envelope: CoreResponseEnvelope;
+  route: CoreRouteDecision;
+  expert: string;
+  confidence_score: number;
+  guardrail_status: string;
+  dc_ethics_metadata: CoreDcEthicsMetadata;
+  matter_context_snapshot: CoreMatterContextSnapshot;
+  audit_timestamp: string;
+  human_review_required: boolean;
+};
+
+export type CoreDiscoveryEnvelope = {
+  workspace: string;
+  engine: string;
+  document_path?: string;
+  facts?: Record<string, unknown>;
+  citations: CoreCitation[];
+  premium_billing_hook?: Record<string, unknown>;
+  matter_id?: string;
+  response_envelope: CoreResponseEnvelope;
+  route: CoreRouteDecision;
+  expert: string;
+  confidence_score: number;
+  guardrail_status: string;
+  dc_ethics_metadata: CoreDcEthicsMetadata;
+  matter_context_snapshot: CoreMatterContextSnapshot;
+  audit_timestamp: string;
+  human_review_required: boolean;
 };
 
 export type CoreRouterEnvelope = {
@@ -239,71 +356,56 @@ export type CoreFullMatterIntakeEnvelope = CoreMatterIntakeEnvelope & {
   next_steps: string[];
 };
 
-const DASHBOARD_DEMO_MATTER_CONTEXT: CoreMatterContext = {
-  matter_id: "demo-only-shaw-lease-review",
-  name: "Shaw lease amendment review",
-  client_id: "demo-only-client",
-  client_name: "Demo commercial tenant",
-  matter_type: "commercial lease review",
-  jurisdiction: "District of Columbia",
-  client_role: "tenant",
-  opposing_parties: ["Demo landlord"],
-  deadlines: [
-    {
-      label: "Demo client review target",
-      date: "2026-05-20",
-      source: "local_dashboard_demo",
-    },
-  ],
-  requested_relief: "Narrow indemnity language and preserve D.C. venue protections.",
-  key_facts: {
-    selected_clause: "Demo clause: tenant indemnifies landlord for broad claims.",
-    workflow: "dashboard_demo_only",
-  },
-  documents: [
-    {
-      document_id: "demo-only-lease-amendment",
-      title: "Demo lease amendment excerpt",
-      source: "local_dashboard_demo",
-    },
-  ],
-  sensitivity_flags: ["demo_only"],
-  missing_information: ["counterparty negligence carveout", "insurance limits"],
-  history: [
-    {
-      event: "local_demo_context_loaded",
-      source: "mercy_legal_web",
-    },
-  ],
-  tier: "free",
-  created_at: "2026-05-12T00:00:00.000Z",
-  last_updated: "2026-05-12T00:00:00.000Z",
-  facts: {
-    selected_clause: "Demo clause: tenant indemnifies landlord for broad claims.",
-  },
-  drafts: [],
-  billing_events: [],
-  route_history: [],
-};
+function browserAuthContext(): CoreAuthContext {
+  if (typeof window === "undefined") {
+    return {};
+  }
 
-const DASHBOARD_DEMO_INTAKE_SUMMARY: CoreIntakeSummary = {
-  version: "local-dashboard-demo",
-  matter_id: DASHBOARD_DEMO_MATTER_CONTEXT.matter_id,
-  matter_name: DASHBOARD_DEMO_MATTER_CONTEXT.name,
-  client_name: DASHBOARD_DEMO_MATTER_CONTEXT.client_name,
-  jurisdiction: DASHBOARD_DEMO_MATTER_CONTEXT.jurisdiction,
-  client_role: DASHBOARD_DEMO_MATTER_CONTEXT.client_role,
-  requested_relief: DASHBOARD_DEMO_MATTER_CONTEXT.requested_relief,
-  document_count: DASHBOARD_DEMO_MATTER_CONTEXT.documents?.length ?? 0,
-  deadline_count: DASHBOARD_DEMO_MATTER_CONTEXT.deadlines?.length ?? 0,
-  missing_information_count: DASHBOARD_DEMO_MATTER_CONTEXT.missing_information?.length ?? 0,
-  conflict_status: "demo_not_checked",
-  scope_status: "demo_not_confirmed",
-  ready_for_attorney_review: false,
-  last_updated: DASHBOARD_DEMO_MATTER_CONTEXT.last_updated,
-};
+  return {
+    token: window.localStorage.getItem("mercy.auth.token") || process.env.NEXT_PUBLIC_MERCY_API_TOKEN,
+    tenantId:
+      window.localStorage.getItem("mercy.auth.tenantId") ||
+      process.env.NEXT_PUBLIC_MERCY_TENANT_ID ||
+      "local-dev-tenant",
+    userId:
+      window.localStorage.getItem("mercy.auth.userId") ||
+      process.env.NEXT_PUBLIC_MERCY_USER_ID ||
+      "local-web-user",
+    roles: window.localStorage.getItem("mercy.auth.roles") || "attorney",
+  };
+}
 
-async function coreFetch<T>(path: string, init?: RequestInit): Promise<CoreClientResult<T>> {
+function serverAuthContext(): CoreAuthContext {
+  return {
+    token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
+    tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
+    userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
+    roles: process.env.MERCY_ROLES || "attorney",
+  };
+}
+
+function authHeaders(auth?: CoreAuthContext): HeadersInit {
+  const context = {
+    ...(typeof window === "undefined" ? serverAuthContext() : browserAuthContext()),
+    ...(auth ?? {}),
+  };
+  const headers: Record<string, string> = {};
+  if (context.token) {
+    headers.Authorization = `Bearer ${context.token}`;
+  }
+  if (context.tenantId) {
+    headers["X-Mercy-Tenant-Id"] = context.tenantId;
+  }
+  if (context.userId) {
+    headers["X-Mercy-User-Id"] = context.userId;
+  }
+  if (context.roles) {
+    headers["X-Mercy-Roles"] = context.roles;
+  }
+  return headers;
+}
+
+async function coreFetch<T>(path: string, init?: RequestInit, auth?: CoreAuthContext): Promise<CoreClientResult<T>> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
 
@@ -313,6 +415,7 @@ async function coreFetch<T>(path: string, init?: RequestInit): Promise<CoreClien
       cache: "no-store",
       headers: {
         Accept: "application/json",
+        ...authHeaders(auth),
         ...(init?.headers ?? {}),
       },
       signal: controller.signal,
@@ -358,17 +461,35 @@ export async function getCoreSnapshot(): Promise<CoreSnapshot> {
     health: health.data,
     capabilities: capabilities.data,
     matters: matters.data ?? [],
-    router: null,
-    intake: null,
-    demoMatterContext: DASHBOARD_DEMO_MATTER_CONTEXT,
-    demoIntakeSummary: DASHBOARD_DEMO_INTAKE_SUMMARY,
-    usingDemoContext: true,
     error: firstError,
   };
 }
 
-export async function getMatter(matterId: string): Promise<CoreClientResult<CoreMatter>> {
-  return coreFetch<CoreMatter>(`/v1/matters/${encodeURIComponent(matterId)}`);
+export async function getMatter(matterId: string, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter>> {
+  return coreFetch<CoreMatter>(`/v1/matters/${encodeURIComponent(matterId)}`, undefined, auth);
+}
+
+export async function createMatter(payload: {
+  name: string;
+  tier?: string;
+  client_id?: string;
+  client_name?: string;
+  matter_type?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter>> {
+  return coreFetch<CoreMatter>(
+    "/v1/matters",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        tier: "free",
+        ...payload,
+      }),
+    },
+    auth,
+  );
 }
 
 export async function routeLegalTask(payload: {
@@ -379,7 +500,7 @@ export async function routeLegalTask(payload: {
   matter_id?: string;
   selected_text?: string;
   document_text?: string;
-}): Promise<CoreClientResult<CoreRouterEnvelope>> {
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreRouterEnvelope>> {
   return coreFetch<CoreRouterEnvelope>("/v1/router/inspect", {
     method: "POST",
     headers: {
@@ -391,7 +512,7 @@ export async function routeLegalTask(payload: {
       matter_context: {},
       ...payload,
     }),
-  });
+  }, auth);
 }
 
 export async function submitMatterIntake(payload: {
@@ -414,7 +535,7 @@ export async function submitMatterIntake(payload: {
   missing_information?: string[];
   surface_context?: string;
   user_type?: string;
-}): Promise<CoreClientResult<CoreMatterIntakeEnvelope>> {
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatterIntakeEnvelope>> {
   return coreFetch<CoreMatterIntakeEnvelope>("/v1/matter/intake", {
     method: "POST",
     headers: {
@@ -425,7 +546,7 @@ export async function submitMatterIntake(payload: {
       surface_context: "mercy_legal_web",
       ...payload,
     }),
-  });
+  }, auth);
 }
 
 export async function submitFullMatterIntake(payload: {
@@ -445,7 +566,7 @@ export async function submitFullMatterIntake(payload: {
   tier?: string;
   surface_context?: string;
   user_type?: string;
-}): Promise<CoreClientResult<CoreFullMatterIntakeEnvelope>> {
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreFullMatterIntakeEnvelope>> {
   return coreFetch<CoreFullMatterIntakeEnvelope>("/v1/matter/intake/full", {
     method: "POST",
     headers: {
@@ -456,5 +577,90 @@ export async function submitFullMatterIntake(payload: {
       surface_context: "mercy_legal_web",
       ...payload,
     }),
-  });
+  }, auth);
+}
+
+export async function retrieveRag(payload: {
+  query: string;
+  matter_id?: string;
+  matter_context?: Record<string, unknown>;
+  top_k?: number;
+  practice_area?: string;
+  date_from?: string;
+  date_to?: string;
+  user_type?: string;
+  surface_context?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreRagEnvelope>> {
+  return coreFetch<CoreRagEnvelope>(
+    "/v1/rag/retrieve",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        top_k: 5,
+        user_type: "solo",
+        surface_context: "mercy_legal_web",
+        matter_context: {
+          jurisdiction: "District of Columbia",
+          authority_type: ["statute", "rule", "case", "regulation", "ethics_opinion", "court_rule"],
+        },
+        ...payload,
+      }),
+    },
+    auth,
+  );
+}
+
+export async function executeAgent(payload: {
+  task: string;
+  params?: Record<string, unknown>;
+  matter_id?: string;
+  matter_context?: Record<string, unknown>;
+  user_type?: string;
+  surface_context?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreAgentEnvelope>> {
+  return coreFetch<CoreAgentEnvelope>(
+    "/v1/agent/execute",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_type: "solo",
+        surface_context: "mercy_legal_web",
+        matter_context: {
+          jurisdiction: "District of Columbia",
+          ...(payload.matter_context ?? {}),
+        },
+        ...payload,
+      }),
+    },
+    auth,
+  );
+}
+
+export async function uploadDiscoveryDocument(payload: {
+  file: File;
+  matter_id?: string;
+  document_text?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreDiscoveryEnvelope>> {
+  const form = new FormData();
+  form.append("file", payload.file);
+  if (payload.matter_id) {
+    form.append("matter_id", payload.matter_id);
+  }
+  if (payload.document_text) {
+    form.append("document_text", payload.document_text);
+  }
+  return coreFetch<CoreDiscoveryEnvelope>(
+    "/v1/workspace/discovery/upload",
+    {
+      method: "POST",
+      body: form,
+    },
+    auth,
+  );
 }

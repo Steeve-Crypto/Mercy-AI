@@ -1,17 +1,4 @@
-import {
-  Archive,
-  BookOpen,
-  BrainCircuit,
-  BriefcaseBusiness,
-  FileCheck2,
-  FileText,
-  Gauge,
-  Landmark,
-  MessageSquareText,
-  Scale,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { Archive, BookOpen, BrainCircuit, BriefcaseBusiness, FileCheck2, Gauge, MessageSquareText } from "lucide-react";
 
 export const features = [
   {
@@ -107,58 +94,4 @@ export const navItems = [
   { label: "Clause Library", icon: BookOpen },
   { label: "Matters", icon: BriefcaseBusiness },
   { label: "Activity", icon: Gauge },
-];
-
-export const documents = [
-  { name: "Lease Amendment - Shaw Retail", type: "Contract", matter: "Dawson v. Mercer", status: "Analyzed" },
-  { name: "Operating Agreement v4", type: "LLC", matter: "North Capitol Holdings", status: "Needs review" },
-  { name: "Discovery Responses", type: "Litigation", matter: "Banneker Labs", status: "Summarized" },
-];
-
-export const clauses = [
-  {
-    title: "DC Tenant Estoppel Certificate",
-    category: "Real Estate",
-    risk: "Medium",
-    summary: "Clarifies lease status, defaults, and representations before assignment or financing.",
-  },
-  {
-    title: "Non-Compete Savings Clause",
-    category: "Employment",
-    risk: "High",
-    summary: "Flags enforceability concerns and points counsel toward narrower confidentiality language.",
-  },
-  {
-    title: "Prompt Payment Act Interest",
-    category: "Commercial",
-    risk: "Low",
-    summary: "Adds statutory interest and fee language for qualifying DC construction or public payment matters.",
-  },
-];
-
-export const matters = [
-  { client: "North Capitol Holdings", matter: "LLC operating agreement", status: "Drafting", next: "Revise transfer clause" },
-  { client: "Banneker Labs", matter: "Commercial dispute", status: "Discovery", next: "Summarize RFP responses" },
-  { client: "Dawson Retail", matter: "Lease amendment", status: "Negotiation", next: "Review indemnity markup" },
-];
-
-export const activity = [
-  { icon: Sparkles, label: "AI summary created", detail: "Discovery Responses, 14 pages", time: "8 min ago" },
-  { icon: ShieldCheck, label: "Risk score updated", detail: "Operating Agreement v4 moved to 72", time: "28 min ago" },
-  { icon: FileText, label: "Document uploaded", detail: "Lease Amendment - Shaw Retail", time: "1 hr ago" },
-  { icon: Landmark, label: "DC clause copied", detail: "Prompt Payment Act Interest", time: "Yesterday" },
-];
-
-export const analysisBreakdown = [
-  { label: "Ambiguous indemnity scope", score: 82, tone: "High" },
-  { label: "Missing DC venue language", score: 64, tone: "Medium" },
-  { label: "Strong confidentiality baseline", score: 22, tone: "Low" },
-  { label: "Termination notice needs detail", score: 57, tone: "Medium" },
-];
-
-export const dashboardStats = [
-  { label: "Active matters", value: "18", icon: BriefcaseBusiness },
-  { label: "Docs reviewed", value: "247", icon: FileCheck2 },
-  { label: "Risk items", value: "31", icon: Scale },
-  { label: "Hours saved", value: "86", icon: Sparkles },
 ];

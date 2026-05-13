@@ -1,19 +1,32 @@
 "use client";
 
-import { useEffect } from "react";
-import { UploadCloud } from "lucide-react";
+import { ChangeEvent, useState } from "react";
+import { Loader2, UploadCloud } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useAppStore } from "@/store/app-store";
 
-export function UploadDropzone() {
-  const { uploadProgress, setUploadProgress } = useAppStore();
+type UploadDropzoneProps = {
+  disabled?: boolean;
+  onUpload: (file: File, documentText?: string) => Promise<void>;
+};
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setUploadProgress(uploadProgress >= 94 ? 58 : uploadProgress + 6);
-    }, 1800);
-    return () => window.clearInterval(timer);
-  }, [setUploadProgress, uploadProgress]);
+export function UploadDropzone({ disabled = false, onUpload }: UploadDropzoneProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [documentText, setDocumentText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
+  }
+
+  async function submitUpload() {
+    if (!file) {
+      return;
+    }
+    setBusy(true);
+    await onUpload(file, documentText || undefined);
+    setBusy(false);
+  }
 
   return (
     <div className="rounded-lg border border-dashed bg-[#fbfcfe] p-5">
@@ -22,13 +35,30 @@ export function UploadDropzone() {
           <UploadCloud className="size-5" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-medium text-mercy-navy">Upload document set</p>
+          <p className="text-sm font-medium text-mercy-navy">Upload a matter PDF</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Drag PDFs, DOCX files, pleadings, contracts, and exhibits into the vault.
+            Uploads go directly to `/v1/workspace/discovery/upload` for the selected matter. Optional text helps the core when a PDF is scanned.
           </p>
-          <div className="mt-4 flex items-center gap-3">
-            <Progress value={uploadProgress} />
-            <span className="w-10 text-right text-xs font-medium text-mercy-navy">{uploadProgress}%</span>
+          <div className="mt-4 grid gap-3">
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={handleFile}
+              disabled={disabled || busy}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-mercy-navy file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+            />
+            <textarea
+              value={documentText}
+              onChange={(event) => setDocumentText(event.target.value)}
+              placeholder="Optional document text or summary for scanned PDFs"
+              disabled={disabled || busy}
+              className="min-h-16 rounded-md border bg-white px-3 py-2 text-xs text-mercy-navy outline-none focus:ring-2 focus:ring-ring"
+            />
+            {busy && <Progress value={70} />}
+            <Button variant="outline" size="sm" disabled={disabled || busy || !file} onClick={submitUpload}>
+              {busy ? <Loader2 className="animate-spin" /> : <UploadCloud />}
+              Analyze upload
+            </Button>
           </div>
         </div>
       </div>
