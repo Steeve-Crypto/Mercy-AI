@@ -1,6 +1,6 @@
 export async function readDocumentText(): Promise<string> {
   if (typeof Word === "undefined") {
-    return "Development preview document text.";
+    return "Word runtime is unavailable; open this add-in inside Word to provide active document text.";
   }
 
   return Word.run(async (context) => {
@@ -13,7 +13,7 @@ export async function readDocumentText(): Promise<string> {
 
 export async function readSelectedText(): Promise<string> {
   if (typeof Word === "undefined") {
-    return "Selected clause preview text.";
+    return "Word runtime is unavailable; select document text inside Word and retry.";
   }
 
   return Word.run(async (context) => {

@@ -59,6 +59,51 @@
                     <SourceLocation resid="Taskpane.Url" />
                   </Action>
                 </Control>
+                <Control xsi:type="Button" id="MercyLegal.AnalyzeDocument">
+                  <Label resid="ML.Analyze.Label" />
+                  <Supertip>
+                    <Title resid="ML.Analyze.Label" />
+                    <Description resid="ML.Analyze.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>analyzeActiveDocument</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.ExplainSelection">
+                  <Label resid="ML.Explain.Label" />
+                  <Supertip>
+                    <Title resid="ML.Explain.Label" />
+                    <Description resid="ML.Explain.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>explainSelection</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.DraftRevision">
+                  <Label resid="ML.Draft.Label" />
+                  <Supertip>
+                    <Title resid="ML.Draft.Label" />
+                    <Description resid="ML.Draft.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>draftRevision</FunctionName>
+                  </Action>
+                </Control>
                 <Control xsi:type="Button" id="MercyLegal.CiteAndVerify">
                   <Label resid="MercyLegal.CiteAndVerify.Label" />
                   <Supertip>
@@ -140,6 +185,9 @@
         <bt:String id="GetStarted.Title" DefaultValue="Mercy Legal is ready" />
         <bt:String id="MercyLegal.GroupLabel" DefaultValue="Mercy Legal" />
         <bt:String id="MercyLegal.OpenTaskpane.Label" DefaultValue="Open Mercy Legal" />
+        <bt:String id="ML.Analyze.Label" DefaultValue="Analyze Doc" />
+        <bt:String id="ML.Explain.Label" DefaultValue="Explain Clause" />
+        <bt:String id="ML.Draft.Label" DefaultValue="Draft Revision" />
         <bt:String id="MercyLegal.CiteAndVerify.Label" DefaultValue="Verify Cite" />
         <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Ethics Check" />
         <bt:String id="MercyLegal.UpdateMatter.Label" DefaultValue="Update Matter" />
@@ -148,10 +196,13 @@
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Open the Mercy Legal sidebar to analyze contracts, explain clauses, draft DC-specific revisions, and generate risk reports." />
         <bt:String id="MercyLegal.OpenTaskpane.Tooltip" DefaultValue="Launch the DC-focused legal AI assistant for this Word document." />
-        <bt:String id="MercyLegal.CiteAndVerify.Tooltip" DefaultValue="Run the cite_and_verify MCP skill on the current Word selection." />
-        <bt:String id="MercyLegal.CheckEthics.Tooltip" DefaultValue="Run the check_dc_ethics MCP skill on the active Word document." />
-        <bt:String id="MercyLegal.UpdateMatter.Tooltip" DefaultValue="Update Mercy matter context from the selected Word text." />
-        <bt:String id="MercyLegal.ExportWord.Tooltip" DefaultValue="Create an Office.js-ready export payload for the selected text." />
+        <bt:String id="ML.Analyze.Tip" DefaultValue="Analyze the full active document through /v1/agent/execute with D.C. guardrails, source grounding, and attorney-review metadata." />
+        <bt:String id="ML.Explain.Tip" DefaultValue="Explain the selected clause under D.C. law through the live Mercy agent network." />
+        <bt:String id="ML.Draft.Tip" DefaultValue="Draft an attorney-review revision for the selected text using live MCP skills and D.C. reliability signals." />
+        <bt:String id="MercyLegal.CiteAndVerify.Tooltip" DefaultValue="Run the discovered cite_and_verify MCP skill on the current Word selection through /v1/agent/execute." />
+        <bt:String id="MercyLegal.CheckEthics.Tooltip" DefaultValue="Run the discovered check_dc_ethics MCP skill on the active Word document with D.C. Ethics Opinion 388 flags." />
+        <bt:String id="MercyLegal.UpdateMatter.Tooltip" DefaultValue="Update tenant-scoped Mercy matter context from selected Word text; confidential content is not persisted in local cache." />
+        <bt:String id="MercyLegal.ExportWord.Tooltip" DefaultValue="Create an Office.js-ready export payload for selected text with guardrail, citation, and trace metadata." />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

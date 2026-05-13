@@ -161,9 +161,12 @@ Pull these in priority order. These are logical next steps from the existing bac
 
 ### Office / Word Add-in
 
-- [ ] PD011 [Office Add-in] Route selected text through dedicated clause explanation UI flow.
-- [ ] PD012 [Office Add-in] Route report generation through core-backed analysis.
-- [ ] PD013 [Office Add-in] Finalize production manifest readiness checklist.
+- [X] PD011 [Office Add-in] Route selected text through dedicated clause explanation UI flow.
+  - **Result**: Clause explanation remains routed through `/v1/agent/execute`; the taskpane and ribbon now expose selected-clause explanation with rich route, guardrail, citation, grounding, tenant, and attorney-review metadata.
+- [X] PD012 [Office Add-in] Route report generation through core-backed analysis.
+  - **Result**: Document analysis and risk report generation now rely on agent-network responses and preserve MoE route, confidence, citations, MCP skills, RAGAS hook status, LangSmith trace, matter context, and D.C. ethics metadata in inserted reports.
+- [X] PD013 [Office Add-in] Finalize production manifest readiness checklist.
+  - **Result**: Manifest now adds intuitive ribbon actions for analyzing the active document, explaining selection, drafting revisions, citation verification, ethics checks, matter updates, and Word export; command functions are wired and manifest validation passes.
 
 ### Shared Intelligence Core
 

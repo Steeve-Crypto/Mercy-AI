@@ -9,6 +9,7 @@ import { DocumentActions } from "./components/document/DocumentActions";
 import { SidebarShell } from "./components/layout/SidebarShell";
 import { RiskSummary } from "./components/risk/RiskSummary";
 import { McpSkillPanel } from "./components/skills/McpSkillPanel";
+import { ReliabilitySignals } from "./components/metadata/ReliabilitySignals";
 import { api } from "./services/api";
 import { insertTextAtCursor, readDocumentText, readSelectedText } from "./services/word";
 import { AgentActionResult, AnalysisResult, Clause, ProcessingState, SidebarView } from "./types";
@@ -134,15 +135,23 @@ export function App() {
         </div>
         <div className="heroStats">
           <div>
-            <Text className="statValue">{analysis?.core?.route ? Math.round(analysis.core.route.confidence * 100) : "--"}</Text>
+            <Text className="statValue">{lastAgentAction?.core.route ? Math.round(lastAgentAction.core.route.confidence * 100) : analysis?.core?.route ? Math.round(analysis.core.route.confidence * 100) : "--"}</Text>
             <Text className="statLabel">Route confidence</Text>
           </div>
           <div>
-            <Text className="statValue">{lastAgentAction?.core.cacheStatus === "queued" ? "Q" : analysis?.core?.guardrailStatus ?? "--"}</Text>
+            <Text className="statValue">
+              {lastAgentAction?.core.cacheStatus === "queued"
+                ? "Q"
+                : lastAgentAction?.core.guardrailStatus ?? analysis?.core?.guardrailStatus ?? "--"}
+            </Text>
             <Text className="statLabel">Reliability</Text>
           </div>
         </div>
       </section>
+
+      {(lastAgentAction?.core ?? analysis?.core) && (
+        <ReliabilitySignals core={lastAgentAction?.core ?? analysis?.core} compact />
+      )}
 
       <DocumentActions analysis={analysis} onAnalyzeDocument={handleAnalyzeDocument} isBusy={isThinking} compact />
 

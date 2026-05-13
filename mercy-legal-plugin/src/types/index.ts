@@ -32,6 +32,11 @@ export interface CoreResponseMetadata {
   langsmithUrl?: string;
   cacheStatus?: "live" | "cached" | "queued" | "synced" | "offline";
   syncStatus?: string;
+  retryWhenOnline?: boolean;
+  queuedRequestCount?: number;
+  tenantId?: string;
+  userId?: string;
+  officialSourceGrounding?: string;
   skillResults?: CoreMcpSkillResult[];
 }
 
@@ -105,6 +110,20 @@ export interface CoreMcpManifest {
   };
   agents: Array<Record<string, unknown>>;
   skills: CoreMcpSkill[];
+  rag_backend?: {
+    tenant_isolated?: boolean;
+    production_blocked?: boolean;
+    source_registry?: {
+      official_source_count?: number;
+      local_demo_source_count?: number;
+      local_demo_active?: boolean;
+    };
+    ingestion_contract?: {
+      official_source_count?: number;
+      local_demo_source_count?: number;
+      local_demo_active?: boolean;
+    };
+  };
   strict_grounding: boolean;
   langsmith_tracing: boolean;
 }
@@ -123,6 +142,8 @@ export interface CoreMatterContext {
   matter_id: string;
   name: string;
   client_id: string;
+  tenant_id?: string;
+  created_by_user_id?: string;
   client_name?: string | null;
   matter_type?: string | null;
   jurisdiction?: string;
@@ -165,6 +186,7 @@ export interface CoreRouteDecision {
   guardrail_status: string;
   citations: CoreCitation[];
   missing_inputs: string[];
+  alternate_routes?: Array<Record<string, unknown>>;
   fallback_path: string;
   surface_context: string;
   premium_gate: string;

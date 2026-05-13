@@ -17,6 +17,13 @@
   gap: 10px;
 }
 
+.mcpBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .mcpSubtext {
   display: block;
   color: #667085;
@@ -41,3 +48,24 @@
   padding-top: 10px;
 }
 
+.mcpGroupList {
+  display: grid;
+  gap: 10px;
+}
+
+.mcpGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.mcpGroupTitle {
+  color: #0e2a4a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.warningLine {
+  color: #8a6110;
+  font-weight: 600;
+}

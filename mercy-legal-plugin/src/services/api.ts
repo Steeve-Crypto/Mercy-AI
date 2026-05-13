@@ -18,11 +18,19 @@ import {
 } from "../types";
 
 const DEFAULT_CORE_URL = "http://127.0.0.1:8000";
-const viteEnv = (import.meta as ImportMeta & { env?: { VITE_MERCY_CORE_API_URL?: string } }).env;
+const viteEnv = (import.meta as ImportMeta & {
+  env?: {
+    VITE_MERCY_API_TOKEN?: string;
+    VITE_MERCY_CORE_API_URL?: string;
+    VITE_MERCY_TENANT_ID?: string;
+    VITE_MERCY_USER_ID?: string;
+  };
+}).env;
 const CORE_API_URL = (viteEnv?.VITE_MERCY_CORE_API_URL || DEFAULT_CORE_URL).replace(/\/+$/, "");
 const MATTER_ID = "word-addin-session-matter";
 const CACHE_PREFIX = "mercy-agent-cache:";
 const QUEUE_KEY = "mercy-agent-offline-queue";
+const RECENT_SAFE_RESPONSES_KEY = "mercy-agent-recent-safe-responses";
 let unsafeStoragePurged = false;
 
 type CoreIntakeResponse = {
@@ -51,6 +59,9 @@ type CoreAgentResponse = {
   route?: CoreResponseMetadata["route"];
   response_envelope?: CoreResponseMetadata["envelope"];
   guardrail_status?: string;
+  cache_status?: CoreResponseMetadata["cacheStatus"];
+  sync_status?: string;
+  retry_when_online?: boolean;
 };
 
 type AgentRequest = {
@@ -114,6 +125,27 @@ const STORAGE_SAFE_AGENT_RESULT = {
     instruction: "Local cache excludes confidential document text and generated legal content."
   }
 };
+
+function authContext(): { token?: string; tenantId: string; userId: string; roles: string } {
+  const store = storage();
+  const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
+  return {
+    token: token || undefined,
+    tenantId: store?.getItem("mercy.auth.tenantId") || viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant",
+    userId: store?.getItem("mercy.auth.userId") || viteEnv?.VITE_MERCY_USER_ID || "word-addin-user",
+    roles: store?.getItem("mercy.auth.roles") || "attorney"
+  };
+}
+
+function authHeaders(): Record<string, string> {
+  const auth = authContext();
+  return {
+    ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}),
+    "X-Mercy-Tenant-Id": auth.tenantId,
+    "X-Mercy-User-Id": auth.userId,
+    "X-Mercy-Roles": auth.roles
+  };
+}
 
 function isOnline(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine;
@@ -291,7 +323,19 @@ function cachedAgent(cacheKeyValue: string): CoreAgentResponse | null {
 }
 
 function saveCachedAgent(cacheKeyValue: string, response: CoreAgentResponse): void {
-  writeJson(cacheKeyValue, storageSafeResponse(response));
+  const safeResponse = storageSafeResponse(response);
+  writeJson(cacheKeyValue, safeResponse);
+  saveRecentSafeResponse(safeResponse);
+}
+
+function saveRecentSafeResponse(response: CoreAgentResponse): void {
+  const recent = readJson<CoreAgentResponse[]>(RECENT_SAFE_RESPONSES_KEY, []);
+  writeJson(RECENT_SAFE_RESPONSES_KEY, [response, ...recent].slice(0, 8));
+}
+
+function recentSafeResponses(): CoreAgentResponse[] {
+  purgeUnsafeStoredAgentData();
+  return readJson<CoreAgentResponse[]>(RECENT_SAFE_RESPONSES_KEY, []);
 }
 
 async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -299,6 +343,7 @@ async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       Accept: "application/json",
+      ...authHeaders(),
       ...(init?.headers ?? {})
     }
   });
@@ -366,6 +411,24 @@ async function postAgent(request: AgentRequest): Promise<CoreAgentResponse> {
   });
 }
 
+function withCacheState(
+  response: CoreAgentResponse,
+  cacheStatus: CoreResponseMetadata["cacheStatus"],
+  retryWhenOnline = false
+): CoreAgentResponse {
+  return {
+    ...response,
+    cache_status: cacheStatus,
+    sync_status:
+      cacheStatus === "live"
+        ? "live core"
+        : retryWhenOnline
+          ? "retry when online with the active document open"
+          : cacheStatus,
+    retry_when_online: retryWhenOnline
+  };
+}
+
 async function agentExecute(action: string, request: AgentRequest, fallbackText: string): Promise<CoreAgentResponse> {
   purgeUnsafeStoredAgentData();
   const key = cacheKey(action, request);
@@ -373,7 +436,7 @@ async function agentExecute(action: string, request: AgentRequest, fallbackText:
     queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
-      return { ...cached, guardrail_status: cached.guardrail_status ?? "warn" };
+      return withCacheState({ ...cached, guardrail_status: cached.guardrail_status ?? "warn" }, "cached", true);
     }
     throw new Error("Core offline; request queued for sync.");
   }
@@ -381,15 +444,15 @@ async function agentExecute(action: string, request: AgentRequest, fallbackText:
   try {
     const response = await postAgent(request);
     saveCachedAgent(key, response);
-    return response;
+    return withCacheState(response, "live");
   } catch (error) {
     queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
-      return cached;
+      return withCacheState(cached, "cached", true);
     }
     const reason = error instanceof Error ? error.message : "Agent request failed";
-    return fallbackAgentResponse(action, request.task, `${fallbackText}\n\nOffline queue: ${reason}`);
+    return withCacheState(fallbackAgentResponse(action, request.task, `${fallbackText}\n\nOffline queue: ${reason}`), "queued", true);
   }
 }
 
@@ -455,7 +518,7 @@ function metadataFromAgent(
   response: CoreAgentResponse,
   matterContext?: CoreMatterContext,
   intakeSummary?: CoreResponseMetadata["intakeSummary"],
-  cacheStatus: CoreResponseMetadata["cacheStatus"] = "live"
+  cacheStatus: CoreResponseMetadata["cacheStatus"] = response.cache_status ?? "live"
 ): CoreResponseMetadata {
   const route = response.response_envelope?.route ?? response.route;
   const groundingPolicy = response.grounding_policy ?? response.agent_result?.grounding_policy;
@@ -467,6 +530,13 @@ function metadataFromAgent(
   const langsmithUrl = response.langsmith_project_url
     ? `${response.langsmith_project_url}${response.trace_id ? `?trace=${response.trace_id}` : ""}`
     : undefined;
+  const auth = authContext();
+  const citationStatuses = response.response_envelope?.citations ?? response.citations ?? route?.citations ?? [];
+  const officialGrounding = citationStatuses.some((citation) => citation.verification_status.includes("official"))
+    ? "official D.C. source metadata present"
+    : citationStatuses.length
+      ? "candidate citations require official-source verification"
+      : "no source grounding returned";
 
   return {
     source: response.agent_network_version === "offline-fallback" ? "fallback" : "core",
@@ -494,7 +564,12 @@ function metadataFromAgent(
     traceId: response.trace_id,
     langsmithUrl,
     cacheStatus,
-    syncStatus: cacheStatus === "live" ? "live core" : "offline queue",
+    syncStatus: response.sync_status ?? (cacheStatus === "live" ? "live core" : "offline queue"),
+    retryWhenOnline: response.retry_when_online,
+    queuedRequestCount: queuedAgentRequestCount(),
+    tenantId: matterContext?.tenant_id ?? auth.tenantId,
+    userId: matterContext?.created_by_user_id ?? auth.userId,
+    officialSourceGrounding: officialGrounding,
     skillResults: response.mcp_skill_results ?? []
   };
 }
@@ -530,6 +605,7 @@ function findingFromAgent(content: string, metadata: CoreResponseMetadata): Risk
 }
 
 function fallbackMetadata(reason: string): CoreResponseMetadata {
+  const auth = authContext();
   return {
     source: "fallback",
     coreUrl: CORE_API_URL,
@@ -538,7 +614,12 @@ function fallbackMetadata(reason: string): CoreResponseMetadata {
     guardrailStatus: "warn",
     groundingStatus: "warn",
     cacheStatus: "queued",
-    syncStatus: "queued for sync"
+    syncStatus: "queued for sync",
+    retryWhenOnline: true,
+    queuedRequestCount: queuedAgentRequestCount(),
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    officialSourceGrounding: "core unavailable; official D.C. grounding pending"
   };
 }
 
@@ -581,6 +662,51 @@ export async function getAgentSkills(): Promise<CoreMcpManifest | null> {
   }
 }
 
+async function skillManifest(): Promise<CoreMcpManifest | null> {
+  return getAgentSkills();
+}
+
+function schemaProperties(skill?: CoreMcpManifest["skills"][number]): Record<string, unknown> {
+  const schema = skill?.input_schema;
+  if (!schema || typeof schema !== "object") {
+    return {};
+  }
+  const properties = (schema as { properties?: Record<string, unknown> }).properties;
+  return properties && typeof properties === "object" ? properties : {};
+}
+
+function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcpManifest["skills"][number]): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  const properties = schemaProperties(skill);
+  const normalizedText = activeText || "Selected Word text unavailable; run again with a selection or active document.";
+  for (const key of Object.keys(properties)) {
+    if (key === "law_or_case") {
+      params[key] = normalizedText || "D.C. Bar Ethics Op. 388";
+    } else if (key === "draft" || key === "content" || key === "query") {
+      params[key] = normalizedText;
+    } else if (key === "matter_id") {
+      params[key] = MATTER_ID;
+    } else if (key === "new_facts") {
+      params[key] = { word_addin_note: normalizedText };
+    } else if (key === "format") {
+      params[key] = "docx";
+    } else if (key === "matter_context" || key === "auth_context") {
+      params[key] = { matter_id: MATTER_ID, jurisdiction: "District of Columbia", auth_context: authContext() };
+    }
+  }
+  if (!Object.keys(params).length) {
+    return {
+      law_or_case: normalizedText,
+      draft: normalizedText,
+      content: normalizedText,
+      matter_id: MATTER_ID,
+      new_facts: { word_addin_note: normalizedText },
+      format: "docx"
+    };
+  }
+  return params;
+}
+
 export async function syncOfflineAgentQueue(): Promise<number> {
   purgeUnsafeStoredAgentData();
   if (!isOnline()) {
@@ -614,6 +740,7 @@ export const api = {
   getAgentSkills,
   syncOfflineAgentQueue,
   queuedAgentRequestCount,
+  recentSafeResponses,
 
   async analyzeDocument(documentText: string): Promise<AnalysisResult> {
     try {
@@ -745,32 +872,29 @@ export const api = {
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Agent drafting request failed";
       return fallbackMessage(
-        "Preview fallback: Party responsibility is limited to direct losses arising from its own breach, negligence, or willful misconduct, subject to applicable District of Columbia law.",
+        "Preview fallback: drafting was queued for the live Mercy agent network. Reconnect to the Mercy core and rerun with the active document open before relying on any revision.",
         reason
       );
     }
   },
 
   async runMcpSkill(skillName: string, activeText: string): Promise<AgentActionResult> {
+    const manifest = await skillManifest();
+    const discoveredSkill = manifest?.skills.find((skill) => skill.name === skillName);
     const taskBySkill: Record<string, string> = {
       cite_and_verify: `Verify citation status and D.C. grounding for: ${activeText || "selected text"}`,
       check_dc_ethics: "Check D.C. ethics compliance, confidentiality, citation, and attorney-review flags.",
       update_matter_context: "Update matter context with new Word document facts.",
       export_to_word: "Draft export to Word using Office.js-ready payload."
     };
-    const paramsBySkill: Record<string, Record<string, unknown>> = {
-      cite_and_verify: { law_or_case: activeText || "D.C. Bar Ethics Op. 388" },
-      check_dc_ethics: { draft: activeText, content: activeText },
-      update_matter_context: { matter_id: MATTER_ID, new_facts: { word_addin_note: activeText || "Matter reviewed in Word add-in." } },
-      export_to_word: { content: activeText || "Mercy export payload pending attorney review.", format: "docx" }
-    };
+    const skillParams = buildSkillParams(skillName, activeText, discoveredSkill);
     const response = await agentExecute(
       skillName,
       {
-        task: taskBySkill[skillName] ?? `Run MCP skill ${skillName}.`,
+        task: taskBySkill[skillName] ?? discoveredSkill?.description ?? `Run MCP skill ${skillName}.`,
         matter_id: MATTER_ID,
         matter_context: { matter_id: MATTER_ID, jurisdiction: "District of Columbia", selected_text: activeText },
-        params: paramsBySkill[skillName] ?? {}
+        params: skillParams
       },
       `Preview fallback: ${skillName} queued for sync.`
     );

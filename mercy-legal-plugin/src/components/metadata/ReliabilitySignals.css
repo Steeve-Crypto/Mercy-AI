@@ -26,6 +26,51 @@
   line-height: 1.45;
 }
 
+.signalMetricGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.signalMetricGrid > div,
+.citationItem {
+  min-width: 0;
+  border: 1px solid #e7edf5;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 7px;
+}
+
+.metricLabel {
+  display: block;
+  color: #7a8698;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.metricValue {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: #0e2a4a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.citationList {
+  display: grid;
+  gap: 6px;
+}
+
+.warningText {
+  color: #8a6110;
+  font-weight: 600;
+}
+
 .attorneyWarning {
   display: block;
   color: #7a4b00;
@@ -33,4 +78,3 @@
   font-weight: 700;
   line-height: 1.35;
 }
-
