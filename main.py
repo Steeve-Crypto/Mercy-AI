@@ -586,6 +586,11 @@ async def rag_evaluate(
             pass_threshold=request.pass_threshold,
             write_report=request.write_report,
             report_path=request.report_path or DEFAULT_REPORT_PATH,
+            matter_context={
+                "surface_context": request.surface_context,
+                "jurisdiction": "District of Columbia",
+                "auth_context": _tenant_context(tenant_user),
+            },
         )
         span["metadata"] = {
             "dataset_size": report["dataset_size"],
@@ -597,6 +602,8 @@ async def rag_evaluate(
             "dataset_path": report["dataset_path"],
             "dataset_size": report["dataset_size"],
             "aggregate": report["aggregate"],
+            "failure_groups": report.get("failure_groups", {}),
+            "langsmith": report.get("langsmith", {}),
             "passed": report["passed"],
             "human_review_required": True,
             "citations": [
