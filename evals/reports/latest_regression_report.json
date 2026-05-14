@@ -1,0 +1,1080 @@
+{
+  "aggregate": {
+    "answer_relevancy": 1.0,
+    "citation_accuracy": 1.0,
+    "context_precision": 1.0,
+    "dc_grounding_score": 1.0,
+    "failed_cases": 0,
+    "faithfulness": 1.0,
+    "overall_score": 1.0,
+    "pass_rate": 1.0,
+    "passed_cases": 12
+  },
+  "corpus": {
+    "chunk_count": 1145,
+    "jurisdiction": "District of Columbia",
+    "mode": "full",
+    "official_only": true,
+    "source_count": 74
+  },
+  "dataset_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmp6ag2e8r5\\golden.jsonl",
+  "dataset_size": 12,
+  "eval_version": "advanced-dc-ragas-regression-1.0",
+  "failure_analysis": {
+    "hallucinated_citation": {
+      "cases": [],
+      "count": 0
+    },
+    "low_answer_relevancy": {
+      "cases": [],
+      "count": 0
+    },
+    "low_citation_accuracy": {
+      "cases": [],
+      "count": 0
+    },
+    "low_context_precision": {
+      "cases": [],
+      "count": 0
+    },
+    "low_faithfulness": {
+      "cases": [],
+      "count": 0
+    },
+    "missing_context": {
+      "cases": [],
+      "count": 0
+    },
+    "non_official_source": {
+      "cases": [],
+      "count": 0
+    },
+    "weak_DC_grounding": {
+      "cases": [],
+      "count": 0
+    },
+    "weak_DC_reasoning": {
+      "cases": [],
+      "count": 0
+    }
+  },
+  "generated_at": "2026-05-14T19:43:00.842086+00:00",
+  "langsmith": {
+    "project_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev",
+    "run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=d6f3f76f-cd4b-461d-9100-6a6da251075c",
+    "summary_pushed": true,
+    "trace_id": "d6f3f76f-cd4b-461d-9100-6a6da251075c"
+  },
+  "metrics": [
+    "faithfulness",
+    "context_precision",
+    "answer_relevancy",
+    "citation_accuracy",
+    "dc_grounding_score"
+  ],
+  "pass_rate": 1.0,
+  "passed": true,
+  "practice_area_breakdown": {
+    "administrative": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "business": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "business_llc": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "civil_litigation": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "civil_procedure": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "consumer": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "criminal": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "education": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "employment": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "evidence": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "family": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    },
+    "health": {
+      "case_count": 1,
+      "overall_score": 1.0,
+      "pass_rate": 1.0
+    }
+  },
+  "regression": {
+    "overall_delta": null,
+    "pass_rate_delta": null,
+    "previous_run_available": false
+  },
+  "report_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmp6ag2e8r5\\reports\\ragas_regression_20260514_194300.json",
+  "rows": [
+    {
+      "answer": "For this District of Columbia administrative issue, use Code of the District of Columbia - Title 1: Government Organization. Title 1 chapter 1 locator. Official D.C. source locator for administrative; requires attorney verification before reliance. Difficulty: advanced. Relevance to D.C. solos: high. Verify citation label D.C. Code title 1, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 1, ch. 1",
+      "expected_source_id": "official_dc_code_title_01",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 1, ch. 1",
+          "source_id": "official_dc_code_title_01"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 1, ch. 1",
+            "D.C. Code title 1, ch. 2",
+            "D.C. Code title 1, ch. 3",
+            "D.C. Code title 1, ch. 4",
+            "D.C. Code title 1, ch. 5",
+            "D.C. Code title 1, ch. 6",
+            "D.C. Code title 1, ch. 7",
+            "D.C. Code title 1, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01",
+            "official_dc_code_title_01"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0001",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=1c72e115-f10c-47f6-84eb-6c97fd5b760a",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "administrative",
+      "question": "For a D.C. solo attorney handling administrative, which official District of Columbia source grounds the issue 'Title 1 chapter 1 locator' in Code of the District of Columbia - Title 1: Government Organization, and should the citation label D.C. Code title 1, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 1, ch. 1",
+        "D.C. Code title 1, ch. 2",
+        "D.C. Code title 1, ch. 3",
+        "D.C. Code title 1, ch. 4",
+        "D.C. Code title 1, ch. 5",
+        "D.C. Code title 1, ch. 6",
+        "D.C. Code title 1, ch. 7",
+        "D.C. Code title 1, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01",
+        "official_dc_code_title_01"
+      ],
+      "score": 1.0,
+      "trace_id": "1c72e115-f10c-47f6-84eb-6c97fd5b760a"
+    },
+    {
+      "answer": "For this District of Columbia business issue, use Code of the District of Columbia - Title 25: Alcoholic Beverages. Title 25 chapter 1 locator. Official D.C. source locator for business; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 25, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 25, ch. 1",
+      "expected_source_id": "official_dc_code_title_25",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 25, ch. 1",
+          "source_id": "official_dc_code_title_25"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 25, ch. 1",
+            "D.C. Code title 25, ch. 2",
+            "D.C. Code title 25, ch. 3",
+            "D.C. Code title 25, ch. 4",
+            "D.C. Code title 25, ch. 5",
+            "D.C. Code title 25, ch. 6",
+            "D.C. Code title 25, ch. 7",
+            "D.C. Code title 25, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25",
+            "official_dc_code_title_25"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0002",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=5aaebb50-1e87-4fe1-b06c-4e0adfbe9409",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "business",
+      "question": "For a D.C. solo attorney handling business, which official District of Columbia source grounds the issue 'Title 25 chapter 1 locator' in Code of the District of Columbia - Title 25: Alcoholic Beverages, and should the citation label D.C. Code title 25, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 25, ch. 1",
+        "D.C. Code title 25, ch. 2",
+        "D.C. Code title 25, ch. 3",
+        "D.C. Code title 25, ch. 4",
+        "D.C. Code title 25, ch. 5",
+        "D.C. Code title 25, ch. 6",
+        "D.C. Code title 25, ch. 7",
+        "D.C. Code title 25, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25",
+        "official_dc_code_title_25"
+      ],
+      "score": 1.0,
+      "trace_id": "5aaebb50-1e87-4fe1-b06c-4e0adfbe9409"
+    },
+    {
+      "answer": "For this District of Columbia business llc issue, use Code of the District of Columbia - Title 29: Business Organizations. Title 29 chapter 1 locator. Official D.C. source locator for business_llc; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 29, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 29, ch. 1",
+      "expected_source_id": "official_dc_code_title_29",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 29, ch. 1",
+          "source_id": "official_dc_code_title_29"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 29, ch. 1",
+            "D.C. Code title 29, ch. 2",
+            "D.C. Code title 29, ch. 3",
+            "D.C. Code title 29, ch. 4",
+            "D.C. Code title 29, ch. 5",
+            "D.C. Code title 29, ch. 6",
+            "D.C. Code title 29, ch. 7",
+            "D.C. Code title 29, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29",
+            "official_dc_code_title_29"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0003",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=f17941e7-d99d-4120-af3f-e4adff2c8eec",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "business_llc",
+      "question": "For a D.C. solo attorney handling business llc, which official District of Columbia source grounds the issue 'Title 29 chapter 1 locator' in Code of the District of Columbia - Title 29: Business Organizations, and should the citation label D.C. Code title 29, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 29, ch. 1",
+        "D.C. Code title 29, ch. 2",
+        "D.C. Code title 29, ch. 3",
+        "D.C. Code title 29, ch. 4",
+        "D.C. Code title 29, ch. 5",
+        "D.C. Code title 29, ch. 6",
+        "D.C. Code title 29, ch. 7",
+        "D.C. Code title 29, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29",
+        "official_dc_code_title_29"
+      ],
+      "score": 1.0,
+      "trace_id": "f17941e7-d99d-4120-af3f-e4adff2c8eec"
+    },
+    {
+      "answer": "For this District of Columbia civil litigation issue, use Code of the District of Columbia - Title 11: Organization and Jurisdiction of the Courts. Title 11 chapter 1 locator. Official D.C. source locator for civil_litigation; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 11, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 11, ch. 1",
+      "expected_source_id": "official_dc_code_title_11",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 11, ch. 1",
+          "source_id": "official_dc_code_title_11"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 11, ch. 1",
+            "D.C. Code title 11, ch. 2",
+            "D.C. Code title 11, ch. 3",
+            "D.C. Code title 11, ch. 4",
+            "D.C. Code title 11, ch. 5",
+            "D.C. Code title 11, ch. 6",
+            "D.C. Code title 11, ch. 7",
+            "D.C. Code title 11, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11",
+            "official_dc_code_title_11"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0004",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=df533f1c-5f3e-49c0-ab41-31a6b66e25a4",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "civil_litigation",
+      "question": "For a D.C. solo attorney handling civil litigation, which official District of Columbia source grounds the issue 'Title 11 chapter 1 locator' in Code of the District of Columbia - Title 11: Organization and Jurisdiction of the Courts, and should the citation label D.C. Code title 11, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 11, ch. 1",
+        "D.C. Code title 11, ch. 2",
+        "D.C. Code title 11, ch. 3",
+        "D.C. Code title 11, ch. 4",
+        "D.C. Code title 11, ch. 5",
+        "D.C. Code title 11, ch. 6",
+        "D.C. Code title 11, ch. 7",
+        "D.C. Code title 11, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11",
+        "official_dc_code_title_11"
+      ],
+      "score": 1.0,
+      "trace_id": "df533f1c-5f3e-49c0-ab41-31a6b66e25a4"
+    },
+    {
+      "answer": "For this District of Columbia civil procedure issue, use Code of the District of Columbia - Title 13: Procedure Generally. Title 13 chapter 1 locator. Official D.C. source locator for civil_procedure; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 13, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 13, ch. 1",
+      "expected_source_id": "official_dc_code_title_13",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 13, ch. 1",
+          "source_id": "official_dc_code_title_13"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 13, ch. 1",
+            "D.C. Code title 13, ch. 2",
+            "D.C. Code title 13, ch. 3",
+            "D.C. Code title 13, ch. 4",
+            "D.C. Code title 13, ch. 5",
+            "D.C. Code title 13, ch. 6",
+            "D.C. Code title 13, ch. 7",
+            "D.C. Code title 13, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13",
+            "official_dc_code_title_13"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0005",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=6b2548df-0c08-4acb-b6ab-8e3e6646475d",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "civil_procedure",
+      "question": "For a D.C. solo attorney handling civil procedure, which official District of Columbia source grounds the issue 'Title 13 chapter 1 locator' in Code of the District of Columbia - Title 13: Procedure Generally, and should the citation label D.C. Code title 13, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 13, ch. 1",
+        "D.C. Code title 13, ch. 2",
+        "D.C. Code title 13, ch. 3",
+        "D.C. Code title 13, ch. 4",
+        "D.C. Code title 13, ch. 5",
+        "D.C. Code title 13, ch. 6",
+        "D.C. Code title 13, ch. 7",
+        "D.C. Code title 13, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13",
+        "official_dc_code_title_13"
+      ],
+      "score": 1.0,
+      "trace_id": "6b2548df-0c08-4acb-b6ab-8e3e6646475d"
+    },
+    {
+      "answer": "For this District of Columbia consumer issue, use Code of the District of Columbia - Title 36: Trade Practices. Title 36 chapter 1 locator. Official D.C. source locator for consumer; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 36, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 36, ch. 1",
+      "expected_source_id": "official_dc_code_title_36",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 36, ch. 1",
+          "source_id": "official_dc_code_title_36"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 36, ch. 1",
+            "D.C. Code title 36, ch. 2",
+            "D.C. Code title 36, ch. 3",
+            "D.C. Code title 36, ch. 4",
+            "D.C. Code title 36, ch. 5",
+            "D.C. Code title 36, ch. 6",
+            "D.C. Code title 36, ch. 7",
+            "D.C. Code title 36, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36",
+            "official_dc_code_title_36"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0006",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=69bd7ffa-8ad6-48f8-9dbc-cd523efbbf57",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "consumer",
+      "question": "For a D.C. solo attorney handling consumer, which official District of Columbia source grounds the issue 'Title 36 chapter 1 locator' in Code of the District of Columbia - Title 36: Trade Practices, and should the citation label D.C. Code title 36, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 36, ch. 1",
+        "D.C. Code title 36, ch. 2",
+        "D.C. Code title 36, ch. 3",
+        "D.C. Code title 36, ch. 4",
+        "D.C. Code title 36, ch. 5",
+        "D.C. Code title 36, ch. 6",
+        "D.C. Code title 36, ch. 7",
+        "D.C. Code title 36, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36",
+        "official_dc_code_title_36"
+      ],
+      "score": 1.0,
+      "trace_id": "69bd7ffa-8ad6-48f8-9dbc-cd523efbbf57"
+    },
+    {
+      "answer": "For this District of Columbia criminal issue, use Code of the District of Columbia - Title 5: Police, Firefighters, Medical Examiner, and Forensic Sciences. Title 5 chapter 1 locator. Official D.C. source locator for criminal; requires attorney verification before reliance. Difficulty: advanced. Relevance to D.C. solos: high. Verify citation label D.C. Code title 5, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 5, ch. 1",
+      "expected_source_id": "official_dc_code_title_05",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 5, ch. 1",
+          "source_id": "official_dc_code_title_05"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 5, ch. 1",
+            "D.C. Code title 5, ch. 2",
+            "D.C. Code title 5, ch. 3",
+            "D.C. Code title 5, ch. 4",
+            "D.C. Code title 5, ch. 5",
+            "D.C. Code title 5, ch. 6",
+            "D.C. Code title 5, ch. 7",
+            "D.C. Code title 5, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05",
+            "official_dc_code_title_05"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0007",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=4f0e4a96-7469-4cad-a374-01dc73f0b966",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "criminal",
+      "question": "For a D.C. solo attorney handling criminal, which official District of Columbia source grounds the issue 'Title 5 chapter 1 locator' in Code of the District of Columbia - Title 5: Police, Firefighters, Medical Examiner, and Forensic Sciences, and should the citation label D.C. Code title 5, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 5, ch. 1",
+        "D.C. Code title 5, ch. 2",
+        "D.C. Code title 5, ch. 3",
+        "D.C. Code title 5, ch. 4",
+        "D.C. Code title 5, ch. 5",
+        "D.C. Code title 5, ch. 6",
+        "D.C. Code title 5, ch. 7",
+        "D.C. Code title 5, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05",
+        "official_dc_code_title_05"
+      ],
+      "score": 1.0,
+      "trace_id": "4f0e4a96-7469-4cad-a374-01dc73f0b966"
+    },
+    {
+      "answer": "For this District of Columbia education issue, use Code of the District of Columbia - Title 38: Educational Institutions. Title 38 chapter 1 locator. Official D.C. source locator for education; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 38, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 38, ch. 1",
+      "expected_source_id": "official_dc_code_title_38",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 38, ch. 1",
+          "source_id": "official_dc_code_title_38"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 38, ch. 1",
+            "D.C. Code title 38, ch. 2",
+            "D.C. Code title 38, ch. 3",
+            "D.C. Code title 38, ch. 4",
+            "D.C. Code title 38, ch. 5",
+            "D.C. Code title 38, ch. 6",
+            "D.C. Code title 38, ch. 7",
+            "D.C. Code title 38, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38",
+            "official_dc_code_title_38"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0008",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=cc2d440d-f8af-4498-8b92-2ab9b7df86e4",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "education",
+      "question": "For a D.C. solo attorney handling education, which official District of Columbia source grounds the issue 'Title 38 chapter 1 locator' in Code of the District of Columbia - Title 38: Educational Institutions, and should the citation label D.C. Code title 38, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 38, ch. 1",
+        "D.C. Code title 38, ch. 2",
+        "D.C. Code title 38, ch. 3",
+        "D.C. Code title 38, ch. 4",
+        "D.C. Code title 38, ch. 5",
+        "D.C. Code title 38, ch. 6",
+        "D.C. Code title 38, ch. 7",
+        "D.C. Code title 38, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38",
+        "official_dc_code_title_38"
+      ],
+      "score": 1.0,
+      "trace_id": "cc2d440d-f8af-4498-8b92-2ab9b7df86e4"
+    },
+    {
+      "answer": "For this District of Columbia employment issue, use Code of the District of Columbia - Title 32: Labor. Title 32 chapter 1 locator. Official D.C. source locator for employment; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 32, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 32, ch. 1",
+      "expected_source_id": "official_dc_code_title_32",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 32, ch. 1",
+          "source_id": "official_dc_code_title_32"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 32, ch. 1",
+            "D.C. Code title 32, ch. 2",
+            "D.C. Code title 32, ch. 3",
+            "D.C. Code title 32, ch. 4",
+            "D.C. Code title 32, ch. 5",
+            "D.C. Code title 32, ch. 6",
+            "D.C. Code title 32, ch. 7",
+            "D.C. Code title 32, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32",
+            "official_dc_code_title_32"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0009",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=c224104b-6d73-4d94-9059-6df93c148e82",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "employment",
+      "question": "For a D.C. solo attorney handling employment, which official District of Columbia source grounds the issue 'Title 32 chapter 1 locator' in Code of the District of Columbia - Title 32: Labor, and should the citation label D.C. Code title 32, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 32, ch. 1",
+        "D.C. Code title 32, ch. 2",
+        "D.C. Code title 32, ch. 3",
+        "D.C. Code title 32, ch. 4",
+        "D.C. Code title 32, ch. 5",
+        "D.C. Code title 32, ch. 6",
+        "D.C. Code title 32, ch. 7",
+        "D.C. Code title 32, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32",
+        "official_dc_code_title_32"
+      ],
+      "score": 1.0,
+      "trace_id": "c224104b-6d73-4d94-9059-6df93c148e82"
+    },
+    {
+      "answer": "For this District of Columbia evidence issue, use District of Columbia Rules of Evidence. Rule 1. Official D.C. source locator for evidence; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Super. Ct. Evidence Rules R. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Super. Ct. Evidence Rules R. 1",
+      "expected_source_id": "official_dc_superior_rules_evidence",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Super. Ct. Evidence Rules R. 1",
+          "source_id": "official_dc_superior_rules_evidence"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Super. Ct. Evidence Rules R. 1",
+            "D.C. Super. Ct. Evidence Rules R. 2",
+            "D.C. Super. Ct. Evidence Rules R. 3",
+            "D.C. Super. Ct. Evidence Rules R. 4",
+            "D.C. Super. Ct. Evidence Rules R. 5",
+            "D.C. Super. Ct. Evidence Rules R. 6",
+            "D.C. Super. Ct. Evidence Rules R. 7",
+            "D.C. Super. Ct. Evidence Rules R. 8"
+          ],
+          "source_ids": [
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence",
+            "official_dc_superior_rules_evidence"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0010",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=5b73bb93-12ad-4c3a-816c-92c388480ed7",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "evidence",
+      "question": "For a D.C. solo attorney handling evidence, which official District of Columbia source grounds the issue 'Rule 1' in District of Columbia Rules of Evidence, and should the citation label D.C. Super. Ct. Evidence Rules R. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Super. Ct. Evidence Rules R. 1",
+        "D.C. Super. Ct. Evidence Rules R. 2",
+        "D.C. Super. Ct. Evidence Rules R. 3",
+        "D.C. Super. Ct. Evidence Rules R. 4",
+        "D.C. Super. Ct. Evidence Rules R. 5",
+        "D.C. Super. Ct. Evidence Rules R. 6",
+        "D.C. Super. Ct. Evidence Rules R. 7",
+        "D.C. Super. Ct. Evidence Rules R. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence",
+        "official_dc_superior_rules_evidence"
+      ],
+      "score": 1.0,
+      "trace_id": "5b73bb93-12ad-4c3a-816c-92c388480ed7"
+    },
+    {
+      "answer": "For this District of Columbia family issue, use Code of the District of Columbia - Title 4: Public Care Systems. Title 4 chapter 1 locator. Official D.C. source locator for family; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 4, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 4, ch. 1",
+      "expected_source_id": "official_dc_code_title_04",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 4, ch. 1",
+          "source_id": "official_dc_code_title_04"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 4, ch. 1",
+            "D.C. Code title 4, ch. 2",
+            "D.C. Code title 4, ch. 3",
+            "D.C. Code title 4, ch. 4",
+            "D.C. Code title 4, ch. 5",
+            "D.C. Code title 4, ch. 6",
+            "D.C. Code title 4, ch. 7",
+            "D.C. Code title 4, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04",
+            "official_dc_code_title_04"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0011",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=eff9ed83-de8d-4c39-9b0a-cbdf9145f7cf",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "family",
+      "question": "For a D.C. solo attorney handling family, which official District of Columbia source grounds the issue 'Title 4 chapter 1 locator' in Code of the District of Columbia - Title 4: Public Care Systems, and should the citation label D.C. Code title 4, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 4, ch. 1",
+        "D.C. Code title 4, ch. 2",
+        "D.C. Code title 4, ch. 3",
+        "D.C. Code title 4, ch. 4",
+        "D.C. Code title 4, ch. 5",
+        "D.C. Code title 4, ch. 6",
+        "D.C. Code title 4, ch. 7",
+        "D.C. Code title 4, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04",
+        "official_dc_code_title_04"
+      ],
+      "score": 1.0,
+      "trace_id": "eff9ed83-de8d-4c39-9b0a-cbdf9145f7cf"
+    },
+    {
+      "answer": "For this District of Columbia health issue, use Code of the District of Columbia - Title 7: Human Health Care and Safety. Title 7 chapter 1 locator. Official D.C. source locator for health; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 7, ch. 1 against the official source before relying on it.",
+      "expected_citation": "D.C. Code title 7, ch. 1",
+      "expected_source_id": "official_dc_code_title_07",
+      "failure_analysis": {
+        "diagnosis": "pass",
+        "expected": {
+          "citation": "D.C. Code title 7, ch. 1",
+          "source_id": "official_dc_code_title_07"
+        },
+        "failure_tags": [],
+        "metrics": {
+          "answer_relevancy": 1.0,
+          "citation_accuracy": 1.0,
+          "context_precision": 1.0,
+          "dc_grounding_score": 1.0,
+          "faithfulness": 1.0
+        },
+        "retrieved": {
+          "citations": [
+            "D.C. Code title 7, ch. 1",
+            "D.C. Code title 7, ch. 2",
+            "D.C. Code title 7, ch. 3",
+            "D.C. Code title 7, ch. 4",
+            "D.C. Code title 7, ch. 5",
+            "D.C. Code title 7, ch. 6",
+            "D.C. Code title 7, ch. 7",
+            "D.C. Code title 7, ch. 8"
+          ],
+          "source_ids": [
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07",
+            "official_dc_code_title_07"
+          ]
+        }
+      },
+      "failure_tags": [],
+      "id": "dc-regression-0012",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-dev?trace_id=3d5fab65-8702-486e-8fb6-6e31fc1f1720",
+      "metrics": {
+        "answer_relevancy": 1.0,
+        "citation_accuracy": 1.0,
+        "context_precision": 1.0,
+        "dc_grounding_score": 1.0,
+        "faithfulness": 1.0
+      },
+      "passed": true,
+      "practice_area": "health",
+      "question": "For a D.C. solo attorney handling health, which official District of Columbia source grounds the issue 'Title 7 chapter 1 locator' in Code of the District of Columbia - Title 7: Human Health Care and Safety, and should the citation label D.C. Code title 7, ch. 1 be verified?",
+      "retrieved_citations": [
+        "D.C. Code title 7, ch. 1",
+        "D.C. Code title 7, ch. 2",
+        "D.C. Code title 7, ch. 3",
+        "D.C. Code title 7, ch. 4",
+        "D.C. Code title 7, ch. 5",
+        "D.C. Code title 7, ch. 6",
+        "D.C. Code title 7, ch. 7",
+        "D.C. Code title 7, ch. 8"
+      ],
+      "retrieved_source_ids": [
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07",
+        "official_dc_code_title_07"
+      ],
+      "score": 1.0,
+      "trace_id": "3d5fab65-8702-486e-8fb6-6e31fc1f1720"
+    }
+  ],
+  "thresholds": {
+    "answer_relevancy": 0.8,
+    "citation_accuracy": 0.9,
+    "context_precision": 0.9,
+    "dc_grounding_score": 0.95,
+    "faithfulness": 0.9,
+    "overall_score": 0.9,
+    "pass_rate": 0.9
+  }
+}

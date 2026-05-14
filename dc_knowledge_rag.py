@@ -22,6 +22,7 @@ from mercy_storage import (
 )
 from observability import record_rag_trace, trace_event, trace_span
 from security_controls import record_security_audit, sanitize_payload, sanitize_text
+from evals.regression_status import latest_regression_health
 
 
 RAG_VERSION = "dc-knowledge-rag-1.0"
@@ -1433,6 +1434,7 @@ def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str
         **status,
         "ingestion_contract": _active_source_registry(tenant_id).status(),
         "seed_status": _seed_status(tenant_id),
+        "regression_health": latest_regression_health(),
     }
 
 

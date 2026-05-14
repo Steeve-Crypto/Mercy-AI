@@ -103,6 +103,8 @@ Local smoke surfaces
 | LLM Providers | `llm_providers.py` uses LiteLLM for OpenAI, Anthropic, Groq, Gemini, and provider/model overrides; MoE routing, RAG answer generation, drafting, and agent execution use real calls when a provider key is configured. | Structured templates remain the fallback when no provider key is configured, and provider failures fall back safely with trace metadata. |
 | D.C. Template Gallery | `template_gallery.py` exposes `/v1/templates/gallery` with 26 tenant-aware, filterable templates connected to PD039 prompt templates and `/v1/agent/execute` generation. | Template generation still requires attorney-supplied facts and final verification before use. |
 | Limited Beta Launch | `beta_launch.py` exposes invite/waitlist state, strong-model monthly quotas, D.C. beta legal docs, welcome sequence metadata, feedback traces, and lightweight analytics through `/v1/beta/*`. | In-memory beta state is suitable for limited/local launch only; production beta operations need persistent invite, billing, and retention controls. |
+| Production Monitoring | `monitoring.py` aggregates LangSmith/local traces, beta quota state, LiteLLM cost events, RAGAS/grounding health, guardrail triggers, error rates, and alert readiness through `/v1/monitoring/*` plus a CLI. | Monitoring state is lightweight and process-local unless connected to persistent logs or an external observability backend. |
+| Advanced RAGAS Regression | `evals/ragas_harness.py` rebuilds the PD038 full seeded official D.C. corpus, generates a 200-case D.C. golden set, runs custom legal RAGAS metrics, writes regression reports, and surfaces latest health through RAG status and monitoring. | Metrics are deterministic and metadata-grounded; external RAGAS/model judges can be layered on when CI secrets and model access are approved. |
 | Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist and report active LLM provider/model status. | MCP compatibility is manifest/schema-level, not a served MCP transport. |
 | Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
@@ -118,6 +120,8 @@ Local smoke surfaces
 - **TraceRecord**: local and optional LangSmith observability events.
 - **MCP Skill Manifest / Agent Result**: discoverable skill schemas and routed agent outputs.
 - **LLMCallResult**: provider, model, fallback reason, token usage, estimated cost, trace ID, and whether a real LiteLLM call was used.
+- **CostEvent / Monitoring Report**: tenant ID, hashed user ID, provider, model, task type, token counts, estimated cost, route expert, alert status, and daily/weekly aggregates without raw prompts or PII.
+- **RegressionGoldenCase / RegressionRow**: advanced RAGAS case with expected official D.C. source, citation, practice area, retrieved citations, faithfulness, context precision, answer relevancy, citation accuracy, D.C. grounding, failure tags, and LangSmith trace links.
 - **DCTemplate / Template Gallery**: title, description, practice area, difficulty, required inputs, prompt template, generation task, source query, D.C. grounding, and attorney-review metadata.
 - **BetaUserState / FeedbackRecord**: invite/waitlist status, monthly strong-model quota, fast-model usage, template usage, guardrail triggers, estimated cost, feedback rating/comment metadata, and trace references.
 - **Office Offline Queue Item**: redacted local request metadata, cache key, action, and redaction summary only.
@@ -146,6 +150,9 @@ POST /v1/rag/retrieve
 POST /v1/rag/evaluate
 GET  /v1/observability/trace
 POST /v1/observability/trace
+GET  /v1/monitoring/dashboard
+GET  /v1/monitoring/metrics
+GET  /v1/monitoring/cost/breakdown
 GET  /v1/agent/skills
 POST /v1/agent/execute
 POST /v1/workspace/draft
@@ -194,6 +201,8 @@ scripts/test_prompts.py
 template_gallery.py
 beta_launch.py
 security_controls.py
+monitoring.py
+evals/
 observability.py
 client_intake_flow.py
 agent_network.py
@@ -300,3 +309,19 @@ These tasks promote the remaining security, stability, and quality risks from ca
 **Required Change**: Add practical SOC 2 Type 1 readiness materials, audit logging for sensitive actions, PII redaction/sanitization hooks, `/v1/*` abuse protection, HTTPS/security-header/CORS hardening, a tenant data deletion flow, automated compliance checks, and basic trust signals in the Standalone Platform and Office Add-in.
 
 **Acceptance**: `docs/compliance/soc2_type1_checklist.md` reflects current status; `python -m scripts.check_security_compliance` reports required controls/docs; sensitive matter/RAG/LLM/document actions emit audit traces and DB logs when PostgreSQL is configured; `DELETE /v1/account/data` soft-deletes tenant matters and purges/deactivates tenant transient data.
+
+### PD043: Production Monitoring, Alerting, and Cost Tracking
+
+**Problem**: Limited beta operations need clear visibility into usage, costs, quota pressure, grounding health, guardrail failures, and error spikes before expanding invites.
+
+**Required Change**: Add admin-only monitoring endpoints, a CLI status command, LiteLLM cost event tracking, alert threshold evaluation, Slack/email notification hooks, and MoE router cost caps that preserve tenant isolation and avoid raw PII.
+
+**Acceptance**: `/v1/monitoring/dashboard`, `/v1/monitoring/metrics`, and `/v1/monitoring/cost/breakdown` are admin-only and return sanitized beta/user/tenant/cost/RAGAS/guardrail/error/quota views; `python -m scripts.monitoring status --days=7` works; configured alert channels are testable; expensive route classes are capped when tenant cost exceeds the configured daily limit.
+
+### PD044: Advanced RAGAS Regression Suite on Full Seeded Corpus
+
+**Problem**: The local RAGAS-style eval is too small to prove the full seeded D.C. knowledge base remains reliable as the corpus, prompts, and retrieval ranking evolve.
+
+**Required Change**: Add an advanced regression harness under `evals/`, generate a 200+ case D.C. golden set, evaluate the complete 1,145+ chunk PD038 seeded corpus, record legal metrics and failure taxonomy, write regression reports, push LangSmith-compatible traces, and surface latest regression health in RAG and monitoring endpoints.
+
+**Acceptance**: `python -m evals.run_regression --corpus=full` produces a passing report under `evals/reports/`, latest health is readable from `/v1/rag/status` and `/v1/monitoring/metrics`, and thresholds cover faithfulness, context precision, answer relevancy, citation accuracy, D.C. grounding, overall score, and pass rate.

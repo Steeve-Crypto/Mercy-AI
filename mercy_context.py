@@ -741,6 +741,9 @@ def product_capabilities() -> dict[str, Any]:
         "observability": {
             "version": "mercy-observability-1.0",
             "trace_endpoint": "/v1/observability/trace",
+            "monitoring_dashboard_endpoint": "/v1/monitoring/dashboard",
+            "monitoring_metrics_endpoint": "/v1/monitoring/metrics",
+            "monitoring_cost_breakdown_endpoint": "/v1/monitoring/cost/breakdown",
             "langsmith_project_env": "LANGSMITH_PROJECT",
             "langsmith_tracing_env": "LANGSMITH_TRACING",
         },

@@ -8,6 +8,7 @@ from dc_knowledge_rag import retrieve_dc_knowledge
 from dc_guardrails import evaluate_dc_guardrails
 from llm_providers import classify_moe_route
 from mercy_context import get_langgraph_runtime, get_matter_context
+from monitoring import cost_policy_for_context
 from observability import record_guardrail_trace, record_route_trace
 from response_envelope import normalize_guardrail_status
 
@@ -69,6 +70,7 @@ class RouterDecision:
     safety_notes: list[str]
     confidentiality: dict[str, Any]
     llm_router: dict[str, Any] = field(default_factory=dict)
+    cost_control: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -442,6 +444,11 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
     if not dc_guardrails_pass(query, top.expert):
         return fallback_to_compliance_expert(query, matter_context, user_type, surface_context)
 
+    cost_control = cost_policy_for_context(matter_context.get("auth_context") if isinstance(matter_context.get("auth_context"), dict) else None)
+    if not cost_control.get("expensive_calls_allowed") and top.expert in {"drafting", "research"}:
+        top = RouteCandidate("intake", "intake", min(top.confidence, 0.74), [*top.reasons, "cost_cap:expensive_call_blocked"])
+        candidates = [top, *[candidate for candidate in candidates if candidate.expert != top.expert]]
+
     matter_context = _inject_dc_knowledge(query, matter_context, top)
     missing_inputs = detect_missing_inputs(top.expert, query, matter_context)
     execute = top.confidence >= SAFE_CONFIDENCE_THRESHOLD and not _has_required_missing_inputs(top.expert, missing_inputs)
@@ -461,6 +468,7 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
         execute=execute,
         next_action=next_action,
         llm_router=llm_router,
+        cost_control=cost_control,
     )
     route = decision.to_dict()
     record_route_trace(route, surface_context=surface_context, matter_reference=matter_context.get("matter_id"))
@@ -664,6 +672,7 @@ def _build_decision(
     execute: bool,
     next_action: str,
     llm_router: dict[str, Any] | None = None,
+    cost_control: dict[str, Any] | None = None,
 ) -> RouterDecision:
     guardrails = _guardrail_profile(query, top, matter_context)
     guardrail_status = normalize_guardrail_status(guardrails["status"], execute=execute)
@@ -699,6 +708,7 @@ def _build_decision(
             "redaction_required_for_observability": True,
         },
         llm_router=llm_router or {},
+        cost_control=cost_control or {},
     )
 
 

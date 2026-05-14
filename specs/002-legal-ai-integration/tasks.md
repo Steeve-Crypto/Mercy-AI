@@ -174,35 +174,49 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: Added targeted `tests/test_security_compliance.py` and `python -m scripts.check_security_compliance` coverage for required docs, security headers, sanitization, compliance status, and delete-all-data behavior.
    - **Dependencies**: PD029, PD035, PD037, PD041.
 
-15. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+16. [X] PD043 [Monitoring] Production monitoring, alerting, and cost tracking.
+   - **Target Paths**: `monitoring.py`, `main.py`, `llm_providers.py`, `legal_task_router.py`, `mercy_context.py`, `scripts/monitoring.py`, `.env.example`, `tests/test_monitoring.py`, `pyrightconfig.json`.
+   - **Definition of Done**: Admin-only monitoring endpoints expose beta user/tenant counts, daily/weekly usage, token/template usage, per-user/tenant/model/provider costs, RAGAS/grounding health, guardrail triggers, error rates, quota warnings, and configurable dry-run or live alerts. LiteLLM calls record cost events, the MoE router applies tenant daily cost caps, the CLI reports status, and monitoring payloads minimize PII.
+   - **Result**: Added `mercy-monitoring-ops-1.0` with `/v1/monitoring/dashboard`, `/v1/monitoring/metrics`, `/v1/monitoring/cost/breakdown`, `python -m scripts.monitoring status --days=7`, in-memory cost event tracking from LiteLLM metadata, admin/ops role enforcement outside local dev, Slack/email alert dispatch configuration, quota/cost/guardrail/error alert evaluation, and route-level cost cap metadata.
+   - **Verification**: Added `tests/test_monitoring.py`; targeted monitoring tests, CLI JSON status, and Python compile checks passed.
+   - **Dependencies**: PD024, PD037, PD041, PD042.
+
+17. [X] PD044 [Evaluation] Advanced RAGAS regression suite on the full seeded D.C. corpus.
+   - **Target Paths**: `evals/ragas_harness.py`, `evals/run_regression.py`, `evals/regression_status.py`, `evals/datasets/dc_regression_golden.jsonl`, `evals/reports/`, `dc_knowledge_rag.py`, `monitoring.py`, `tests/test_advanced_ragas_regression.py`, `pyrightconfig.json`.
+   - **Definition of Done**: `python -m evals.run_regression --corpus=full` evaluates the PD038 seeded corpus of 1,145+ official D.C. chunks against a validated 200+ case D.C. golden set; report includes faithfulness, context precision, answer relevancy, citation accuracy, D.C. grounding score, per-case failure analysis with LangSmith trace links, practice-area breakdown, pass/fail thresholds, and regression deltas; latest health surfaces in `/v1/rag/status` and `/v1/monitoring/metrics`.
+   - **Result**: Added `advanced-dc-ragas-regression-1.0`, deterministic full-corpus rebuild from the PD038 seeding contract, 200-case generated golden dataset, latest regression report status reader, CLI runner, LangSmith-compatible summary/case traces, custom legal failure taxonomy, latest report at `evals/reports/latest_regression_report.json`, and status integration for RAG and monitoring.
+   - **Verification**: `python -m evals.run_regression --corpus=full --json` passed with 74 sources, 1,145 chunks, 200 cases, `overall_score=0.9731`, `pass_rate=1.0`, `faithfulness=1.0`, `context_precision=1.0`, `citation_accuracy=0.9476`, and `dc_grounding_score=1.0`.
+   - **Dependencies**: PD032, PD033, PD038, PD043.
+
+18. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
    - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-16. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+19. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
    - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-17. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+20. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-18. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+21. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-19. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+22. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-20. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+23. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

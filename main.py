@@ -41,6 +41,7 @@ from mercy_context import (
     product_capabilities,
     update_matter_context,
 )
+from monitoring import cost_breakdown, monitoring_dashboard, monitoring_metrics
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
@@ -283,6 +284,14 @@ def _auth_metadata(tenant_user: TenantUser) -> dict[str, Any]:
     }
 
 
+def _require_monitoring_admin(tenant_user: TenantUser) -> None:
+    if tenant_user.auth_mode == "local_dev":
+        return
+    if "admin" in tenant_user.roles or "ops" in tenant_user.roles:
+        return
+    raise HTTPException(status_code=403, detail="Monitoring endpoints require an admin or ops role.")
+
+
 def _matter_context(matter_id: str | None, tenant_user: TenantUser) -> dict[str, Any]:
     try:
         return get_matter_context(matter_id, tenant_context=_tenant_context(tenant_user)) or {}
@@ -338,6 +347,37 @@ async def security_compliance(tenant_user: TenantUser = Depends(get_current_tena
             "message": "Matter, RAG, checkpoint, quota, and audit records are scoped by tenant_id.",
         },
     }
+
+
+@app.get("/v1/monitoring/dashboard")
+async def monitoring_dashboard_endpoint(
+    days: int = Query(7, ge=1, le=90),
+    send_alerts: bool = Query(False, description="Send configured alerts instead of dry-run evaluation."),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_monitoring_admin(tenant_user)
+    trace_event(name="monitoring_dashboard_view", surface_context="monitoring", category="monitoring", metadata=_auth_metadata(tenant_user))
+    return monitoring_dashboard(days=days, send_alerts=send_alerts)
+
+
+@app.get("/v1/monitoring/metrics")
+async def monitoring_metrics_endpoint(
+    days: int = Query(7, ge=1, le=90),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_monitoring_admin(tenant_user)
+    trace_event(name="monitoring_metrics_view", surface_context="monitoring", category="monitoring", metadata=_auth_metadata(tenant_user))
+    return monitoring_metrics(days=days)
+
+
+@app.get("/v1/monitoring/cost/breakdown")
+async def monitoring_cost_breakdown_endpoint(
+    days: int = Query(7, ge=1, le=90),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_monitoring_admin(tenant_user)
+    trace_event(name="monitoring_cost_breakdown_view", surface_context="monitoring", category="monitoring", metadata=_auth_metadata(tenant_user))
+    return cost_breakdown(days=days)
 
 
 @app.delete("/v1/account/data")

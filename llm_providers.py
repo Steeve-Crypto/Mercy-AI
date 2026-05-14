@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from observability import trace_event, trace_span
+from monitoring import record_cost_event
 from prompts.registry import get_prompt_registry
 from security_controls import record_security_audit, sanitize_payload, sanitize_text
 
@@ -231,6 +232,18 @@ def complete_legal_task(
                 route=route,
                 matter_reference=context.get("matter_id"),
                 metadata=span["metadata"],
+            )
+            record_cost_event(
+                tenant_context=context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None,
+                provider=provider.provider,
+                model=model,
+                task_type=task_type,
+                estimated_cost_usd=result.estimated_cost_usd,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                route_expert=route.get("expert") if isinstance(route, dict) else None,
+                surface_context=surface_context,
+                trace_id=result.trace_id,
             )
             record_security_audit(
                 "llm_call_completed",
