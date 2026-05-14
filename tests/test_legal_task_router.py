@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import unittest
 
-from legal_task_router import moe_route
+for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
+    os.environ[_key] = ""
+
+from legal_task_router import moe_route  # noqa: E402
 
 
 class LegalTaskRouterTests(unittest.TestCase):

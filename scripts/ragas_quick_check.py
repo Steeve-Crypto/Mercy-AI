@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ragas_eval import run_ragas_evaluation
+from ragas_eval import run_ragas_evaluation  # noqa: E402
 
 
 def main() -> int:

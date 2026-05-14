@@ -8,7 +8,6 @@ from typing import Any
 
 from system_prompts import (
     CLERK_OS_VERSION,
-    DC_CLERK_OPERATING_SYSTEM,
     build_clerk_prompt,
 )
 
@@ -34,7 +33,7 @@ except Exception:
 if str(DISCOVERY_SRC) not in sys.path:
     sys.path.insert(0, str(DISCOVERY_SRC))
 
-from legal_discovery_ai.crew import PROJECT_ROOT, build_llm, run_crew  # noqa: E402
+from legal_discovery_ai.crew import PROJECT_ROOT, run_crew  # noqa: E402
 
 
 def _normalize_result(result: object) -> dict[str, Any]:
@@ -134,21 +133,10 @@ record citations, and D.C. Bar Ethics Opinion 388 compliance.
 
 
 def _call_llm(prompt: str) -> str | None:
-    try:
-        llm = build_llm()
-    except Exception:
-        return None
-
-    messages = [
-        {"role": "system", "content": DC_CLERK_OPERATING_SYSTEM},
-        {"role": "user", "content": prompt},
-    ]
-    for payload in (messages, f"{DC_CLERK_OPERATING_SYSTEM}\n\n{prompt}"):
-        try:
-            response = llm.call(payload)
-            return str(response)
-        except Exception:
-            continue
+    # Workspace drafting is upgraded by main.py through llm_providers.py after
+    # D.C. RAG grounding is attached. Keep the bridge fallback deterministic so
+    # this brownfield helper cannot bypass the shared LiteLLM provider layer.
+    _ = prompt
     return None
 
 

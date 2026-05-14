@@ -5,6 +5,7 @@ python-multipart
 langgraph
 langgraph-checkpoint
 langchain-core
+litellm>=1.67
 SQLAlchemy>=2.0
 psycopg[binary]>=3.2
 pgvector>=0.3

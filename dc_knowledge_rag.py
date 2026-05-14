@@ -10,6 +10,7 @@ from importlib import metadata
 from typing import Any
 
 from dc_guardrails import evaluate_dc_guardrails
+from llm_providers import generate_research_answer
 from mercy_storage import (
     DCRagChunkRecord,
     DCRagSourceRecord,
@@ -1059,12 +1060,23 @@ class DCKnowledgeRAG:
                 },
                 "retrieved_at": datetime.now(UTC).isoformat(),
             }
+            llm_answer = generate_research_answer(
+                query=query,
+                retrieval=payload,
+                matter_context=context,
+                route=route,
+                fallback=_grounded_rag_answer(results),
+            )
+            payload["answer"] = llm_answer.content
+            payload["llm"] = llm_answer.to_dict()
             span["rag"] = payload
             span["metadata"] = {
                 **_safe_rag_trace_metadata(context, filters),
                 "result_count": len(results),
                 "vector_backend": self.config.vector_backend,
                 "graph_backend": self.config.graph_backend,
+                "llm_used": llm_answer.used_llm,
+                "llm_model": llm_answer.model,
             }
             record_rag_trace(
                 payload,
@@ -1401,6 +1413,20 @@ def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str
         **status,
         "ingestion_contract": _active_source_registry(_metadata_filters(context).get("tenant_id")).status(),
     }
+
+
+def _grounded_rag_answer(results: list[dict[str, Any]]) -> str:
+    if not results:
+        return "No official D.C. grounding was retrieved. Do not answer substantively until official sources are supplied."
+    lines = [
+        "Research summary is evidence-only and requires attorney review before use.",
+    ]
+    for result in results[:4]:
+        citation = result.get("citation", {}) if isinstance(result.get("citation"), dict) else {}
+        label = citation.get("label") or result.get("source_id") or "[VERIFY CITE]"
+        summary = result.get("summary") or "Candidate source metadata requires attorney verification."
+        lines.append(f"- {summary} Source: {label}.")
+    return "\n".join(lines)
 
 
 def _tokens(text: str) -> list[str]:

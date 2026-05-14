@@ -4,8 +4,10 @@ import os
 import unittest
 
 os.environ.setdefault("MERCY_ENV", "local")
+for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
+    os.environ[_key] = ""
 
-from agent_network import (
+from agent_network import (  # noqa: E402
     AGENT_NETWORK_VERSION,
     LANGGRAPH_AVAILABLE,
     _local_langgraph_fallback_allowed,
@@ -15,8 +17,8 @@ from agent_network import (
     langgraph_runtime_metadata,
     mcp_skill_manifest,
 )
-from legal_task_router import delegate_to_agent_network
-from mercy_context import get_matter_context, update_matter_context
+from legal_task_router import delegate_to_agent_network  # noqa: E402
+from mercy_context import get_matter_context, update_matter_context  # noqa: E402
 
 TEST_AUTH = {"tenant_id": "tenant-agent", "user_id": "user-agent", "auth_mode": "unit_test"}
 
@@ -29,6 +31,8 @@ class AgentNetworkTests(unittest.TestCase):
 
         self.assertEqual(manifest["agent_network_version"], AGENT_NETWORK_VERSION)
         self.assertIn("available", manifest["langgraph"])
+        self.assertIn("llm_providers", manifest)
+        self.assertIn("fallback_active", manifest["llm_providers"])
         self.assertIn("runtime", manifest["langgraph"])
         if LANGGRAPH_AVAILABLE:
             self.assertTrue(manifest["langgraph"]["available"])
@@ -77,6 +81,7 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertIn("cite_and_verify", result["mcp_skills_used"])
         self.assertTrue(result["citations"])
         self.assertTrue(result["grounding_policy"]["strict_grounding"])
+        self.assertIn("llm", result)
         self.assertIn("available", result["langgraph_runtime"])
 
     def test_drafting_agent_returns_attorney_review_irac_scaffold(self) -> None:

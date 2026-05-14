@@ -14,12 +14,12 @@ Mercy now follows a "One Brain, Multiple Surfaces" model:
 3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, and now redacts local offline storage.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
-The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, LangGraph runtime activation, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source coverage, real MCP transport, and deployment operations.
+The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, LangGraph runtime activation, LiteLLM-backed provider integration, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source coverage, real MCP transport, and deployment operations.
 
 ## Technical Context
 
 **Language/Version**: Python 3.12 local runtime observed; TypeScript/React for web and Office surfaces.
-**Primary Dependencies**: FastAPI, Pydantic, Uvicorn, Next.js 15, React 19 for `mercy-legal-web`, Vite 5, React 18, Fluent UI, Office.js tooling for `mercy-legal-plugin`, CrewAI package under `legal_discovery_ai`.
+**Primary Dependencies**: FastAPI, Pydantic, Uvicorn, LiteLLM for multi-provider LLM calls, Next.js 15, React 19 for `mercy-legal-web`, Vite 5, React 18, Fluent UI, Office.js tooling for `mercy-legal-plugin`, CrewAI package under `legal_discovery_ai`.
 **Storage**: SQLAlchemy-backed PostgreSQL + pgvector persistent store via `POSTGRES_URL` or `SUPABASE_URL` for matters, official D.C. RAG sources/chunks, and LangGraph checkpoints; local in-memory fallback is allowed only for explicit `MERCY_ENV=local` development.
 **Testing**: Python `unittest` modules under `tests/`; `npm run typecheck`, `npm run build`, and `npm run lint` for TypeScript surfaces; Office manifest validation via `npm run validate:manifest`.
 **Target Platform**: Local Windows development, FastAPI core, Next.js web app, Microsoft Word add-in.
@@ -50,6 +50,7 @@ FastAPI Shared Intelligence Core
   mercy_context.py
   dc_guardrails.py
   dc_knowledge_rag.py
+  llm_providers.py
   ragas_eval.py
   observability.py
   client_intake_flow.py
@@ -88,14 +89,15 @@ Local smoke surfaces
 
 | Area | Current State | Important Caveat |
 |------|---------------|------------------|
-| MoE Router | `legal_task_router.py` routes to research, drafting, compliance, intake, and citation verifier experts; `/v1/router/inspect` returns route metadata. | Classifier is deterministic/rule-based, not a production LLM classifier. |
+| MoE Router | `legal_task_router.py` routes to research, drafting, compliance, intake, and citation verifier experts; `/v1/router/inspect` returns route metadata and uses LiteLLM classification when a provider key is configured. | Deterministic routing remains the fallback when no provider key is configured or a provider fails. |
 | Response Envelope | `response_envelope.py` standardizes route, expert, confidence, guardrail status, citations, ethics metadata, matter snapshot, and audit timestamp. | `block` can represent missing required inputs, not only ethics blocking. |
 | Matter Context | `mercy_context.py` models matter/client IDs, facts, documents, history, deadlines, sensitivity flags, and route history. | Production-like use requires `POSTGRES_URL` or `SUPABASE_URL`; local in-memory fallback is dev-only. |
 | Full Intake | `client_intake_flow.py` and `prompts/intake.py` support structured D.C. intake and `/v1/matter/intake/full`. | Conflict and scope checks are workflow scaffolds, not real firm conflict systems. |
 | D.C. RAG | `dc_knowledge_rag.py` exposes tenant-scoped D.C. retrieval from persisted official source/chunk records, with pgvector as the primary DB-backed vector path and optional Qdrant/Neo4j adapters. | Advanced pgvector tuning and full official source coverage remain future hardening. |
 | RAGAS Eval | `ragas_eval.py`, `datasets/dc_golden_dataset.jsonl`, and `/v1/rag/evaluate` produce local reports. | Metrics are deterministic RAGAS-style, and current eval threshold may fail. |
 | Observability | `observability.py` exposes `/v1/observability/trace` and optional LangSmith submission, including storage-operation trace events. | LangSmith requires env vars and package availability; trace buffer remains process-local. |
-| Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist. | LangGraph is optional and currently falls back when package is absent; MCP compatibility is manifest/schema-level, not a served MCP transport. |
+| LLM Providers | `llm_providers.py` uses LiteLLM for OpenAI, Anthropic, Groq, Gemini, and provider/model overrides; MoE routing, RAG answer generation, drafting, and agent execution use real calls when a provider key is configured. | Structured templates remain the fallback when no provider key is configured, and provider failures fall back safely with trace metadata. |
+| Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist and report active LLM provider/model status. | MCP compatibility is manifest/schema-level, not a served MCP transport. |
 | Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
 
@@ -108,6 +110,7 @@ Local smoke surfaces
 - **GoldenExample / EvaluationRow**: D.C. eval cases and deterministic metric rows.
 - **TraceRecord**: local and optional LangSmith observability events.
 - **MCP Skill Manifest / Agent Result**: discoverable skill schemas and routed agent outputs.
+- **LLMCallResult**: provider, model, fallback reason, token usage, estimated cost, trace ID, and whether a real LiteLLM call was used.
 - **Office Offline Queue Item**: redacted local request metadata, cache key, action, and redaction summary only.
 
 ## API Contracts
@@ -167,6 +170,7 @@ response_envelope.py
 mercy_context.py
 dc_guardrails.py
 dc_knowledge_rag.py
+llm_providers.py
 ragas_eval.py
 observability.py
 client_intake_flow.py

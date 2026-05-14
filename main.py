@@ -17,6 +17,7 @@ from bridge import draft_from_facts, run_discovery
 from auth_context import TenantUser, get_current_tenant_user
 from dc_guardrails import DCGuardrailMiddleware
 from legal_task_router import moe_route
+from llm_providers import generate_workspace_draft
 from mercy_context import (
     MATTERS,
     CORE_NAME,
@@ -839,6 +840,28 @@ async def workspace_draft(
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        retrieval = retrieve_dc_knowledge(
+            query=f"{request.draft_type} {request.requested_relief or ''}".strip(),
+            matter_context=matter_context,
+            top_k=4,
+            route=route,
+            agentic=True,
+        )
+        fallback_draft = str(result.get("draft") or result.get("content") or "")
+        llm_draft = generate_workspace_draft(
+            facts=request.facts,
+            draft_type=request.draft_type,
+            target_court=request.target_court,
+            requested_relief=request.requested_relief,
+            matter_context=matter_context,
+            retrieval=retrieval,
+            route=route,
+            fallback=fallback_draft,
+        )
+        result["draft"] = llm_draft.content
+        result["rag"] = retrieval
+        result["llm"] = llm_draft.to_dict()
 
         if request.matter_id:
             result["matter_id"] = request.matter_id

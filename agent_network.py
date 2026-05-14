@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from dc_guardrails import evaluate_dc_guardrails
 from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
+from llm_providers import generate_legal_draft, generate_research_answer, llm_provider_status
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from mercy_storage import persistent_storage_configured, record_langgraph_checkpoint
 from observability import trace_event, trace_span
@@ -462,10 +463,19 @@ class ResearchAgent(BaseLegalAgent):
             agentic=True,
         )
         citation_check = self._call_skill("cite_and_verify", law_or_case=task, matter_context=context)
+        fallback_answer = _grounded_research_summary(retrieval)
+        llm_answer = generate_research_answer(
+            query=task,
+            retrieval=retrieval,
+            matter_context=context,
+            route=state["route"],
+            fallback=fallback_answer,
+        )
         return {
             "agent": self.name,
             "status": retrieval.get("verification", {}).get("status") or "warn",
-            "answer": _grounded_research_summary(retrieval),
+            "answer": llm_answer.content,
+            "llm": llm_answer.to_dict(),
             "skills_used": ["cite_and_verify"],
             "skill_results": [citation_check],
             "rag": retrieval,
@@ -491,7 +501,15 @@ class DraftingAgent(BaseLegalAgent):
             route=state["route"],
             agentic=True,
         )
-        draft = _grounded_draft(task, context, retrieval)
+        fallback_draft = _grounded_draft(task, context, retrieval)
+        llm_draft = generate_legal_draft(
+            task=task,
+            matter_context=context,
+            retrieval=retrieval,
+            route=state["route"],
+            fallback=fallback_draft,
+        )
+        draft = llm_draft.content
         ethics = self._call_skill("check_dc_ethics", query=task, draft=draft, matter_context=context)
         export = self._call_skill("export_to_word", content=draft, format=str(state["params"].get("format") or "docx"))
         status = "block" if not retrieval.get("results") else ethics.get("status", "warn")
@@ -499,6 +517,7 @@ class DraftingAgent(BaseLegalAgent):
             "agent": self.name,
             "status": status,
             "draft": draft,
+            "llm": llm_draft.to_dict(),
             "skills_used": ["check_dc_ethics", "export_to_word"],
             "skill_results": [ethics, export],
             "rag": retrieval,
@@ -610,6 +629,7 @@ class AgentNetwork:
             "agents": [agent.metadata() for agent in self.agents.values()],
             "skills": [skill.metadata() for skill in self.skills.values()],
             "rag_backend": rag_backend_status(),
+            "llm_providers": llm_provider_status(),
             "strict_grounding": True,
             "langsmith_tracing": True,
         }
@@ -656,6 +676,7 @@ class AgentNetwork:
                 "task": task,
                 "params": _safe_params(params),
                 "agent_result": result,
+                "llm": result.get("llm") if isinstance(result.get("llm"), dict) else llm_provider_status(),
                 "mcp_skills_used": result.get("skills_used", []),
                 "mcp_skill_results": result.get("skill_results", []),
                 "citations": result.get("citations", []),
@@ -671,6 +692,8 @@ class AgentNetwork:
                 "skill_count": len(response["mcp_skills_used"]),
                 "langgraph_runtime": self._langgraph_runtime.get("runtime"),
                 "langgraph_available": self._langgraph_runtime.get("available"),
+                "llm_used": bool(result.get("llm", {}).get("used_llm")) if isinstance(result.get("llm"), dict) else False,
+                "llm_model": result.get("llm", {}).get("model") if isinstance(result.get("llm"), dict) else None,
             }
             trace_event(
                 name="agent_network_result",

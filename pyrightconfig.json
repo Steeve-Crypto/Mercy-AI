@@ -7,6 +7,7 @@
     "dc_guardrails.py",
     "dc_knowledge_rag.py",
     "legal_task_router.py",
+    "llm_providers.py",
     "main.py",
     "mercy_context.py",
     "mercy_storage.py",

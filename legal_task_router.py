@@ -6,6 +6,7 @@ from typing import Any
 
 from dc_knowledge_rag import retrieve_dc_knowledge
 from dc_guardrails import evaluate_dc_guardrails
+from llm_providers import classify_moe_route
 from mercy_context import get_langgraph_runtime, get_matter_context
 from observability import record_guardrail_trace, record_route_trace
 from response_envelope import normalize_guardrail_status
@@ -67,6 +68,7 @@ class RouterDecision:
     knowledge_context: dict[str, Any]
     safety_notes: list[str]
     confidentiality: dict[str, Any]
+    llm_router: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -418,6 +420,24 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
 
     candidates = classification["candidates"]
     top = select_expert(classification, threshold=SAFE_CONFIDENCE_THRESHOLD)
+    llm_router: dict[str, Any] = {}
+    llm_pick = classify_moe_route(
+        query=query,
+        matter_context=matter_context,
+        candidates=[asdict(candidate) for candidate in candidates],
+        fallback_expert=top.expert,
+    )
+    if llm_pick:
+        llm_top = RouteCandidate(
+            expert=str(llm_pick["expert"]),
+            route_mode=str(llm_pick.get("route_mode") or _route_mode_for_expert(str(llm_pick["expert"]), matter_context)),
+            confidence=round(float(llm_pick.get("confidence") or top.confidence), 2),
+            reasons=["litellm_router", *[str(reason) for reason in llm_pick.get("reasons", [])]],
+        )
+        candidates = [llm_top, *[candidate for candidate in candidates if candidate.expert != llm_top.expert]]
+        top = llm_top
+        llm_payload = llm_pick.get("llm")
+        llm_router = dict(llm_payload) if isinstance(llm_payload, dict) else {}
 
     if not dc_guardrails_pass(query, top.expert):
         return fallback_to_compliance_expert(query, matter_context, user_type, surface_context)
@@ -440,6 +460,7 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
         candidates=candidates,
         execute=execute,
         next_action=next_action,
+        llm_router=llm_router,
     )
     route = decision.to_dict()
     record_route_trace(route, surface_context=surface_context, matter_reference=matter_context.get("matter_id"))
@@ -642,6 +663,7 @@ def _build_decision(
     candidates: list[RouteCandidate],
     execute: bool,
     next_action: str,
+    llm_router: dict[str, Any] | None = None,
 ) -> RouterDecision:
     guardrails = _guardrail_profile(query, top, matter_context)
     guardrail_status = normalize_guardrail_status(guardrails["status"], execute=execute)
@@ -676,6 +698,7 @@ def _build_decision(
             "training_use": "client data is not used for model training by Mercy",
             "redaction_required_for_observability": True,
         },
+        llm_router=llm_router or {},
     )
 
 

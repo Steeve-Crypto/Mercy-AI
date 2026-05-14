@@ -132,35 +132,42 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: `unittest discover` passed 36 tests, web `typecheck`, `lint`, and `build` passed, add-in `lint`, `build`, and `validate:manifest` passed, `pyright` and targeted `ruff` passed.
    - **Dependencies**: PD003, PD008, PD011-PD013, PD026-PD035.
 
-10. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+10. [X] PD037 [Core LLM] Add real LiteLLM provider integration for routing, RAG, drafting, and agents.
+   - **Target Paths**: `llm_providers.py`, `legal_task_router.py`, `dc_knowledge_rag.py`, `agent_network.py`, `main.py`, `bridge.py`, `mercy_context.py`, `.env.example`, `requirements.txt`, `tests/test_llm_providers.py`.
+   - **Definition of Done**: When OpenAI, Anthropic, Groq, Gemini, or compatible provider keys are configured, MoE routing, RAG answer generation, workspace drafting, and agent drafting/research use LiteLLM calls with provider/model metadata, cost estimates, LangSmith-compatible traces, and safe structured fallback when no provider is configured.
+   - **Result**: Added the `llm_providers.py` abstraction, smart fast/reasoning model selection, provider env/model overrides, LLM call envelopes, basic cost estimation, trace metadata, RAG/drafting generation hooks, `/v1/product/capabilities` and `/v1/agent/skills` provider reporting, and tests for no-key fallback plus mocked real-call behavior.
+   - **Verification**: `unittest discover -s tests` passed 39 tests, `pyright` passed, `ruff check .` passed, and capability/skill manifests report `mercy-llm-providers-litellm-1.0`.
+   - **Dependencies**: PD026, PD030, PD032, PD035, PD036.
+
+11. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
    - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-11. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+12. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
    - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-12. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+13. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-13. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+14. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-14. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+15. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-15. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+16. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

@@ -5,8 +5,10 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("MERCY_ENV", "local")
+for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
+    os.environ[_key] = ""
 
-from dc_knowledge_rag import (
+from dc_knowledge_rag import (  # noqa: E402
     DCKnowledgeRAG,
     KnowledgeChunk,
     RetrievalConfig,
@@ -16,7 +18,7 @@ from dc_knowledge_rag import (
     rag_backend_status,
     retrieve_dc_knowledge,
 )
-from legal_task_router import moe_route
+from legal_task_router import moe_route  # noqa: E402
 
 
 class DCKnowledgeRagTests(unittest.TestCase):

@@ -6,6 +6,7 @@ from typing import Any, NoReturn
 from uuid import uuid4
 
 from observability import trace_event
+from llm_providers import llm_provider_status
 from mercy_storage import (
     MatterRecord,
     init_storage,
@@ -669,6 +670,7 @@ def product_capabilities() -> dict[str, Any]:
             "langsmith_project_env": "LANGSMITH_PROJECT",
             "langsmith_tracing_env": "LANGSMITH_TRACING",
         },
+        "llm_providers": llm_provider_status(),
         "tiers": {
             "free": [
                 "single-document drafting",
