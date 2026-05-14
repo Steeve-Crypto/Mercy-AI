@@ -1,0 +1,72 @@
+.templateGallery {
+  display: grid;
+  gap: 12px;
+}
+
+.templateToolbar {
+  display: grid;
+  gap: 8px;
+}
+
+.templateSelectRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.templateSelectRow select {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.templateCard {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #dde4ee;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(14, 42, 74, 0.06);
+  padding: 12px;
+}
+
+.templateMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.templateDescription {
+  color: #566273;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.templateInputs {
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.templateResult {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(201, 164, 76, 0.38);
+  border-radius: 8px;
+  background: #fffaf0;
+  padding: 12px;
+}
+
+.templateResultText {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #34405a;
+  font-size: 12px;
+  line-height: 1.5;
+}

@@ -14,6 +14,9 @@ import {
   CoreMcpManifest,
   CoreMcpSkillResult,
   CoreResponseMetadata,
+  CoreBetaStatus,
+  CoreTemplateGallery,
+  CoreTemplateGalleryItem,
   RiskFinding
 } from "../types";
 
@@ -62,6 +65,12 @@ type CoreAgentResponse = {
   cache_status?: CoreResponseMetadata["cacheStatus"];
   sync_status?: string;
   retry_when_online?: boolean;
+  beta?: {
+    model_tier: string;
+    quota: CoreResponseMetadata["betaQuota"];
+    feedback_endpoint: string;
+    attorney_review_required: boolean;
+  };
 };
 
 type AgentRequest = {
@@ -496,6 +505,22 @@ function fallbackAgentResponse(action: string, task: string, content: string): C
   };
 }
 
+async function getTemplateGallery(): Promise<CoreTemplateGallery | null> {
+  try {
+    return await coreFetch<CoreTemplateGallery>("/v1/templates/gallery");
+  } catch {
+    return null;
+  }
+}
+
+async function getBetaStatus(): Promise<CoreBetaStatus | null> {
+  try {
+    return await coreFetch<CoreBetaStatus>("/v1/beta/status");
+  } catch {
+    return null;
+  }
+}
+
 function addReviewDisclaimer(content: string): string {
   const disclaimer = "This is AI-assisted drafting - attorney must review and verify all content before use.";
   if (content.includes(disclaimer)) {
@@ -578,7 +603,8 @@ function metadataFromAgent(
     tenantId: matterContext?.tenant_id ?? auth.tenantId,
     userId: matterContext?.created_by_user_id ?? auth.userId,
     officialSourceGrounding: officialGrounding,
-    skillResults: response.mcp_skill_results ?? []
+    skillResults: response.mcp_skill_results ?? [],
+    betaQuota: response.beta?.quota
   };
 }
 
@@ -746,6 +772,8 @@ export function queuedAgentRequestCount(): number {
 
 export const api = {
   getAgentSkills,
+  getTemplateGallery,
+  getBetaStatus,
   syncOfflineAgentQueue,
   queuedAgentRequestCount,
   recentSafeResponses,
@@ -913,5 +941,84 @@ export const api = {
       content: agentContent(response),
       core: metadataFromAgent(response, undefined, undefined, response.agent_network_version === "offline-fallback" ? "queued" : "live")
     };
+  },
+
+  async generateTemplate(template: CoreTemplateGalleryItem, documentText: string): Promise<AgentActionResult> {
+    try {
+      const intake = await postCoreIntake({
+        requested_relief: template.generation_task,
+        matter: {
+          matter_name: `${template.title} - Word matter`,
+          matter_type: template.matter_type,
+          jurisdiction: "District of Columbia",
+          client_role: "client"
+        },
+        key_facts: {
+          workflow: "template_gallery_generation",
+          template_id: template.template_id,
+          practice_area: template.practice_area,
+          document_excerpt: documentText.slice(0, 1000)
+        },
+        documents: documentText
+          ? [{ document_id: "active-word-template-context", title: "Active Word context", source: "office_addin" }]
+          : [],
+        missing_information: template.required_inputs,
+        sensitivity_flags: ["confidential_template_generation_context"]
+      });
+      const response = await agentExecute(
+        `template_${template.template_id}`,
+        {
+          task: template.generation_task,
+          matter_id: intake.matter_id,
+          matter_context: {
+            matter_id: intake.matter_id,
+            jurisdiction: "District of Columbia",
+            matter_type: template.matter_type,
+            practice_area: template.practice_area,
+            document_text: documentText
+          },
+          params: {
+            template_id: template.template_id,
+            prompt_template_id: template.prompt_template_id,
+            template_title: template.title,
+            required_inputs: template.required_inputs,
+            source_query: template.source_query,
+            top_k: 5,
+            format: "docx"
+          }
+        },
+        `Preview fallback: ${template.title} generation queued for the Mercy agent network.`
+      );
+      return {
+        title: template.title,
+        content: agentContent(response),
+        core: metadataFromAgent(response, intake.matter_context, intake.intake_summary, response.agent_network_version === "offline-fallback" ? "queued" : "live")
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Template generation request failed";
+      return {
+        title: template.title,
+        content: addReviewDisclaimer(
+          "Core service temporarily unavailable - working in offline mode. Template generation was queued for the live Mercy agent network."
+        ),
+        core: fallbackMetadata(reason)
+      };
+    }
+  },
+
+  async submitFeedback(payload: {
+    rating: "up" | "down";
+    comment?: string;
+    action?: string;
+    trace_id?: string;
+    route_expert?: string;
+    guardrail_status?: string;
+    template_id?: string;
+  }): Promise<void> {
+    await coreFetch("/v1/beta/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
   }
 };

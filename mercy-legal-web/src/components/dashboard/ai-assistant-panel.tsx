@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowUp, Bot, FileText, Loader2, Search, UserRound } from "lucide-react";
 import { ReliabilityPanel } from "@/components/dashboard/reliability-panel";
+import { BetaFeedback } from "@/components/dashboard/beta-feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -191,6 +192,15 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
           rag={ragResult}
           agent={agentResult}
         />
+
+        {(agentResult || ragResult) && (
+          <BetaFeedback
+            action={agentResult ? "agent_action" : "rag_research"}
+            traceId={agentResult?.trace_id ?? null}
+            routeExpert={agentResult?.selected_expert ?? ragResult?.expert ?? null}
+            guardrailStatus={agentResult?.guardrail_status ?? ragResult?.guardrail_status ?? null}
+          />
+        )}
 
         {notice && !error && (
           <div className="rounded-md border border-[#d7e7d0] bg-[#f2fbef] p-3 text-xs leading-5 text-[#285b2f]">

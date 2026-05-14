@@ -153,35 +153,49 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: `python -m scripts.test_prompts --task=motion_drafting --count=5` passed with `motion_drafting_superior_court`, 13 templates, and 12 few-shot examples. `unittest discover -s tests -p "test_*.py"` passed 47 tests, `pyright` passed, and `ruff check .` passed.
    - **Dependencies**: PD032, PD035, PD037, PD038.
 
-13. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+13. [X] PD040 [Templates + Onboarding] Add D.C. template gallery and beta onboarding flow.
+   - **Target Paths**: `template_gallery.py`, `main.py`, `mercy_context.py`, `tests/test_template_gallery.py`, `mercy-legal-web/src/lib/core-client.ts`, `mercy-legal-web/src/components/dashboard/template-gallery.tsx`, `mercy-legal-web/src/components/dashboard/beta-onboarding.tsx`, `mercy-legal-web/src/components/dashboard/dashboard-workspace.tsx`, `mercy-legal-plugin/src/services/api.ts`, `mercy-legal-plugin/src/types/index.ts`, `mercy-legal-plugin/src/App.tsx`, `mercy-legal-plugin/src/components/templates/`.
+   - **Definition of Done**: `/v1/templates/gallery` returns a tenant-aware, filterable catalog with at least 25 D.C.-specific templates; Standalone Platform and Office add-in expose a clean gallery with one-click generation through `/v1/agent/execute`; first-use onboarding explains matter setup, guardrails, citations, attorney review, and D.C. ethics; template usage is traced; generated outputs carry prompt, source-grounding, tenant, and attorney-review metadata.
+   - **Result**: Added 26 production D.C. templates across retainers, Superior Court civil/family/criminal motions and pleadings, zoning, administrative appeals, small-business formation/compliance, client intake, demand letters, settlement agreements, discovery requests, and citation verification. Added gallery status to product capabilities, LangSmith-compatible template view/usage traces, Standalone beta onboarding and quick matter creation, dashboard one-click generation, and Office add-in template tab with live generation from the active Word document.
+   - **Verification**: `unittest discover -s tests -p "test_*.py"` passed 51 tests, `pyright` passed, targeted `ruff` passed, web `typecheck`, `lint`, and `build` passed, Office add-in `lint`, `build`, and `validate:manifest` passed.
+   - **Dependencies**: PD032, PD038, PD039.
+
+14. [X] PD041 [Beta Launch] Add limited beta launch package.
+   - **Target Paths**: `beta_launch.py`, `main.py`, `mercy_context.py`, `tests/test_beta_launch.py`, `mercy-legal-web/src/lib/core-client.ts`, `mercy-legal-web/src/components/dashboard/beta-launch-panel.tsx`, `mercy-legal-web/src/components/dashboard/beta-feedback.tsx`, `mercy-legal-web/src/components/dashboard/dashboard-workspace.tsx`, `mercy-legal-plugin/src/services/api.ts`, `mercy-legal-plugin/src/types/index.ts`, `mercy-legal-plugin/src/App.tsx`, `mercy-legal-plugin/src/components/beta/`.
+   - **Definition of Done**: Core supports invite-only beta status, waitlist, invite acceptance, downloadable D.C.-appropriate DPA and beta terms, monthly strong-model quotas with fast-model allowance, welcome sequence metadata, feedback collection with tracing, and lightweight analytics. Standalone and Office surfaces show beta branding, quota/welcome elements, legal docs, feedback prompts, and analytics where appropriate.
+   - **Result**: Added `mercy-limited-beta-1.0` with `/v1/beta/status`, `/v1/beta/waitlist`, `/v1/beta/invites`, `/v1/beta/invites/accept`, `/v1/beta/legal/{dpa|terms}`, `/v1/beta/feedback`, and `/v1/beta/analytics`; added strong-model quota enforcement for routed agent research/drafting, local/dev beta activation, feedback and usage LangSmith-compatible traces, D.C. attorney responsibility language in beta documents, dashboard beta launch/analytics panel, web feedback widgets, and Office add-in beta quota/welcome/feedback panel.
+   - **Verification**: `unittest discover -s tests -p "test_*.py"` passed 57 tests, `pyright` passed, targeted `ruff` passed, web `typecheck`, `lint`, and `build` passed, Office add-in `lint`, `build`, and `validate:manifest` passed.
+   - **Dependencies**: PD029, PD037, PD040.
+
+15. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
    - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-14. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+16. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
    - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-15. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+17. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-16. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+18. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-17. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+19. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-18. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+20. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

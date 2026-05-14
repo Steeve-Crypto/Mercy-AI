@@ -2,6 +2,7 @@
   "include": [
     "auth_context.py",
     "agent_network.py",
+    "beta_launch.py",
     "bridge.py",
     "client_intake_flow.py",
     "dc_guardrails.py",
@@ -15,6 +16,7 @@
     "prompts",
     "ragas_eval.py",
     "response_envelope.py",
+    "template_gallery.py",
     "tests",
     "scripts"
   ],

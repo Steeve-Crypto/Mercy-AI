@@ -62,6 +62,16 @@ export type CoreCapabilities = {
     storage: string;
     training_use: string;
   };
+  template_gallery?: {
+    version: string;
+    template_count: number;
+    practice_areas: string[];
+    endpoint: string;
+    generation_endpoint: string;
+    official_dc_grounding_required: boolean;
+    attorney_review_required: boolean;
+  };
+  limited_beta?: CoreBetaStatus;
 };
 
 export type CoreMatter = {
@@ -241,6 +251,12 @@ export type CoreAgentEnvelope = {
   matter_context_snapshot: CoreMatterContextSnapshot;
   audit_timestamp: string;
   human_review_required: boolean;
+  beta?: {
+    model_tier: "strong" | "fast" | string;
+    quota: CoreBetaQuota;
+    feedback_endpoint: string;
+    attorney_review_required: boolean;
+  };
 };
 
 export type CoreDiscoveryEnvelope = {
@@ -354,6 +370,101 @@ export type CoreFullMatterIntakeEnvelope = CoreMatterIntakeEnvelope & {
     }>;
   };
   next_steps: string[];
+};
+
+export type CoreTemplateGalleryItem = {
+  template_id: string;
+  title: string;
+  description: string;
+  practice_area: string;
+  difficulty: "beginner" | "intermediate" | "advanced" | string;
+  required_inputs: string[];
+  prompt_template_id: string;
+  prompt_template?: {
+    template_id: string;
+    version: string;
+    title: string;
+    task: string;
+    grounding: string;
+    attorney_review_required: boolean;
+  };
+  generation_task: string;
+  matter_type: string;
+  source_query: string;
+  default_inputs?: Record<string, unknown>;
+  ethics_tip: string;
+  dc_grounding: {
+    official_sources_only: boolean;
+    seeded_knowledge_base: string;
+    attorney_review_required: boolean;
+  };
+};
+
+export type CoreTemplateGallery = {
+  version: string;
+  template_count: number;
+  practice_areas: string[];
+  endpoint: string;
+  generation_endpoint: string;
+  prompt_registry_version: string;
+  official_dc_grounding_required: boolean;
+  attorney_review_required: boolean;
+  filters: {
+    practice_area?: string | null;
+    difficulty?: string | null;
+    search?: string | null;
+  };
+  templates: CoreTemplateGalleryItem[];
+  generated_at: string;
+};
+
+export type CoreBetaQuota = {
+  strong_model_monthly_limit: number;
+  strong_model_used: number;
+  strong_model_remaining: number;
+  fast_model_limit: string;
+  fast_model_used: number;
+  period: string;
+  gentle_rate_limit: string;
+};
+
+export type CoreBetaStatus = {
+  version: string;
+  beta_mode: boolean;
+  invite_only: boolean;
+  access: "active" | "waitlist" | string;
+  quota: CoreBetaQuota;
+  legal_docs: {
+    dpa: string;
+    terms: string;
+  };
+  welcome_sequence: Array<{ subject: string; body: string }>;
+  ethics_note: string;
+};
+
+export type CoreBetaAnalytics = {
+  version: string;
+  active_users: number;
+  waitlist_count: number;
+  invite_count: number;
+  feedback: {
+    count: number;
+    thumbs_up: number;
+    thumbs_down: number;
+  };
+  template_usage: Array<[string, number]>;
+  guardrail_triggers: Record<string, number>;
+  ragas_trends: {
+    trace_count: number;
+    recent_statuses: string[];
+  };
+  estimated_cost_usd: number;
+  quota: {
+    strong_model_monthly_limit: number;
+    total_strong_used: number;
+    fast_model_limit: string;
+  };
+  generated_at: string;
 };
 
 function browserAuthContext(): CoreAuthContext {
@@ -486,6 +597,49 @@ export async function getCoreSnapshot(): Promise<CoreSnapshot> {
     matters: matters.data ?? [],
     error: firstError,
   };
+}
+
+export async function getTemplateGallery(filters?: {
+  practice_area?: string;
+  difficulty?: string;
+  search?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreTemplateGallery>> {
+  const params = new URLSearchParams();
+  if (filters?.practice_area) params.set("practice_area", filters.practice_area);
+  if (filters?.difficulty) params.set("difficulty", filters.difficulty);
+  if (filters?.search) params.set("search", filters.search);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return coreFetch<CoreTemplateGallery>(`/v1/templates/gallery${suffix}`, undefined, auth);
+}
+
+export async function getBetaStatus(auth?: CoreAuthContext): Promise<CoreClientResult<CoreBetaStatus>> {
+  return coreFetch<CoreBetaStatus>("/v1/beta/status", undefined, auth);
+}
+
+export async function getBetaAnalytics(auth?: CoreAuthContext): Promise<CoreClientResult<CoreBetaAnalytics>> {
+  return coreFetch<CoreBetaAnalytics>("/v1/beta/analytics", undefined, auth);
+}
+
+export async function submitBetaFeedback(payload: {
+  rating: "up" | "down";
+  comment?: string;
+  action?: string;
+  trace_id?: string;
+  route_expert?: string;
+  guardrail_status?: string;
+  template_id?: string;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<{ status: string; feedback_id: string; thanks: string }>> {
+  return coreFetch<{ status: string; feedback_id: string; thanks: string }>(
+    "/v1/beta/feedback",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
 }
 
 export async function getMatter(matterId: string, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter>> {

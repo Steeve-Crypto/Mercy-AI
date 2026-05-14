@@ -10,8 +10,8 @@ This feature is the active Spec Kit home for the Mercy legal AI integration work
 Mercy now follows a "One Brain, Multiple Surfaces" model:
 
 1. **FastAPI Shared Intelligence Core** in root Python modules owns routing, matter context, response envelopes, D.C. guardrails, RAG retrieval, evaluation, observability, intake, and agent execution.
-2. **Standalone Platform** in `mercy-legal-web/` consumes core state and metadata from a typed Next.js client while still retaining some demo/dashboard sections.
-3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, and now redacts local offline storage.
+2. **Standalone Platform** in `mercy-legal-web/` consumes core state and metadata from a typed Next.js client, including beta launch status, quota, feedback, and template workflows.
+3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, exposes the shared D.C. template gallery and limited beta status, and now redacts local offline storage.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
 The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, a D.C. knowledge seeding pipeline, LangGraph runtime activation, LiteLLM-backed provider integration, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source text extraction, real MCP transport, and deployment operations.
@@ -53,6 +53,8 @@ FastAPI Shared Intelligence Core
   llm_providers.py
   ragas_eval.py
   scripts/seed_dc_knowledge.py
+  template_gallery.py
+  beta_launch.py
   observability.py
   client_intake_flow.py
   agent_network.py
@@ -99,6 +101,8 @@ Local smoke surfaces
 | RAGAS Eval | `ragas_eval.py`, `datasets/dc_golden_dataset.jsonl`, and `/v1/rag/evaluate` produce local reports. | Metrics are deterministic RAGAS-style, and current eval threshold may fail. |
 | Observability | `observability.py` exposes `/v1/observability/trace` and optional LangSmith submission, including storage-operation trace events. | LangSmith requires env vars and package availability; trace buffer remains process-local. |
 | LLM Providers | `llm_providers.py` uses LiteLLM for OpenAI, Anthropic, Groq, Gemini, and provider/model overrides; MoE routing, RAG answer generation, drafting, and agent execution use real calls when a provider key is configured. | Structured templates remain the fallback when no provider key is configured, and provider failures fall back safely with trace metadata. |
+| D.C. Template Gallery | `template_gallery.py` exposes `/v1/templates/gallery` with 26 tenant-aware, filterable templates connected to PD039 prompt templates and `/v1/agent/execute` generation. | Template generation still requires attorney-supplied facts and final verification before use. |
+| Limited Beta Launch | `beta_launch.py` exposes invite/waitlist state, strong-model monthly quotas, D.C. beta legal docs, welcome sequence metadata, feedback traces, and lightweight analytics through `/v1/beta/*`. | In-memory beta state is suitable for limited/local launch only; production beta operations need persistent invite, billing, and retention controls. |
 | Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist and report active LLM provider/model status. | MCP compatibility is manifest/schema-level, not a served MCP transport. |
 | Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
@@ -114,6 +118,8 @@ Local smoke surfaces
 - **TraceRecord**: local and optional LangSmith observability events.
 - **MCP Skill Manifest / Agent Result**: discoverable skill schemas and routed agent outputs.
 - **LLMCallResult**: provider, model, fallback reason, token usage, estimated cost, trace ID, and whether a real LiteLLM call was used.
+- **DCTemplate / Template Gallery**: title, description, practice area, difficulty, required inputs, prompt template, generation task, source query, D.C. grounding, and attorney-review metadata.
+- **BetaUserState / FeedbackRecord**: invite/waitlist status, monthly strong-model quota, fast-model usage, template usage, guardrail triggers, estimated cost, feedback rating/comment metadata, and trace references.
 - **Office Offline Queue Item**: redacted local request metadata, cache key, action, and redaction summary only.
 
 ## API Contracts
@@ -123,6 +129,14 @@ Current core endpoints relevant to this feature:
 ```text
 GET  /health
 GET  /v1/product/capabilities
+GET  /v1/beta/status
+POST /v1/beta/waitlist
+POST /v1/beta/invites
+POST /v1/beta/invites/accept
+GET  /v1/beta/legal/{document_kind}
+POST /v1/beta/feedback
+GET  /v1/beta/analytics
+GET  /v1/templates/gallery
 GET  /v1/matters
 GET  /v1/matters/{matter_id}
 POST /v1/matter/intake
@@ -177,6 +191,8 @@ llm_providers.py
 ragas_eval.py
 scripts/seed_dc_knowledge.py
 scripts/test_prompts.py
+template_gallery.py
+beta_launch.py
 observability.py
 client_intake_flow.py
 agent_network.py

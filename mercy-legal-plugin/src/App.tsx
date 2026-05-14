@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge, Divider, Tab, TabList, Text } from "@fluentui/react-components";
-import { Chat24Regular, DocumentBulletList24Regular, Library24Regular, ShieldCheckmark24Regular } from "@fluentui/react-icons";
+import { Chat24Regular, DocumentBulletList24Regular, DocumentAdd24Regular, Library24Regular, ShieldCheckmark24Regular } from "@fluentui/react-icons";
 import { MercyLogo } from "./components/brand/MercyLogo";
+import { BetaWelcome } from "./components/beta/BetaWelcome";
 import { AssistantChat } from "./components/chat/AssistantChat";
 import { ClauseLibrary } from "./components/clauses/ClauseLibrary";
 import { DocumentActions } from "./components/document/DocumentActions";
 import { SidebarShell } from "./components/layout/SidebarShell";
 import { RiskSummary } from "./components/risk/RiskSummary";
 import { McpSkillPanel } from "./components/skills/McpSkillPanel";
+import { TemplateGallery } from "./components/templates/TemplateGallery";
 import { ReliabilitySignals } from "./components/metadata/ReliabilitySignals";
 import { api } from "./services/api";
 import { insertTextAtCursor, readDocumentText, readSelectedText } from "./services/word";
@@ -16,6 +18,7 @@ import { AgentActionResult, AnalysisResult, Clause, ProcessingState, SidebarView
 
 const views: Array<{ value: SidebarView; label: string; icon: JSX.Element }> = [
   { value: "risk", label: "Risk", icon: <ShieldCheckmark24Regular /> },
+  { value: "templates", label: "Templates", icon: <DocumentAdd24Regular /> },
   { value: "clauses", label: "Clauses", icon: <Library24Regular /> },
   { value: "chat", label: "Chat", icon: <Chat24Regular /> },
   { value: "report", label: "Report", icon: <DocumentBulletList24Regular /> }
@@ -114,6 +117,8 @@ export function App() {
     switch (activeView) {
       case "clauses":
         return <ClauseLibrary onInsertClause={handleInsertClause} />;
+      case "templates":
+        return <TemplateGallery isBusy={isThinking} onBusyChange={handleBusyChange} onResult={handleAgentAction} />;
       case "chat":
         return <AssistantChat onExplainSelection={handleExplainSelection} />;
       case "report":
@@ -164,6 +169,8 @@ export function App() {
           </div>
         </div>
       </section>
+
+      <BetaWelcome lastResult={lastAgentAction} />
 
       {(lastAgentAction?.core ?? analysis?.core) && (
         <ReliabilitySignals core={lastAgentAction?.core ?? analysis?.core} compact />

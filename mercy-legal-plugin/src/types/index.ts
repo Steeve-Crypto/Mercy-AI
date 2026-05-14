@@ -1,6 +1,6 @@
 export type RiskLevel = "high" | "medium" | "low";
 
-export type SidebarView = "risk" | "clauses" | "chat" | "report";
+export type SidebarView = "risk" | "templates" | "clauses" | "chat" | "report";
 
 export type ProcessingState = "idle" | "analyzing" | "explaining" | "inserting" | "drafting" | "syncing" | "skill";
 
@@ -38,6 +38,7 @@ export interface CoreResponseMetadata {
   userId?: string;
   officialSourceGrounding?: string;
   skillResults?: CoreMcpSkillResult[];
+  betaQuota?: CoreBetaQuota;
 }
 
 export interface CoreCitation {
@@ -126,6 +127,59 @@ export interface CoreMcpManifest {
   };
   strict_grounding: boolean;
   langsmith_tracing: boolean;
+}
+
+export interface CoreTemplateGalleryItem {
+  template_id: string;
+  title: string;
+  description: string;
+  practice_area: string;
+  difficulty: "beginner" | "intermediate" | "advanced" | string;
+  required_inputs: string[];
+  prompt_template_id: string;
+  generation_task: string;
+  matter_type: string;
+  source_query: string;
+  ethics_tip: string;
+  dc_grounding: {
+    official_sources_only: boolean;
+    seeded_knowledge_base: string;
+    attorney_review_required: boolean;
+  };
+}
+
+export interface CoreTemplateGallery {
+  version: string;
+  template_count: number;
+  practice_areas: string[];
+  generation_endpoint: string;
+  official_dc_grounding_required: boolean;
+  attorney_review_required: boolean;
+  templates: CoreTemplateGalleryItem[];
+}
+
+export interface CoreBetaQuota {
+  strong_model_monthly_limit: number;
+  strong_model_used: number;
+  strong_model_remaining: number;
+  fast_model_limit: string;
+  fast_model_used: number;
+  period: string;
+  gentle_rate_limit: string;
+}
+
+export interface CoreBetaStatus {
+  version: string;
+  beta_mode: boolean;
+  invite_only: boolean;
+  access: string;
+  quota: CoreBetaQuota;
+  legal_docs: {
+    dpa: string;
+    terms: string;
+  };
+  welcome_sequence: Array<{ subject: string; body: string }>;
+  ethics_note: string;
 }
 
 export interface CoreMcpSkillResult {

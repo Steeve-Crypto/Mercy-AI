@@ -7,7 +7,7 @@ from typing import Any
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
 from dc_knowledge_rag import SourceValidationError, ingest_dc_sources, rag_backend_status, retrieve_dc_knowledge
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +15,17 @@ from pydantic import BaseModel, Field
 
 from bridge import draft_from_facts, run_discovery
 from auth_context import TenantUser, get_current_tenant_user
+from beta_launch import (
+    accept_invite,
+    beta_analytics,
+    beta_status,
+    check_quota,
+    create_invite,
+    join_waitlist,
+    legal_document,
+    record_feedback,
+    record_usage,
+)
 from dc_guardrails import DCGuardrailMiddleware
 from legal_task_router import moe_route
 from llm_providers import generate_workspace_draft
@@ -32,6 +43,7 @@ from observability import configure_langsmith_environment, observability_dashboa
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
 from system_prompts import CLERK_OS_VERSION, DC_CLERK_OPERATING_SYSTEM
+from template_gallery import list_template_gallery, trace_template_usage
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -196,6 +208,31 @@ class AgentExecuteRequest(BaseModel):
     surface_context: str = Field("core_agent", description="Calling surface name.")
 
 
+class BetaWaitlistRequest(BaseModel):
+    email: str = Field(..., description="Beta waitlist email.")
+    practice_area: str | None = Field(None, description="Optional D.C. practice area.")
+
+
+class BetaInviteRequest(BaseModel):
+    email: str = Field(..., description="Invite recipient email.")
+    invited_by: str | None = Field(None, description="Optional inviting user label.")
+
+
+class BetaAcceptInviteRequest(BaseModel):
+    invite_code: str = Field(..., description="Invite code.")
+    email: str | None = Field(None, description="Optional invitee email.")
+
+
+class BetaFeedbackRequest(BaseModel):
+    rating: str = Field(..., description="up or down.")
+    comment: str | None = Field(None, description="Optional feedback comment.")
+    action: str = Field("major_action", description="Action being rated.")
+    trace_id: str | None = Field(None, description="Optional trace ID.")
+    route_expert: str | None = Field(None, description="Optional MoE expert.")
+    guardrail_status: str | None = Field(None, description="Optional guardrail status.")
+    template_id: str | None = Field(None, description="Optional gallery template ID.")
+
+
 def _tenant_context(tenant_user: TenantUser) -> dict[str, Any]:
     return tenant_user.to_context()
 
@@ -245,6 +282,91 @@ async def health() -> dict[str, str]:
 @app.get("/v1/product/capabilities")
 async def capabilities(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
     return product_capabilities()
+
+
+@app.get("/v1/beta/status")
+async def beta_status_endpoint(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    return beta_status(_tenant_context(tenant_user))
+
+
+@app.post("/v1/beta/waitlist")
+async def beta_waitlist(
+    request: BetaWaitlistRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    return join_waitlist(_tenant_context(tenant_user), request.email, request.practice_area)
+
+
+@app.post("/v1/beta/invites")
+async def beta_invites(
+    request: BetaInviteRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    return create_invite(request.email, _tenant_context(tenant_user), invited_by=request.invited_by)
+
+
+@app.post("/v1/beta/invites/accept")
+async def beta_invite_accept(
+    request: BetaAcceptInviteRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    return accept_invite(_tenant_context(tenant_user), request.invite_code, request.email)
+
+
+@app.get("/v1/beta/legal/{document_kind}")
+async def beta_legal_document(
+    document_kind: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> Response:
+    if document_kind not in {"dpa", "terms"}:
+        raise HTTPException(status_code=404, detail="Beta legal document not found.")
+    trace_event(
+        name="beta_legal_document_downloaded",
+        surface_context="beta_launch",
+        category="beta",
+        metadata={**_auth_metadata(tenant_user), "document_kind": document_kind},
+    )
+    filename = "mercy-beta-dpa.md" if document_kind == "dpa" else "mercy-beta-terms.md"
+    return Response(
+        content=legal_document(document_kind),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/v1/beta/feedback")
+async def beta_feedback(
+    request: BetaFeedbackRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return record_feedback(_tenant_context(tenant_user), request.dict(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/beta/analytics")
+async def beta_analytics_endpoint(
+    limit: int = Query(100, ge=1, le=500),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    trace_event(name="beta_analytics_view", surface_context="beta_admin", category="beta", metadata=_auth_metadata(tenant_user))
+    return beta_analytics(limit=limit)
+
+
+@app.get("/v1/templates/gallery")
+async def templates_gallery(
+    practice_area: str | None = Query(None, description="Optional practice-area filter."),
+    difficulty: str | None = Query(None, description="Optional difficulty filter."),
+    search: str | None = Query(None, description="Optional text search across template titles and descriptions."),
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    return list_template_gallery(
+        tenant_context=_tenant_context(tenant_user),
+        practice_area=practice_area,
+        difficulty=difficulty,
+        search=search,
+    )
 
 
 @app.post("/v1/matters")
@@ -680,11 +802,27 @@ async def agent_execute(
         if request.matter_id:
             context["matter_id"] = request.matter_id
         route = _route_payload(moe_route(request.task, context, user_type=request.user_type))
+        model_tier = "strong" if route.get("expert") in {"drafting", "research"} else "fast"
+        try:
+            check_quota(_tenant_context(tenant_user), model_tier)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
         params = {
             **request.params,
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
+        template_id = str(params.get("template_id") or params.get("gallery_template_id") or "")
+        if template_id:
+            trace_template_usage(
+                template_id=template_id,
+                surface_context=request.surface_context,
+                tenant_context=_tenant_context(tenant_user),
+                matter_id=request.matter_id,
+                prompt_template_id=str(params.get("prompt_template_id") or ""),
+            )
         if request.matter_id:
             params.setdefault("matter_id", request.matter_id)
         result = execute_agent_task(
@@ -702,6 +840,20 @@ async def agent_execute(
             "agent": result.get("selected_agent"),
             "skill_count": len(result.get("mcp_skills_used") or []),
             **_auth_metadata(tenant_user),
+        }
+        llm_payload = result.get("llm") if isinstance(result.get("llm"), dict) else {}
+        estimated_cost = float(llm_payload.get("estimated_cost_usd") or 0.0) if isinstance(llm_payload, dict) else 0.0
+        result["beta"] = {
+            "model_tier": model_tier,
+            "quota": record_usage(
+                _tenant_context(tenant_user),
+                model_tier=model_tier,
+                estimated_cost_usd=estimated_cost,
+                template_id=template_id or None,
+                guardrail_status=str(route.get("guardrail_status") or ""),
+            ),
+            "feedback_endpoint": "/v1/beta/feedback",
+            "attorney_review_required": True,
         }
         return _attach_route(result, route, tenant_user, request.matter_id, context, source="agent_execute")
 

@@ -1,0 +1,56 @@
+.betaWelcome {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(201, 164, 76, 0.38);
+  border-radius: 8px;
+  background: #fffaf0;
+  padding: 12px;
+}
+
+.betaWelcomeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.betaWelcomeCopy {
+  color: #5c6676;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.betaQuota {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.betaQuotaBox {
+  border: 1px solid #eadfbf;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.betaQuotaValue {
+  display: block;
+  color: #0e2a4a;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.feedbackRow {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dde4ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.feedbackActions {
+  display: flex;
+  gap: 6px;
+}

@@ -6,6 +6,7 @@ from typing import Any, NoReturn
 from uuid import uuid4
 
 from observability import trace_event
+from beta_launch import beta_status
 from llm_providers import llm_provider_status
 from mercy_storage import (
     MatterRecord,
@@ -17,6 +18,7 @@ from mercy_storage import (
     trace_storage_event,
 )
 from prompts.registry import prompt_registry_status
+from template_gallery import template_gallery_status
 
 
 PRODUCT_NAME = "Mercy"
@@ -673,6 +675,8 @@ def product_capabilities() -> dict[str, Any]:
         },
         "llm_providers": llm_provider_status(),
         "prompt_registry": prompt_registry_status(),
+        "template_gallery": template_gallery_status(),
+        "limited_beta": beta_status({"tenant_id": "capabilities", "user_id": "capabilities"}),
         "tiers": {
             "free": [
                 "single-document drafting",

@@ -4,10 +4,13 @@ import { useMemo, useState } from "react";
 import { Bell, CalendarDays, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { AiAssistantPanel, type AssistantActionResult } from "@/components/dashboard/ai-assistant-panel";
+import { BetaLaunchPanel } from "@/components/dashboard/beta-launch-panel";
+import { BetaOnboarding } from "@/components/dashboard/beta-onboarding";
 import { ClauseLibrary } from "@/components/dashboard/clause-library";
 import { ContractAnalyzer } from "@/components/dashboard/contract-analyzer";
 import { DocumentVault } from "@/components/dashboard/document-vault";
 import { MatterManagement } from "@/components/dashboard/matter-management";
+import { TemplateGallery } from "@/components/dashboard/template-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -167,6 +170,9 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
         </div>
       </header>
 
+      <BetaLaunchPanel />
+      <BetaOnboarding />
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {liveStats.map((stat) => (
           <div key={stat.label} className="rounded-lg border bg-white p-5 shadow-[0_16px_45px_rgba(10,20,40,0.05)]">
@@ -196,6 +202,14 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
       <section className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <DocumentVault matterContext={currentMatter} discoveryResult={discoveryResult} onDiscovery={handleDiscovery} />
         <ClauseLibrary matterContext={currentMatter} onResult={handleAssistantResult} />
+      </section>
+
+      <section className="mt-5">
+        <TemplateGallery
+          matterContext={currentMatter}
+          onMatterCreated={handleMatterCreated}
+          onResult={handleAssistantResult}
+        />
       </section>
 
       <section className="mt-5 grid gap-5 pb-8 xl:grid-cols-[1fr_0.8fr]">
