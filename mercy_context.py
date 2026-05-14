@@ -14,10 +14,12 @@ from mercy_storage import (
     local_memory_fallback_allowed,
     persistent_storage_configured,
     session_scope,
+    soft_delete_tenant_records,
     storage_status,
     trace_storage_event,
 )
 from prompts.registry import prompt_registry_status
+from security_controls import record_security_audit, security_compliance_status
 from template_gallery import template_gallery_status
 
 
@@ -58,6 +60,8 @@ class MatterContext:
     drafts: list[dict[str, Any]] = field(default_factory=list)
     billing_events: list[dict[str, Any]] = field(default_factory=list)
     route_history: list[dict[str, Any]] = field(default_factory=list)
+    deleted_at: str | None = None
+    retention_status: str = "active"
 
 
 class MatterTenantAccessError(PermissionError):
@@ -170,13 +174,19 @@ class InMemoryMatterStore:
 
     def get(self, matter_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
         matter = self._matters.get(matter_id)
+        if matter and matter.retention_status == "deleted":
+            return None
         if matter:
             self._assert_access(matter, tenant_context)
         return asdict(matter) if matter else None
 
     def list(self, tenant_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         auth = _require_tenant_context(tenant_context)
-        return [asdict(matter) for matter in self._matters.values() if matter.tenant_id == auth["tenant_id"]]
+        return [
+            asdict(matter)
+            for matter in self._matters.values()
+            if matter.tenant_id == auth["tenant_id"] and matter.retention_status != "deleted"
+        ]
 
     def attach_facts(self, matter_id: str, facts: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         matter = self._matters.get(matter_id)
@@ -277,6 +287,33 @@ class InMemoryMatterStore:
         )
         return asdict(matter)
 
+    def delete_all(self, tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+        auth = _require_tenant_context(tenant_context)
+        now = datetime.now(UTC).isoformat()
+        count = 0
+        for matter in self._matters.values():
+            if matter.tenant_id != auth["tenant_id"] or matter.retention_status == "deleted":
+                continue
+            matter.retention_status = "deleted"
+            matter.deleted_at = now
+            matter.last_updated = now
+            matter.history.append(
+                {
+                    "event": "tenant_data_soft_deleted",
+                    "timestamp": now,
+                    "source": "privacy_request",
+                    "retention_policy": "soft delete retained for legal/security retention review",
+                }
+            )
+            count += 1
+        return {
+            "storage_mode": "local_in_memory_fallback",
+            "matters_soft_deleted": count,
+            "tenant_rag_chunks_deleted": 0,
+            "tenant_rag_sources_deactivated": 0,
+            "checkpoints_deleted": 0,
+        }
+
     def _touch(self, matter: MatterContext, event: str, details: dict[str, Any] | None = None) -> None:
         timestamp = datetime.now(UTC).isoformat()
         matter.last_updated = timestamp
@@ -336,6 +373,8 @@ def _record_to_context(record: MatterRecord) -> dict[str, Any]:
         "drafts": list(record.drafts or []),
         "billing_events": list(record.billing_events or []),
         "route_history": list(record.route_history or []),
+        "deleted_at": _datetime_to_iso(record.deleted_at) if record.deleted_at else None,
+        "retention_status": record.retention_status,
     }
 
 
@@ -395,6 +434,8 @@ class DatabaseMatterStore:
     def get(self, matter_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
         with session_scope() as session:
             record = session.get(MatterRecord, matter_id)
+            if record and record.retention_status == "deleted":
+                record = None
             if record:
                 self._assert_access(record, tenant_context)
                 payload = _record_to_context(record)
@@ -406,7 +447,7 @@ class DatabaseMatterStore:
         with session_scope() as session:
             records = (
                 session.query(MatterRecord)
-                .filter(MatterRecord.tenant_id == auth["tenant_id"])
+                .filter(MatterRecord.tenant_id == auth["tenant_id"], MatterRecord.retention_status != "deleted")
                 .order_by(MatterRecord.last_updated.desc())
                 .all()
             )
@@ -479,6 +520,8 @@ class DatabaseMatterStore:
     def _mutate(self, matter_id: str, tenant_context: dict[str, Any] | None, mutator: Any) -> None:
         with session_scope() as session:
             record = session.get(MatterRecord, matter_id)
+            if record and record.retention_status == "deleted":
+                return
             if not record:
                 return
             self._assert_access(record, tenant_context)
@@ -541,6 +584,10 @@ class DatabaseMatterStore:
             },
         ]
 
+    def delete_all(self, tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+        auth = _require_tenant_context(tenant_context)
+        return soft_delete_tenant_records(auth["tenant_id"], user_id=auth["user_id"])
+
 
 class UnavailableMatterStore:
     def _raise(self) -> NoReturn:
@@ -568,6 +615,9 @@ class UnavailableMatterStore:
         self._raise()
 
     def update_context(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        self._raise()
+
+    def delete_all(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self._raise()
 
 
@@ -614,6 +664,27 @@ def update_matter_context(intake: dict[str, Any], tenant_context: dict[str, Any]
         },
     )
     return updated
+
+
+def delete_all_tenant_data(tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    auth = _require_tenant_context(tenant_context)
+    result = _ensure_matter_store().delete_all(tenant_context=tenant_context)
+    record_security_audit(
+        "tenant_data_delete_requested",
+        tenant_context=auth,
+        category="privacy",
+        metadata={**result, "retention_policy": "matter soft delete with security/legal retention; tenant-scoped transient records purged"},
+    )
+    return {
+        "deleted": True,
+        "tenant_id": auth["tenant_id"],
+        "retention_policy": {
+            "matters": "soft_deleted_pending_retention_review",
+            "audit_logs": "retained for security, abuse prevention, and legal compliance",
+            "tenant_rag_and_checkpoints": "purged or deactivated when tenant-scoped",
+        },
+        **result,
+    }
 
 
 def build_billing_report(matter: dict[str, Any]) -> dict[str, Any]:
@@ -676,6 +747,7 @@ def product_capabilities() -> dict[str, Any]:
         "llm_providers": llm_provider_status(),
         "prompt_registry": prompt_registry_status(),
         "template_gallery": template_gallery_status(),
+        "security_compliance": security_compliance_status(),
         "limited_beta": beta_status({"tenant_id": "capabilities", "user_id": "capabilities"}),
         "tiers": {
             "free": [

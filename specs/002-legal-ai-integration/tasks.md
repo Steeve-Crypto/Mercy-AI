@@ -167,6 +167,13 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: `unittest discover -s tests -p "test_*.py"` passed 57 tests, `pyright` passed, targeted `ruff` passed, web `typecheck`, `lint`, and `build` passed, Office add-in `lint`, `build`, and `validate:manifest` passed.
    - **Dependencies**: PD029, PD037, PD040.
 
+15. [X] PD042 [Security] SOC 2 Type 1 preparation and security hardening.
+   - **Target Paths**: `security_controls.py`, `mercy_storage.py`, `mercy_context.py`, `dc_knowledge_rag.py`, `llm_providers.py`, `main.py`, `scripts/check_security_compliance.py`, `docs/compliance/`, `tests/test_security_compliance.py`, `mercy-legal-web/src/components/dashboard/beta-launch-panel.tsx`, `mercy-legal-plugin/src/components/beta/`.
+   - **Definition of Done**: SOC 2 Type 1 readiness checklist and customer-facing security/privacy docs exist; sensitive actions are audited through LangSmith-compatible traces and DB audit logs; `/v1/*` endpoints have security headers, CORS hardening, rate limiting, and optional HTTPS enforcement; LLM/RAG flows sanitize/redact PII; users can delete tenant data with soft-delete retention semantics; automated compliance checks are runnable; web and Office surfaces show trust signals.
+   - **Result**: Added `mercy-security-controls-1.0`, DB audit log records, matter soft-delete fields, `DELETE /v1/account/data`, `/v1/security/compliance`, `/v1/*` rate limiting and security headers, PII redaction hooks in LLM/RAG/API flows, compliance docs, CLI compliance report with Bandit/npm audit hooks, and security trust cards in the Standalone beta panel plus Office add-in beta panel.
+   - **Verification**: Added targeted `tests/test_security_compliance.py` and `python -m scripts.check_security_compliance` coverage for required docs, security headers, sanitization, compliance status, and delete-all-data behavior.
+   - **Dependencies**: PD029, PD035, PD037, PD041.
+
 15. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.

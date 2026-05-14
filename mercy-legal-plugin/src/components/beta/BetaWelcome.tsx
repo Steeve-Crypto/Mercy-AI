@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, Input, Text } from "@fluentui/react-components";
-import { ThumbDislike24Regular, ThumbLike24Regular } from "@fluentui/react-icons";
+import { Database24Regular, ShieldCheckmark24Regular, ThumbDislike24Regular, ThumbLike24Regular } from "@fluentui/react-icons";
 import { api } from "../../services/api";
 import { AgentActionResult, CoreBetaStatus } from "../../types";
 import "./BetaWelcome.css";
@@ -60,6 +60,16 @@ export function BetaWelcome({ lastResult }: BetaWelcomeProps) {
         </div>
       </div>
       <Text className="betaWelcomeCopy">{status?.ethics_note ?? "Counsel must review and verify all AI-assisted output."}</Text>
+      <div className="betaSecurity">
+        <div className="betaSecurityItem">
+          <ShieldCheckmark24Regular />
+          <Text>SOC 2 Type 1 prep: audit logs, redaction, rate limiting, and security headers active.</Text>
+        </div>
+        <div className="betaSecurityItem">
+          <Database24Regular />
+          <Text>Tenant-isolated matter and official D.C. source grounding are enforced by the core API.</Text>
+        </div>
+      </div>
       {lastResult ? (
         <div className="feedbackRow">
           <Text weight="semibold">Rate last action</Text>

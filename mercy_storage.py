@@ -4,6 +4,7 @@ import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, Iterator
+from uuid import uuid4
 
 from observability import trace_event, trace_span
 
@@ -97,6 +98,8 @@ class MatterRecord(Base):
     route_history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    retention_status: Mapped[str] = mapped_column(String(64), nullable=False, default="active", index=True)
 
 
 class DCRagSourceRecord(Base):
@@ -158,6 +161,19 @@ class LangGraphCheckpointRecord(Base):
     state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AuditLogRecord(Base):
+    __tablename__ = "mercy_audit_logs"
+
+    audit_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
 Index("ix_mercy_dc_chunks_tenant_source", DCRagChunkRecord.tenant_id, DCRagChunkRecord.source_id)
@@ -265,6 +281,91 @@ def record_langgraph_checkpoint(
             record.state = state
             record.updated_at = now
     trace_storage_event("langgraph_checkpoint_persisted", "checkpoint_upsert", tenant_id=tenant_id, matter_id=matter_id)
+
+
+def record_audit_log(
+    *,
+    audit_id: str | None = None,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
+    action: str,
+    category: str,
+    matter_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    created_at: str | datetime | None = None,
+) -> None:
+    if not persistent_storage_configured():
+        return
+    timestamp = created_at if isinstance(created_at, datetime) else None
+    if timestamp is None and created_at:
+        try:
+            timestamp = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        except ValueError:
+            timestamp = None
+    with session_scope() as session:
+        session.add(
+            AuditLogRecord(
+                audit_id=audit_id or str(uuid4()),
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action=action,
+                category=category,
+                matter_id=matter_id,
+                metadata_json=metadata or {},
+                created_at=timestamp or datetime.now(UTC),
+            )
+        )
+
+
+def soft_delete_tenant_records(tenant_id: str, *, user_id: str | None = None) -> dict[str, Any]:
+    if not persistent_storage_configured():
+        return {
+            "storage_mode": storage_mode(),
+            "matters_soft_deleted": 0,
+            "tenant_rag_chunks_deleted": 0,
+            "tenant_rag_sources_deactivated": 0,
+            "checkpoints_deleted": 0,
+        }
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        matters = (
+            session.query(MatterRecord)
+            .filter(MatterRecord.tenant_id == tenant_id, MatterRecord.retention_status != "deleted")
+            .all()
+        )
+        for record in matters:
+            record.retention_status = "deleted"
+            record.deleted_at = now
+            record.last_updated = now
+            record.history = [
+                *list(record.history or []),
+                {
+                    "event": "tenant_data_soft_deleted",
+                    "timestamp": now.isoformat(),
+                    "source": "privacy_request",
+                    "requested_by_user_id": user_id,
+                    "retention_policy": "soft delete; retained only for legal/security retention review before purge",
+                },
+            ]
+        sources = session.query(DCRagSourceRecord).filter(DCRagSourceRecord.tenant_id == tenant_id).all()
+        for source in sources:
+            source.active = False
+            source.updated_at = now
+        chunks_deleted = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id == tenant_id).delete(synchronize_session=False)
+        checkpoints_deleted = (
+            session.query(LangGraphCheckpointRecord)
+            .filter(LangGraphCheckpointRecord.tenant_id == tenant_id)
+            .delete(synchronize_session=False)
+        )
+        result = {
+            "storage_mode": storage_mode(),
+            "matters_soft_deleted": len(matters),
+            "tenant_rag_chunks_deleted": chunks_deleted,
+            "tenant_rag_sources_deactivated": len(sources),
+            "checkpoints_deleted": checkpoints_deleted,
+        }
+    trace_storage_event("tenant_data_soft_deleted", "privacy_delete", tenant_id=tenant_id, metadata=result)
+    return result
 
 
 def reset_storage_for_tests() -> None:

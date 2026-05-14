@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, FileText, MailCheck, ShieldCheck } from "lucide-react";
+import { BarChart3, Database, FileText, LockKeyhole, MailCheck, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,6 +94,20 @@ export function BetaLaunchPanel() {
                 <p key={template}>{template}: {count}</p>
               ))
             : <p>No template usage recorded yet.</p>}
+        </div>
+        <div className="mt-4 grid gap-2 rounded-md border bg-[#fbfcfe] p-3 text-xs leading-5 text-muted-foreground">
+          <p className="flex items-center gap-2 font-semibold text-mercy-navy">
+            <LockKeyhole className="size-4 text-[#9b740e]" />
+            Security and compliance
+          </p>
+          <p className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#1d6f42]" />
+            SOC 2 Type 1 preparation in progress; audit logging, redaction, rate limiting, and security headers are enabled.
+          </p>
+          <p className="flex items-start gap-2">
+            <Database className="mt-0.5 size-4 shrink-0 text-[#1d4f8f]" />
+            Tenant-isolated matters and official D.C. RAG records persist in PostgreSQL when configured.
+          </p>
         </div>
       </div>
     </section>

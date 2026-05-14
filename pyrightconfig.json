@@ -16,6 +16,7 @@
     "prompts",
     "ragas_eval.py",
     "response_envelope.py",
+    "security_controls.py",
     "template_gallery.py",
     "tests",
     "scripts"

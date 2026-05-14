@@ -21,6 +21,7 @@ from mercy_storage import (
     trace_storage_event,
 )
 from observability import record_rag_trace, trace_event, trace_span
+from security_controls import record_security_audit, sanitize_payload, sanitize_text
 
 
 RAG_VERSION = "dc-knowledge-rag-1.0"
@@ -995,7 +996,8 @@ class DCKnowledgeRAG:
         route: dict[str, Any] | None = None,
         agentic: bool = True,
     ) -> dict[str, Any]:
-        context = matter_context or {}
+        context = sanitize_payload(matter_context or {})
+        query = sanitize_text(query, max_length=8000)
         limit = max(1, min(top_k, 10))
         filters = _metadata_filters(context)
         self._load_persistent_context(filters)
@@ -1086,6 +1088,20 @@ class DCKnowledgeRAG:
                 route=route,
                 surface_context=str(context.get("surface_context") or "core_rag"),
                 matter_reference=str(context.get("matter_id")) if context.get("matter_id") else None,
+            )
+            record_security_audit(
+                "rag_retrieval_backend",
+                tenant_context=context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None,
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                category="rag",
+                metadata={
+                    "result_count": len(results),
+                    "verification_status": verification.get("status"),
+                    "vector_backend": self.config.vector_backend,
+                    "graph_backend": self.config.graph_backend,
+                    "official_sources_only": True,
+                },
+                guardrail_status=str(verification.get("status") or ""),
             )
             return payload
 

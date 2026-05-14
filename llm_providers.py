@@ -8,6 +8,7 @@ from typing import Any
 
 from observability import trace_event, trace_span
 from prompts.registry import get_prompt_registry
+from security_controls import record_security_audit, sanitize_payload, sanitize_text
 
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 os.environ.setdefault("LITELLM_LOG", "ERROR")
@@ -177,25 +178,34 @@ def complete_legal_task(
     if selected is None or completion is None:
         return _fallback_result(task_type, fallback, _fallback_reason(active_provider_configs()), prompt_template=prompt_template)
     provider, model = selected
-    context = matter_context or {}
+    context = sanitize_payload(matter_context or {})
+    safe_system_prompt = sanitize_text(system_prompt, max_length=20_000)
+    safe_user_prompt = sanitize_text(user_prompt, max_length=40_000)
     surface_context = str(context.get("surface_context") or "llm_provider")
     metadata = _safe_trace_metadata(context, route, provider, model, task_type, prompt_template)
     with trace_span("llm_completion", surface_context, "llm", route=route, matter_reference=context.get("matter_id"), metadata=metadata) as span:
         try:
+            record_security_audit(
+                "llm_call_started",
+                tenant_context=context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None,
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                category="llm",
+                metadata={"task_type": task_type, "provider": provider.provider, "model": model, "surface_context": surface_context},
+            )
             response = completion(  # type: ignore[misc]
                 model=model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "system", "content": safe_system_prompt},
+                    {"role": "user", "content": safe_user_prompt},
                 ],
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
             content = _extract_content(response).strip()
             usage = _extract_usage(response)
-            estimated_cost = _completion_cost(response, model, user_prompt, content, usage)
+            estimated_cost = _completion_cost(response, model, safe_user_prompt, content, usage)
             result = LLMCallResult(
-                content=content or fallback,
+                content=sanitize_text(content or fallback, max_length=80_000),
                 used_llm=bool(content),
                 task_type=task_type,
                 provider=provider.provider,
@@ -222,6 +232,19 @@ def complete_legal_task(
                 matter_reference=context.get("matter_id"),
                 metadata=span["metadata"],
             )
+            record_security_audit(
+                "llm_call_completed",
+                tenant_context=context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None,
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                category="llm",
+                metadata={
+                    "task_type": task_type,
+                    "provider": provider.provider,
+                    "model": model,
+                    "used_llm": result.used_llm,
+                    "estimated_cost_usd": result.estimated_cost_usd,
+                },
+            )
             return result
         except Exception as exc:
             result = _fallback_result(task_type, fallback, f"provider_error:{exc.__class__.__name__}", provider, model, prompt_template)
@@ -234,6 +257,14 @@ def complete_legal_task(
                 route=route,
                 matter_reference=context.get("matter_id"),
                 metadata=span["metadata"],
+            )
+            record_security_audit(
+                "llm_call_fallback",
+                tenant_context=context.get("auth_context") if isinstance(context.get("auth_context"), dict) else None,
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                category="llm",
+                metadata={"task_type": task_type, "provider": provider.provider, "model": model, "fallback_reason": result.fallback_reason},
+                guardrail_status="warn",
             )
             return result
 

@@ -41,6 +41,29 @@
   font-weight: 750;
 }
 
+.betaSecurity {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #eadfbf;
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.betaSecurityItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #405064;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.betaSecurityItem svg {
+  flex: 0 0 auto;
+  color: #0e2a4a;
+}
+
 .feedbackRow {
   display: grid;
   gap: 8px;

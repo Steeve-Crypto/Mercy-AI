@@ -193,6 +193,7 @@ scripts/seed_dc_knowledge.py
 scripts/test_prompts.py
 template_gallery.py
 beta_launch.py
+security_controls.py
 observability.py
 client_intake_flow.py
 agent_network.py
@@ -202,6 +203,7 @@ prompts/registry.py
 prompts/fewshot/dc_examples.jsonl
 datasets/
 reports/
+docs/compliance/
 tests/
 mercy-legal-web/
 mercy-legal-plugin/
@@ -227,7 +229,7 @@ tools/
 - `unittest discover` must be run with `-s tests -p "test_*.py"`; the canonical verifier uses this pattern.
 - The current RAGAS-style release report passes threshold with the expanded 45-case dataset; the canonical verifier runs a fast 8-case subset.
 - LangGraph and MCP are compatibility layers until real runtime/transport dependencies are activated.
-- Production client data use still needs encryption, retention, deletion, export, and operational audit policy before deployment.
+- Production client data use now has application-level audit logging, deletion, sanitization, rate limiting, and security-header controls; deployment still needs hosted database encryption/backups, formal retention windows, export policy, and SOC 2 evidence collection before broad production rollout.
 
 ## High-Priority Risk Resolution Plan
 
@@ -290,3 +292,11 @@ These tasks promote the remaining security, stability, and quality risks from ca
 **Required Change**: Document and/or script one canonical smoke sequence covering Python legal core tests, compile checks, RAGAS eval, web typecheck/lint/build, add-in lint/build/manifest validation, dashboard no-mutation check, auth guard checks, and RAG backend fallback checks.
 
 **Acceptance**: A single documented sequence catches regressions in PD028-PD033 and is referenced by `tasks.md` as the brownfield hardening verification path.
+
+### PD042: SOC 2 Type 1 Preparation and Security Hardening
+
+**Problem**: Limited beta readiness requires visible, testable security controls and customer-facing security documentation before D.C. attorneys trust client-data workflows.
+
+**Required Change**: Add practical SOC 2 Type 1 readiness materials, audit logging for sensitive actions, PII redaction/sanitization hooks, `/v1/*` abuse protection, HTTPS/security-header/CORS hardening, a tenant data deletion flow, automated compliance checks, and basic trust signals in the Standalone Platform and Office Add-in.
+
+**Acceptance**: `docs/compliance/soc2_type1_checklist.md` reflects current status; `python -m scripts.check_security_compliance` reports required controls/docs; sensitive matter/RAG/LLM/document actions emit audit traces and DB logs when PostgreSQL is configured; `DELETE /v1/account/data` soft-deletes tenant matters and purges/deactivates tenant transient data.

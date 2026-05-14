@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
 from dc_knowledge_rag import SourceValidationError, ingest_dc_sources, rag_backend_status, retrieve_dc_knowledge
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,7 @@ from mercy_context import (
     MatterTenantAccessError,
     PRODUCT_NAME,
     build_billing_report,
+    delete_all_tenant_data,
     get_matter_context,
     product_capabilities,
     update_matter_context,
@@ -42,6 +44,7 @@ from mercy_context import (
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
+from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
 from system_prompts import CLERK_OS_VERSION, DC_CLERK_OPERATING_SYSTEM
 from template_gallery import list_template_gallery, trace_template_usage
 
@@ -60,21 +63,56 @@ app = FastAPI(
         "Mercy Word plugin and standalone platform."
     ),
 )
+
+_DEFAULT_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "https://127.0.0.1:3000",
+    "https://localhost:3000",
+]
+_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in (os.getenv("MERCY_ALLOWED_ORIGINS") or ",".join(_DEFAULT_ALLOWED_ORIGINS)).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3000",
-        "https://127.0.0.1:3000",
-        "https://localhost:3000",
-    ],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(DCGuardrailMiddleware)
+
+
+@app.middleware("http")
+async def security_controls_middleware(request: Request, call_next: Any) -> Response:
+    if request.url.path.startswith("/v1/"):
+        if os.getenv("MERCY_REQUIRE_HTTPS", "").lower() == "true":
+            proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+            if proto != "https" and request.client and request.client.host not in {"127.0.0.1", "localhost"}:
+                return JSONResponse({"detail": "HTTPS is required for Mercy API traffic."}, status_code=400)
+        tenant_hint = request.headers.get("x-mercy-tenant-id") or request.headers.get("x-tenant-id") or "anonymous"
+        client_host = request.client.host if request.client else "unknown"
+        allowed, retry_after = check_rate_limit(f"{tenant_hint}:{client_host}:{request.url.path}")
+        if not allowed:
+            record_security_audit(
+                "rate_limit_exceeded",
+                category="abuse_protection",
+                metadata={"path": request.url.path, "client_host": client_host, "retry_after": retry_after},
+                guardrail_status="block",
+            )
+            return JSONResponse(
+                {"detail": "Too many requests. Please retry shortly.", "retry_after_seconds": retry_after},
+                status_code=429,
+                headers={"Retry-After": str(retry_after), **security_headers()},
+            )
+    response = await call_next(request)
+    for header, value in security_headers().items():
+        response.headers.setdefault(header, value)
+    return response
 
 if DASHBOARD_DIR.exists():
     app.mount("/static/dashboard", StaticFiles(directory=str(DASHBOARD_DIR)), name="dashboard_static")
@@ -284,6 +322,29 @@ async def capabilities(tenant_user: TenantUser = Depends(get_current_tenant_user
     return product_capabilities()
 
 
+@app.get("/v1/security/compliance")
+async def security_compliance(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    record_security_audit(
+        "security_compliance_view",
+        tenant_context=_tenant_context(tenant_user),
+        category="security",
+        metadata={"surface_context": "security_compliance"},
+    )
+    return {
+        **security_compliance_status(),
+        "tenant_isolation": {
+            "tenant_id": tenant_user.tenant_id,
+            "status": "active",
+            "message": "Matter, RAG, checkpoint, quota, and audit records are scoped by tenant_id.",
+        },
+    }
+
+
+@app.delete("/v1/account/data")
+async def delete_account_data(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    return delete_all_tenant_data(_tenant_context(tenant_user))
+
+
 @app.get("/v1/beta/status")
 async def beta_status_endpoint(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
     return beta_status(_tenant_context(tenant_user))
@@ -375,7 +436,7 @@ async def create_matter(
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
     tier = request.tier if request.tier in {"free", "premium"} else "free"
-    return MATTERS.create(
+    matter = MATTERS.create(
         name=request.name,
         tier=tier,
         client_id=request.client_id,
@@ -383,6 +444,14 @@ async def create_matter(
         matter_type=request.matter_type,
         tenant_context=_tenant_context(tenant_user),
     )
+    record_security_audit(
+        "matter_created",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=matter.get("matter_id"),
+        category="matter",
+        metadata={"matter_type": matter.get("matter_type"), "tier": matter.get("tier")},
+    )
+    return matter
 
 
 @app.post("/v1/matter/intake")
@@ -391,7 +460,7 @@ async def matter_intake(
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
     with trace_span("matter_intake_endpoint", request.surface_context, "matter_context", metadata=_auth_metadata(tenant_user)) as span:
-        payload = request.dict(exclude_none=True)
+        payload = sanitize_payload(request.dict(exclude_none=True))
         payload["source"] = request.surface_context
         try:
             updated_context = update_matter_context(payload, tenant_context=_tenant_context(tenant_user))
@@ -436,7 +505,7 @@ async def matter_intake_full(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        payload = request.dict(exclude_none=True)
+        payload = sanitize_payload(request.dict(exclude_none=True))
         payload["surface_context"] = request.surface_context
         payload["auth_context"] = _tenant_context(tenant_user)
         try:
@@ -479,7 +548,14 @@ async def matter_intake_full(
 
 @app.get("/v1/matters")
 async def list_matters(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> list[dict[str, Any]]:
-    return MATTERS.list(tenant_context=_tenant_context(tenant_user))
+    matters = MATTERS.list(tenant_context=_tenant_context(tenant_user))
+    record_security_audit(
+        "matter_list_accessed",
+        tenant_context=_tenant_context(tenant_user),
+        category="matter",
+        metadata={"count": len(matters)},
+    )
+    return matters
 
 
 @app.get("/v1/matters/{matter_id}")
@@ -493,6 +569,13 @@ async def get_matter(
         raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
     if not matter:
         raise HTTPException(status_code=404, detail="Matter not found.")
+    record_security_audit(
+        "matter_accessed",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=matter_id,
+        category="matter",
+        metadata={"matter_type": matter.get("matter_type")},
+    )
     return matter
 
 
@@ -558,19 +641,19 @@ async def router_inspect(
     ) as span:
         context = {
             **_matter_context(request.matter_id, tenant_user),
-            **request.matter_context,
+            **sanitize_payload(request.matter_context),
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
         if request.selected_text:
-            context["selected_text"] = request.selected_text
+            context["selected_text"] = sanitize_text(request.selected_text)
         if request.document_text:
-            context["document_text"] = request.document_text
+            context["document_text"] = sanitize_text(request.document_text)
         if request.matter_id:
             context["matter_id"] = request.matter_id
 
         decision = moe_route(
-            query=request.query,
+            query=sanitize_text(request.query, max_length=8000),
             matter_context=context,
             user_type=request.user_type,
         )
@@ -611,7 +694,7 @@ async def rag_retrieve(
     ) as span:
         context = {
             **_matter_context(request.matter_id, tenant_user),
-            **request.matter_context,
+            **sanitize_payload(request.matter_context),
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
@@ -626,13 +709,13 @@ async def rag_retrieve(
 
         route = _route_payload(
             moe_route(
-                query=request.query,
+                query=sanitize_text(request.query, max_length=8000),
                 matter_context=context,
                 user_type=request.user_type,
             )
         )
         retrieval = retrieve_dc_knowledge(
-            query=request.query,
+            query=sanitize_text(request.query, max_length=8000),
             matter_context=context,
             top_k=request.top_k,
             route=route,
@@ -645,6 +728,13 @@ async def rag_retrieve(
             "matter_id": request.matter_id,
             "human_review_required": True,
         }
+        record_security_audit(
+            "rag_retrieval",
+            tenant_context=_tenant_context(tenant_user),
+            matter_id=request.matter_id,
+            category="rag",
+            metadata={"top_k": request.top_k, "results": len(retrieval.get("results") or []), "official_sources_only": True},
+        )
         return _attach_route(payload, route, tenant_user, request.matter_id, context, source="rag_retrieve")
 
 
@@ -795,13 +885,14 @@ async def agent_execute(
     ) as span:
         context = {
             **_matter_context(request.matter_id, tenant_user),
-            **request.matter_context,
+            **sanitize_payload(request.matter_context),
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
         if request.matter_id:
             context["matter_id"] = request.matter_id
-        route = _route_payload(moe_route(request.task, context, user_type=request.user_type))
+        safe_task = sanitize_text(request.task, max_length=8000)
+        route = _route_payload(moe_route(safe_task, context, user_type=request.user_type))
         model_tier = "strong" if route.get("expert") in {"drafting", "research"} else "fast"
         try:
             check_quota(_tenant_context(tenant_user), model_tier)
@@ -810,7 +901,7 @@ async def agent_execute(
         except RuntimeError as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         params = {
-            **request.params,
+            **sanitize_payload(request.params),
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
@@ -826,7 +917,7 @@ async def agent_execute(
         if request.matter_id:
             params.setdefault("matter_id", request.matter_id)
         result = execute_agent_task(
-            task=request.task,
+            task=safe_task,
             params=params,
             matter_context=context,
             route=route,
@@ -855,6 +946,18 @@ async def agent_execute(
             "feedback_endpoint": "/v1/beta/feedback",
             "attorney_review_required": True,
         }
+        record_security_audit(
+            "agent_execution",
+            tenant_context=_tenant_context(tenant_user),
+            matter_id=request.matter_id,
+            category="agent",
+            metadata={
+                "route_expert": route.get("expert"),
+                "model_tier": model_tier,
+                "skill_count": len(result.get("mcp_skills_used") or []),
+                "estimated_cost_usd": estimated_cost,
+            },
+        )
         return _attach_route(result, route, tenant_user, request.matter_id, context, source="agent_execute")
 
 
@@ -873,8 +976,8 @@ async def workspace_discovery(
         matter_context = {
             **_matter_context(request.matter_id, tenant_user),
             "matter_id": request.matter_id,
-            "document_path": request.document_path,
-            "document_text": request.document_text,
+            "document_path": sanitize_text(request.document_path, max_length=2000),
+            "document_text": sanitize_text(request.document_text, max_length=40_000) if request.document_text else None,
             "surface_context": "core_discovery",
             "auth_context": _tenant_context(tenant_user),
         }
@@ -889,8 +992,8 @@ async def workspace_discovery(
         try:
             result = await asyncio.to_thread(
                 run_discovery,
-                document_path=request.document_path,
-                document_text=request.document_text,
+                document_path=sanitize_text(request.document_path, max_length=2000),
+                document_text=sanitize_text(request.document_text, max_length=40_000) if request.document_text else None,
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -904,6 +1007,13 @@ async def workspace_discovery(
                     result["premium_billing_hook"],
                     tenant_context=_tenant_context(tenant_user),
                 )
+        record_security_audit(
+            "document_analysis",
+            tenant_context=_tenant_context(tenant_user),
+            matter_id=request.matter_id,
+            category="document",
+            metadata={"surface_context": "core_discovery", "fact_count": len(result.get("facts") or {})},
+        )
         return _attach_route(result, route, tenant_user, request.matter_id, matter_context, source="discovery")
 
 
@@ -968,15 +1078,15 @@ async def workspace_draft(
         matter_context = {
             **_matter_context(request.matter_id, tenant_user),
             "matter_id": request.matter_id,
-            "facts": request.facts,
+            "facts": sanitize_payload(request.facts),
             "draft_type": request.draft_type,
-            "requested_relief": request.requested_relief,
+            "requested_relief": sanitize_text(request.requested_relief) if request.requested_relief else None,
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
         route = _route_payload(
             moe_route(
-                query=request.requested_relief or request.draft_type,
+                query=sanitize_text(request.requested_relief or request.draft_type, max_length=8000),
                 matter_context=matter_context,
                 user_type=request.user_type,
             )
@@ -985,7 +1095,7 @@ async def workspace_draft(
         try:
             result = await asyncio.to_thread(
                 draft_from_facts,
-                facts=request.facts,
+                facts=sanitize_payload(request.facts),
                 draft_type=request.draft_type,
                 target_court=request.target_court,
                 requested_relief=request.requested_relief,
@@ -994,7 +1104,7 @@ async def workspace_draft(
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         retrieval = retrieve_dc_knowledge(
-            query=f"{request.draft_type} {request.requested_relief or ''}".strip(),
+            query=sanitize_text(f"{request.draft_type} {request.requested_relief or ''}".strip(), max_length=8000),
             matter_context=matter_context,
             top_k=4,
             route=route,
@@ -1002,7 +1112,7 @@ async def workspace_draft(
         )
         fallback_draft = str(result.get("draft") or result.get("content") or "")
         llm_draft = generate_workspace_draft(
-            facts=request.facts,
+            facts=sanitize_payload(request.facts),
             draft_type=request.draft_type,
             target_court=request.target_court,
             requested_relief=request.requested_relief,
@@ -1024,4 +1134,16 @@ async def workspace_draft(
                     result["premium_billing_hook"],
                     tenant_context=_tenant_context(tenant_user),
                 )
+        record_security_audit(
+            "document_generation",
+            tenant_context=_tenant_context(tenant_user),
+            matter_id=request.matter_id,
+            category="document",
+            metadata={
+                "draft_type": request.draft_type,
+                "route_expert": route.get("expert"),
+                "used_llm": llm_draft.used_llm,
+                "estimated_cost_usd": llm_draft.estimated_cost_usd,
+            },
+        )
         return _attach_route(result, route, tenant_user, request.matter_id, matter_context, source="drafting")
