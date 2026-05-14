@@ -12,6 +12,7 @@ from llm_providers import generate_legal_draft, generate_research_answer, llm_pr
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from mercy_storage import persistent_storage_configured, record_langgraph_checkpoint
 from observability import trace_event, trace_span
+from prompts.registry import get_prompt_registry, prompt_registry_status
 from ragas_eval import METRICS as RAGAS_METRICS
 
 try:
@@ -193,6 +194,14 @@ def _citation_label(law_or_case: str, retrieval: dict[str, Any]) -> str:
 
 def cite_and_verify(law_or_case: str, matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     with trace_span("mcp_cite_and_verify", "agent_network", "agent_skill") as span:
+        rendered_prompt = get_prompt_registry().render(
+            task=law_or_case,
+            matter_context=matter_context or {"jurisdiction": "District of Columbia"},
+            retrieved_sources=[],
+            route_expert="citation_verifier",
+            template_id="citation_generation_verification",
+            fewshot_count=1,
+        )
         retrieval = retrieve_dc_knowledge(
             query=f"Verify D.C. grounding and citation status for {law_or_case}",
             matter_context=matter_context or {"jurisdiction": "District of Columbia"},
@@ -218,6 +227,7 @@ def cite_and_verify(law_or_case: str, matter_context: dict[str, Any] | None = No
             "dc_grounding": retrieval.get("results", []),
             "citations": citations,
             "provenance": {"retrieval": retrieval.get("backend_status"), "rag_version": retrieval.get("rag_version")},
+            "prompt_template": rendered_prompt.metadata(),
             "grounding_policy": _grounding_policy(status, issues),
             "ragas_eval_hook": _ragas_hook(),
             "human_review_required": True,
@@ -229,6 +239,14 @@ def cite_and_verify(law_or_case: str, matter_context: dict[str, Any] | None = No
 
 def check_dc_ethics(query: str, draft: str, matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     with trace_span("mcp_check_dc_ethics", "agent_network", "agent_skill") as span:
+        rendered_prompt = get_prompt_registry().render(
+            task=query,
+            matter_context=matter_context or {"jurisdiction": "District of Columbia"},
+            retrieved_sources=[],
+            route_expert="compliance_guardrails",
+            template_id="dc_ethics_rpc_check",
+            fewshot_count=1,
+        )
         guardrails = evaluate_dc_guardrails(
             {
                 "draft": draft or query,
@@ -254,6 +272,7 @@ def check_dc_ethics(query: str, draft: str, matter_context: dict[str, Any] | Non
             "guardrails": guardrails,
             "citations": _citations_from_retrieval(retrieval),
             "provenance": {"guardrail_schema": guardrails.get("schema"), "rag_version": retrieval.get("rag_version")},
+            "prompt_template": rendered_prompt.metadata(),
             "grounding_policy": _grounding_policy(status, review_flags),
             "human_review_required": True,
         }
@@ -630,6 +649,7 @@ class AgentNetwork:
             "skills": [skill.metadata() for skill in self.skills.values()],
             "rag_backend": rag_backend_status(),
             "llm_providers": llm_provider_status(),
+            "prompt_registry": prompt_registry_status(),
             "strict_grounding": True,
             "langsmith_tracing": True,
         }

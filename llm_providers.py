@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from observability import trace_event, trace_span
+from prompts.registry import get_prompt_registry
 
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 os.environ.setdefault("LITELLM_LOG", "ERROR")
@@ -108,6 +109,7 @@ class LLMCallResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     trace_id: str | None = None
+    prompt_template: dict[str, Any] | None = None
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
@@ -167,16 +169,17 @@ def complete_legal_task(
     matter_context: dict[str, Any] | None = None,
     route: dict[str, Any] | None = None,
     fallback: str,
+    prompt_template: dict[str, Any] | None = None,
     max_tokens: int = 1200,
     temperature: float = 0.2,
 ) -> LLMCallResult:
     selected = _select_provider(task_type)
     if selected is None or completion is None:
-        return _fallback_result(task_type, fallback, _fallback_reason(active_provider_configs()))
+        return _fallback_result(task_type, fallback, _fallback_reason(active_provider_configs()), prompt_template=prompt_template)
     provider, model = selected
     context = matter_context or {}
     surface_context = str(context.get("surface_context") or "llm_provider")
-    metadata = _safe_trace_metadata(context, route, provider, model, task_type)
+    metadata = _safe_trace_metadata(context, route, provider, model, task_type, prompt_template)
     with trace_span("llm_completion", surface_context, "llm", route=route, matter_reference=context.get("matter_id"), metadata=metadata) as span:
         try:
             response = completion(  # type: ignore[misc]
@@ -202,6 +205,7 @@ def complete_legal_task(
                 prompt_tokens=usage.get("prompt_tokens"),
                 completion_tokens=usage.get("completion_tokens"),
                 trace_id=str(span.get("trace_id")) if span.get("trace_id") else None,
+                prompt_template=prompt_template,
             )
             span["metadata"] = {
                 **metadata,
@@ -220,7 +224,7 @@ def complete_legal_task(
             )
             return result
         except Exception as exc:
-            result = _fallback_result(task_type, fallback, f"provider_error:{exc.__class__.__name__}", provider, model)
+            result = _fallback_result(task_type, fallback, f"provider_error:{exc.__class__.__name__}", provider, model, prompt_template)
             span["metadata"] = {**metadata, "used_llm": False, "fallback_reason": result.fallback_reason}
             trace_event(
                 name="llm_completion_fallback",
@@ -241,11 +245,13 @@ def classify_moe_route(
     fallback_expert: str,
 ) -> dict[str, Any] | None:
     fallback = json.dumps({"expert": fallback_expert, "confidence": None, "reasons": ["structured_router_fallback"]})
+    selected_prompt = get_prompt_registry().select(task=query, route_expert=fallback_expert, matter_context=matter_context)
     prompt = {
         "query": query,
         "matter_context": _compact_context(matter_context),
         "candidate_experts": candidates,
         "allowed_experts": ["research", "drafting", "compliance_guardrails", "intake", "citation_verifier"],
+        "recommended_prompt_template": selected_prompt.metadata(),
         "instruction": (
             "Return strict JSON with expert, confidence from 0 to 1, route_mode, and reasons. "
             "Prefer intake when required facts are missing. Prefer compliance for ethics, confidentiality, fee, or supervision risks."
@@ -257,6 +263,7 @@ def classify_moe_route(
         user_prompt=json.dumps(prompt, default=str),
         matter_context=matter_context,
         fallback=fallback,
+        prompt_template=selected_prompt.metadata(),
         max_tokens=400,
         temperature=0.0,
     )
@@ -291,25 +298,21 @@ def generate_research_answer(
     sources = _source_pack(retrieval.get("results") or [])
     if not sources:
         return _fallback_result("research_generation", fallback, "no_retrieved_official_sources")
+    rendered = get_prompt_registry().render(
+        task=query,
+        matter_context=matter_context,
+        retrieved_sources=sources,
+        route_expert=str((route or {}).get("expert") or "research"),
+        fewshot_count=3,
+    )
     return complete_legal_task(
         task_type="research_generation",
-        system_prompt=(
-            "You are Mercy, a D.C.-focused legal AI assistant. Use only the provided official D.C. source metadata. "
-            "Do not quote, invent citations, or state final legal advice. Include attorney-review warnings."
-        ),
-        user_prompt=json.dumps(
-            {
-                "query": query,
-                "matter_context": _compact_context(matter_context),
-                "retrieved_sources": sources,
-                "required_style": "concise evidence-grounded research memo with citation labels and verification caveats",
-                "mandatory_warning": ATTORNEY_REVIEW_DISCLAIMER,
-            },
-            default=str,
-        ),
+        system_prompt=rendered.system_prompt,
+        user_prompt=rendered.user_prompt,
         matter_context=matter_context,
         route=route,
         fallback=fallback,
+        prompt_template=rendered.metadata(),
         max_tokens=1400,
         temperature=0.15,
     )
@@ -325,31 +328,21 @@ def generate_legal_draft(
     sources = _source_pack(retrieval.get("results") or [])
     if not sources:
         return _fallback_result("legal_drafting", fallback, "no_retrieved_official_sources")
+    rendered = get_prompt_registry().render(
+        task=task,
+        matter_context=matter_context,
+        retrieved_sources=sources,
+        route_expert=str((route or {}).get("expert") or "drafting"),
+        fewshot_count=3,
+    )
     return complete_legal_task(
         task_type="legal_drafting",
-        system_prompt=(
-            "You are Mercy, an attorney-supervised D.C. legal drafting assistant. Draft only from provided matter facts "
-            "and official D.C. source metadata. Use IRAC where appropriate. Do not fabricate facts, authorities, quotes, "
-            "pin cites, procedural posture, or final legal advice."
-        ),
-        user_prompt=json.dumps(
-            {
-                "task": task,
-                "matter_context": _compact_context(matter_context),
-                "retrieved_sources": sources,
-                "mandatory_first_sentence": ATTORNEY_REVIEW_DISCLAIMER,
-                "drafting_requirements": [
-                    "Use natural D.C.-specific legal phrasing.",
-                    "Include inline citation labels tied to the retrieved sources.",
-                    "Flag every unsupported fact or citation for attorney verification.",
-                    "Preserve confidentiality and professional-responsibility warnings.",
-                ],
-            },
-            default=str,
-        ),
+        system_prompt=rendered.system_prompt,
+        user_prompt=rendered.user_prompt,
         matter_context=matter_context,
         route=route,
         fallback=fallback,
+        prompt_template=rendered.metadata(),
         max_tokens=2200,
         temperature=0.2,
     )
@@ -406,6 +399,7 @@ def _fallback_result(
     reason: str,
     provider: LLMProviderConfig | None = None,
     model: str | None = None,
+    prompt_template: dict[str, Any] | None = None,
 ) -> LLMCallResult:
     return LLMCallResult(
         content=fallback,
@@ -414,6 +408,7 @@ def _fallback_result(
         provider=provider.provider if provider else None,
         model=model,
         fallback_reason=reason,
+        prompt_template=prompt_template,
     )
 
 
@@ -513,6 +508,7 @@ def _safe_trace_metadata(
     provider: LLMProviderConfig,
     model: str,
     task_type: str,
+    prompt_template: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     auth_context = context.get("auth_context") if isinstance(context.get("auth_context"), dict) else {}
     return {
@@ -524,6 +520,8 @@ def _safe_trace_metadata(
         "matter_id": context.get("matter_id"),
         "route_expert": route.get("expert") if isinstance(route, dict) else None,
         "route_mode": route.get("route_mode") if isinstance(route, dict) else None,
+        "prompt_template_id": prompt_template.get("template_id") if isinstance(prompt_template, dict) else None,
+        "prompt_template_version": prompt_template.get("version") if isinstance(prompt_template, dict) else None,
         "client_data_training": "disabled_by_policy",
     }
 

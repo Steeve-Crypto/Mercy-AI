@@ -28,6 +28,9 @@ coverage/
 .districtdraft_runtime/
 legal_discovery_ai/data/uploads/
 legal_discovery_ai/data/analysis_history.json
+data/*.db
+reports/dc_knowledge_seed_report.json
+reports/dc_knowledge_seed_latest.json
 
 # Logs and OS/editor files
 *.log

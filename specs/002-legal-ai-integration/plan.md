@@ -14,7 +14,7 @@ Mercy now follows a "One Brain, Multiple Surfaces" model:
 3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, and now redacts local offline storage.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
-The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, LangGraph runtime activation, LiteLLM-backed provider integration, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source coverage, real MCP transport, and deployment operations.
+The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, a D.C. knowledge seeding pipeline, LangGraph runtime activation, LiteLLM-backed provider integration, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source text extraction, real MCP transport, and deployment operations.
 
 ## Technical Context
 
@@ -52,6 +52,7 @@ FastAPI Shared Intelligence Core
   dc_knowledge_rag.py
   llm_providers.py
   ragas_eval.py
+  scripts/seed_dc_knowledge.py
   observability.py
   client_intake_flow.py
   agent_network.py
@@ -93,7 +94,8 @@ Local smoke surfaces
 | Response Envelope | `response_envelope.py` standardizes route, expert, confidence, guardrail status, citations, ethics metadata, matter snapshot, and audit timestamp. | `block` can represent missing required inputs, not only ethics blocking. |
 | Matter Context | `mercy_context.py` models matter/client IDs, facts, documents, history, deadlines, sensitivity flags, and route history. | Production-like use requires `POSTGRES_URL` or `SUPABASE_URL`; local in-memory fallback is dev-only. |
 | Full Intake | `client_intake_flow.py` and `prompts/intake.py` support structured D.C. intake and `/v1/matter/intake/full`. | Conflict and scope checks are workflow scaffolds, not real firm conflict systems. |
-| D.C. RAG | `dc_knowledge_rag.py` exposes tenant-scoped D.C. retrieval from persisted official source/chunk records, with pgvector as the primary DB-backed vector path and optional Qdrant/Neo4j adapters. | Advanced pgvector tuning and full official source coverage remain future hardening. |
+| D.C. RAG | `dc_knowledge_rag.py` exposes tenant-scoped D.C. retrieval from persisted official source/chunk records, with pgvector as the primary DB-backed vector path and optional Qdrant/Neo4j adapters. | Advanced pgvector tuning and full official source text extraction remain future hardening. |
+| D.C. Knowledge Seeding | `scripts/seed_dc_knowledge.py` seeds official D.C. source records and legal-aware locator chunks for D.C. Code, Superior Court rules, DCMR, D.C. Court of Appeals opinions, and court forms through the PD032 ingestion contract. | Current seed chunks preserve official locators, headings, citations, and metadata; full body-text extraction from every official source remains a later expansion. |
 | RAGAS Eval | `ragas_eval.py`, `datasets/dc_golden_dataset.jsonl`, and `/v1/rag/evaluate` produce local reports. | Metrics are deterministic RAGAS-style, and current eval threshold may fail. |
 | Observability | `observability.py` exposes `/v1/observability/trace` and optional LangSmith submission, including storage-operation trace events. | LangSmith requires env vars and package availability; trace buffer remains process-local. |
 | LLM Providers | `llm_providers.py` uses LiteLLM for OpenAI, Anthropic, Groq, Gemini, and provider/model overrides; MoE routing, RAG answer generation, drafting, and agent execution use real calls when a provider key is configured. | Structured templates remain the fallback when no provider key is configured, and provider failures fall back safely with trace metadata. |
@@ -107,6 +109,7 @@ Local smoke surfaces
 - **ResponseEnvelope**: standardized compliance signal attached to legal endpoint outputs.
 - **MatterContext**: tenant-scoped matter state with client identity, matter fields, facts, documents, deadlines, sensitivity flags, history, route history, drafts, and billing events, persisted through the SQLAlchemy repository when database storage is configured.
 - **KnowledgeChunk / Citation Provenance**: tenant-scoped D.C. knowledge chunk with source title, citation label, verification status, provenance, entities, relationships, and pgvector-ready embedding metadata.
+- **SeedSource / Seed Report**: official D.C. source catalog entries, legal-aware chunks, validation result counts, practice-area coverage, health, and latest successful seed timestamp.
 - **GoldenExample / EvaluationRow**: D.C. eval cases and deterministic metric rows.
 - **TraceRecord**: local and optional LangSmith observability events.
 - **MCP Skill Manifest / Agent Result**: discoverable skill schemas and routed agent outputs.
@@ -172,11 +175,15 @@ dc_guardrails.py
 dc_knowledge_rag.py
 llm_providers.py
 ragas_eval.py
+scripts/seed_dc_knowledge.py
+scripts/test_prompts.py
 observability.py
 client_intake_flow.py
 agent_network.py
 agents/
-prompts/
+prompts/dc_legal_prompts.py
+prompts/registry.py
+prompts/fewshot/dc_examples.jsonl
 datasets/
 reports/
 tests/

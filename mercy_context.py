@@ -16,6 +16,7 @@ from mercy_storage import (
     storage_status,
     trace_storage_event,
 )
+from prompts.registry import prompt_registry_status
 
 
 PRODUCT_NAME = "Mercy"
@@ -671,6 +672,7 @@ def product_capabilities() -> dict[str, Any]:
             "langsmith_tracing_env": "LANGSMITH_TRACING",
         },
         "llm_providers": llm_provider_status(),
+        "prompt_registry": prompt_registry_status(),
         "tiers": {
             "free": [
                 "single-document drafting",

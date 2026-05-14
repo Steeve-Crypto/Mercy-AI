@@ -12,6 +12,7 @@
     "mercy_context.py",
     "mercy_storage.py",
     "observability.py",
+    "prompts",
     "ragas_eval.py",
     "response_envelope.py",
     "tests",

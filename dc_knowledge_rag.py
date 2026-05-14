@@ -4,6 +4,7 @@ import math
 import os
 import re
 import hashlib
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, date
 from importlib import metadata
@@ -308,7 +309,7 @@ def _persistent_source_records(tenant_id: str | None) -> list[SourceRecord]:
         with session_scope() as session:
             records = (
                 session.query(DCRagSourceRecord)
-                .filter(DCRagSourceRecord.tenant_id == tenant_id, DCRagSourceRecord.active.is_(True))
+                .filter(DCRagSourceRecord.tenant_id.in_([tenant_id, "public"]), DCRagSourceRecord.active.is_(True))
                 .all()
             )
             return [
@@ -341,7 +342,7 @@ def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
     try:
         init_storage()
         with session_scope() as session:
-            records = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id == tenant_id).all()
+            records = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id.in_([tenant_id, "public"])).all()
             chunks = [
                 KnowledgeChunk(
                     chunk_id=record.chunk_id,
@@ -771,9 +772,11 @@ class LocalLegalGraph:
                 if entity in normalized or any(part in tokens for part in entity.split("_"))
             ]
             relationship_hits = [
-                relation["to"]
+                str(relation.get("to") or relation.get("value") or "")
                 for relation in chunk.relationships
-                if relation.get("from", "") in normalized or relation.get("to", "") in normalized
+                if relation.get("from", "") in normalized
+                or relation.get("to", "") in normalized
+                or str(relation.get("value") or "").lower().replace(" ", "_") in normalized
             ]
             score = min(1.0, (len(matched) * 0.18) + (len(relationship_hits) * 0.12))
             if score:
@@ -1386,6 +1389,7 @@ def ingest_dc_sources(payload: dict[str, Any], matter_context: dict[str, Any] | 
 
 def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
     context = matter_context or {}
+    tenant_id = _metadata_filters(context).get("tenant_id")
     try:
         rag = DCKnowledgeRAG()
         status = rag._backend_status()
@@ -1411,8 +1415,96 @@ def rag_backend_status(matter_context: dict[str, Any] | None = None) -> dict[str
             "langchain_neo4j": _package_version("langchain-neo4j"),
         },
         **status,
-        "ingestion_contract": _active_source_registry(_metadata_filters(context).get("tenant_id")).status(),
+        "ingestion_contract": _active_source_registry(tenant_id).status(),
+        "seed_status": _seed_status(tenant_id),
     }
+
+
+def _seed_status(tenant_id: str | None) -> dict[str, Any]:
+    report = _latest_seed_report()
+    persistent = persistent_storage_configured()
+    if persistent and tenant_id:
+        try:
+            with session_scope() as session:
+                tenants = [tenant_id, "public"]
+                sources = (
+                    session.query(DCRagSourceRecord)
+                    .filter(DCRagSourceRecord.tenant_id.in_(tenants), DCRagSourceRecord.active.is_(True))
+                    .all()
+                )
+                chunks = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id.in_(tenants)).all()
+                area_counts = Counter(str(chunk.practice_area or "unknown") for chunk in chunks)
+                last_seeded = max([source.updated_at for source in sources], default=None)
+                return {
+                    "pipeline_version": report.get("version") or "dc-knowledge-seed-pipeline-1.0",
+                    "persistent": True,
+                    "seeded_source_count": len(sources),
+                    "seeded_chunk_count": len(chunks),
+                    "last_successful_seed_date": report.get("completed_at") or (_datetime_to_iso(last_seeded) if last_seeded else None),
+                    "coverage_summary_by_practice_area": dict(sorted(area_counts.items())),
+                    "overall_health": _seed_health(len(sources), len(chunks), bool(report.get("passed"))),
+                    "latest_report": _safe_seed_report(report),
+                }
+        except Exception as exc:
+            return {
+                "pipeline_version": report.get("version") or "dc-knowledge-seed-pipeline-1.0",
+                "persistent": True,
+                "seeded_source_count": 0,
+                "seeded_chunk_count": 0,
+                "last_successful_seed_date": report.get("completed_at"),
+                "coverage_summary_by_practice_area": {},
+                "overall_health": "degraded",
+                "error": str(exc),
+                "latest_report": _safe_seed_report(report),
+            }
+    registry = _active_source_registry(tenant_id).status()
+    return {
+        "pipeline_version": report.get("version") or "dc-knowledge-seed-pipeline-1.0",
+        "persistent": persistent,
+        "seeded_source_count": int(report.get("sources_ingested") or registry.get("official_source_count") or 0),
+        "seeded_chunk_count": int(report.get("chunks_created") or 0),
+        "last_successful_seed_date": report.get("completed_at"),
+        "coverage_summary_by_practice_area": report.get("coverage_summary", {}).get("practice_areas", {}),
+        "overall_health": _seed_health(int(report.get("sources_ingested") or 0), int(report.get("chunks_created") or 0), bool(report.get("passed"))),
+        "latest_report": _safe_seed_report(report),
+    }
+
+
+def _latest_seed_report() -> dict[str, Any]:
+    path = os.getenv("MERCY_SEED_REPORT_PATH") or "reports/dc_knowledge_seed_latest.json"
+    try:
+        import json
+
+        with open(path, encoding="utf-8") as handle:
+            report = json.load(handle)
+        return report if isinstance(report, dict) else {}
+    except Exception:
+        return {}
+
+
+def _safe_seed_report(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": report.get("source"),
+        "started_at": report.get("started_at"),
+        "completed_at": report.get("completed_at"),
+        "sources_ingested": report.get("sources_ingested"),
+        "chunks_created": report.get("chunks_created"),
+        "validation_failure_count": len(report.get("validation_failures") or []),
+        "passed": report.get("passed"),
+        "health": report.get("health"),
+    }
+
+
+def _seed_health(source_count: int, chunk_count: int, latest_passed: bool) -> str:
+    if chunk_count >= 500 and source_count >= 20 and latest_passed:
+        return "healthy"
+    if chunk_count >= 100 and source_count >= 5:
+        return "partial"
+    return "not_seeded"
+
+
+def _datetime_to_iso(value: datetime | None) -> str | None:
+    return value.isoformat() if isinstance(value, datetime) else None
 
 
 def _grounded_rag_answer(results: list[dict[str, Any]]) -> str:
