@@ -57,6 +57,8 @@ class AgentNetworkTests(unittest.TestCase):
             self.assertEqual(skill["output_schema"]["type"], "object")
         for agent in manifest["agents"]:
             self.assertTrue(agent["hermes"]["enabled"])
+            self.assertEqual(agent["hermes"]["name"], "HermesAgent")
+            self.assertIn("NousResearch", agent["hermes"]["provider"])
             self.assertTrue(agent["hermes"]["persistent_memory"])
 
     def test_cite_and_verify_returns_dc_grounding(self) -> None:

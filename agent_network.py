@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from dc_guardrails import evaluate_dc_guardrails
 from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
-from hermes_intelligence import agent_hermes_metadata, hermes_observe, hermes_reason, hermes_status
+from hermes_intelligence import HermesAgent, hermes_status
 from llm_providers import generate_legal_draft, generate_research_answer, llm_provider_status
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from mercy_storage import persistent_storage_configured, record_langgraph_checkpoint
@@ -588,6 +588,7 @@ class BaseLegalAgent:
 
     def __init__(self, skills: dict[str, MCPSkill]) -> None:
         self.skills = skills
+        self.hermes = HermesAgent(owner_agent_name=self.name, expert=self.expert)
 
     def execute(self, state: dict[str, Any]) -> dict[str, Any]:
         return self._execute_core(state)
@@ -602,7 +603,7 @@ class BaseLegalAgent:
             "description": self.description,
             "skills": list(self.skill_names),
             "react_enabled": True,
-            "hermes": agent_hermes_metadata(self.name, self.expert),
+            "hermes": self.hermes.metadata(),
             "react_loop": {
                 "version": REACT_LOOP_VERSION,
                 "cycle": "Reason -> Act -> Observe -> Repeat",
@@ -618,7 +619,7 @@ class BaseLegalAgent:
     def reason(self, state: dict[str, Any]) -> dict[str, Any]:
         react = _react_state(state)
         cycle = int(react.get("cycle") or 0) + 1
-        hermes = hermes_reason(agent_name=self.name, expert=self.expert, state=state, cycle=cycle, available_skills=list(self.skill_names))
+        hermes = self.hermes.reason(state=state, cycle=cycle, available_skills=list(self.skill_names))
         thought = str(hermes.get("reasoning_summary") or self._thought_for_cycle(state, cycle))
         step = {
             "cycle": cycle,
@@ -698,7 +699,8 @@ class BaseLegalAgent:
             **result,
             "hermes": {
                 "reasoning": state.get("hermes") if isinstance(state.get("hermes"), dict) else {},
-                "reflection": hermes_observe(agent_name=self.name, expert=self.expert, state=state, observation=observation),
+                "reflection": self.hermes.observe(state=state, observation=observation),
+                "agent": self.hermes.metadata(),
             },
             "react_loop": {
                 "version": REACT_LOOP_VERSION,

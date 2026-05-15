@@ -20,6 +20,11 @@ HERMES_SYSTEM_PROMPT = (
     "and attorney-review safeguards. Return concise JSON with reasoning_summary, skill_plan, memory_updates, "
     "workflow_reflection, and stop_condition. Do not reveal chain-of-thought; provide short rationale summaries only."
 )
+NOUS_HERMES_MODELS = {
+    "preferred": "openrouter/nousresearch/hermes-3-llama-3.1-405b",
+    "fallback": "openrouter/nousresearch/hermes-3-mixtral-8x7b",
+    "provider": "NousResearch via LiteLLM/OpenRouter",
+}
 
 
 @dataclass
@@ -37,6 +42,47 @@ class HermesMemoryRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+class HermesAgent:
+    """Dedicated NousResearch Hermes intelligence layer for Mercy expert agents."""
+
+    def __init__(self, *, owner_agent_name: str, expert: str) -> None:
+        self.owner_agent_name = owner_agent_name
+        self.expert = expert
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "version": HERMES_INTELLIGENCE_VERSION,
+            "name": "HermesAgent",
+            "provider": NOUS_HERMES_MODELS["provider"],
+            "owner_agent": self.owner_agent_name,
+            "expert": self.expert,
+            "enabled": True,
+            "persistent_memory": True,
+            "skill_reuse": True,
+            "domain_learning": "PD038 seeded D.C. knowledge + PD044 golden regression metadata",
+            "workflow_improvement": "internal reflection over ReACT observations and LangSmith trace summaries",
+            "models": hermes_model_status(),
+            "model_preferences": dict(NOUS_HERMES_MODELS),
+        }
+
+    def reason(self, *, state: dict[str, Any], cycle: int, available_skills: list[str]) -> dict[str, Any]:
+        return hermes_reason(
+            agent_name=self.owner_agent_name,
+            expert=self.expert,
+            state=state,
+            cycle=cycle,
+            available_skills=available_skills,
+        )
+
+    def observe(self, *, state: dict[str, Any], observation: dict[str, Any]) -> dict[str, Any]:
+        return hermes_observe(
+            agent_name=self.owner_agent_name,
+            expert=self.expert,
+            state=state,
+            observation=observation,
+        )
 
 
 _HERMES_MEMORY: dict[str, HermesMemoryRecord] = {}
@@ -61,17 +107,7 @@ def hermes_status() -> dict[str, Any]:
 
 
 def agent_hermes_metadata(agent_name: str, expert: str) -> dict[str, Any]:
-    return {
-        "version": HERMES_INTELLIGENCE_VERSION,
-        "enabled": True,
-        "agent": agent_name,
-        "expert": expert,
-        "persistent_memory": True,
-        "skill_reuse": True,
-        "domain_learning": "PD038 seeded D.C. knowledge + PD044 golden regression metadata",
-        "workflow_improvement": "internal reflection over ReACT observations and LangSmith trace summaries",
-        "models": hermes_model_status(),
-    }
+    return HermesAgent(owner_agent_name=agent_name, expert=expert).metadata()
 
 
 def hermes_reason(
@@ -344,6 +380,7 @@ def _parse_hermes_json(text: str) -> dict[str, Any] | None:
 
 __all__ = [
     "HERMES_INTELLIGENCE_VERSION",
+    "HermesAgent",
     "agent_hermes_metadata",
     "hermes_observe",
     "hermes_reason",
