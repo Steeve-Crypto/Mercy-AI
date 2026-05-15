@@ -36,6 +36,8 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertIn("runtime", manifest["langgraph"])
         self.assertTrue(manifest["react_loop"]["enabled"])
         self.assertTrue(manifest["sandbox"]["enabled"])
+        self.assertTrue(manifest["hermes"]["enabled"])
+        self.assertIn("models", manifest["hermes"])
         if LANGGRAPH_AVAILABLE:
             self.assertTrue(manifest["langgraph"]["available"])
             self.assertEqual(manifest["langgraph"]["runtime"], "native_state_graph")
@@ -53,6 +55,9 @@ class AgentNetworkTests(unittest.TestCase):
             self.assertFalse(skill["sandbox_status"]["arbitrary_code_execution"])
             self.assertEqual(skill["input_schema"]["type"], "object")
             self.assertEqual(skill["output_schema"]["type"], "object")
+        for agent in manifest["agents"]:
+            self.assertTrue(agent["hermes"]["enabled"])
+            self.assertTrue(agent["hermes"]["persistent_memory"])
 
     def test_cite_and_verify_returns_dc_grounding(self) -> None:
         result = cite_and_verify("D.C. Bar Ethics Op. 388", {"jurisdiction": "District of Columbia"})
@@ -91,6 +96,32 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertTrue(result["react_loop"]["enabled"])
         self.assertGreaterEqual(result["react_loop"]["cycles_completed"], 1)
         self.assertTrue(result["mcp_skill_results"][0]["sandbox"]["enabled"])
+        self.assertIn("hermes", result)
+        self.assertIn("reasoning", result["hermes"])
+        self.assertIn("reflection", result["hermes"])
+        self.assertTrue(result["hermes"]["reflection"]["memory"]["tenant_id"])
+
+    def test_hermes_memory_reuses_successful_skills_across_cycles(self) -> None:
+        result = execute_agent_task(
+            task="Draft D.C. attorney review language about official citation verification.",
+            params={"top_k": 2, "cycles": 3},
+            matter_context={
+                "jurisdiction": "District of Columbia",
+                "surface_context": "unit_test_hermes",
+                "auth_context": TEST_AUTH,
+                "matter_id": "hermes-memory-matter",
+                "key_facts": {"objective": "Citation verification clause."},
+            },
+            route={"expert": "drafting", "route_mode": "dc_drafting", "confidence": 0.93, "guardrail_status": "pass"},
+        )
+
+        hermes = result["hermes"]
+        memory = hermes["reflection"]["memory"]
+
+        self.assertEqual(result["selected_agent"], "DraftingAgent")
+        self.assertEqual(result["react_loop"]["cycles_completed"], 3)
+        self.assertIn("check_dc_ethics", memory["preferred_skills"])
+        self.assertIn("pd044_golden_dataset", hermes["reasoning"]["domain_learning"])
 
     def test_mcp_sandbox_blocks_invalid_skill_input(self) -> None:
         from agent_network import execute_mcp_skill_sandboxed, get_agent_network

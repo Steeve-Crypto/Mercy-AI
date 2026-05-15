@@ -177,7 +177,6 @@
     "previous_generated_at": "2026-05-15T00:13:00.070313+00:00",
     "previous_run_available": true
   },
-  "report_path": "evals\\reports\\ragas_regression_20260515_012038.json",
   "rows": [
     {
       "answer": "For this District of Columbia administrative issue, use Code of the District of Columbia - Title 1: Government Organization. Title 1 chapter 1 locator. Official D.C. source locator for administrative; requires attorney verification before reliance. Difficulty: advanced. Relevance to D.C. solos: high. Verify citation label D.C. Code title 1, ch. 1 against the official source before relying on it.",

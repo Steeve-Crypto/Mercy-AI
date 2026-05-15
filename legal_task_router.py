@@ -71,6 +71,7 @@ class RouterDecision:
     confidentiality: dict[str, Any]
     llm_router: dict[str, Any] = field(default_factory=dict)
     cost_control: dict[str, Any] = field(default_factory=dict)
+    hermes_delegation: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -448,6 +449,10 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
     if not cost_control.get("expensive_calls_allowed") and top.expert in {"drafting", "research"}:
         top = RouteCandidate("intake", "intake", min(top.confidence, 0.74), [*top.reasons, "cost_cap:expensive_call_blocked"])
         candidates = [top, *[candidate for candidate in candidates if candidate.expert != top.expert]]
+    else:
+        hermes_policy = _hermes_delegation_policy(query, matter_context, top)
+        if hermes_policy["delegate_to_hermes"] and "hermes_powered_agent" not in top.reasons:
+            top.reasons.append("hermes_powered_agent")
 
     matter_context = _inject_dc_knowledge(query, matter_context, top)
     missing_inputs = detect_missing_inputs(top.expert, query, matter_context)
@@ -469,6 +474,7 @@ def moe_route(query: str, matter_context: dict[str, Any] | None, user_type: str 
         next_action=next_action,
         llm_router=llm_router,
         cost_control=cost_control,
+        hermes_delegation=_hermes_delegation_policy(query, matter_context, top),
     )
     route = decision.to_dict()
     record_route_trace(route, surface_context=surface_context, matter_reference=matter_context.get("matter_id"))
@@ -673,6 +679,7 @@ def _build_decision(
     next_action: str,
     llm_router: dict[str, Any] | None = None,
     cost_control: dict[str, Any] | None = None,
+    hermes_delegation: dict[str, Any] | None = None,
 ) -> RouterDecision:
     guardrails = _guardrail_profile(query, top, matter_context)
     guardrail_status = normalize_guardrail_status(guardrails["status"], execute=execute)
@@ -709,7 +716,40 @@ def _build_decision(
         },
         llm_router=llm_router or {},
         cost_control=cost_control or {},
+        hermes_delegation=hermes_delegation or _hermes_delegation_policy(query, matter_context, top),
     )
+
+
+def _hermes_delegation_policy(query: str, matter_context: dict[str, Any], top: RouteCandidate) -> dict[str, Any]:
+    text = f"{query} {_context_text(matter_context)}".lower()
+    complex_terms = (
+        "motion",
+        "brief",
+        "appeal",
+        "summary judgment",
+        "injunction",
+        "zoning",
+        "administrative",
+        "ethics",
+        "citation",
+        "verify",
+        "multi-step",
+        "strategy",
+        "research",
+        "draft",
+        "analyze",
+    )
+    complex_reasoning = top.expert in {"research", "drafting", "compliance_guardrails", "citation_verifier"} and (
+        top.confidence >= 0.85 or any(term in text for term in complex_terms)
+    )
+    return {
+        "enabled": True,
+        "delegate_to_hermes": bool(complex_reasoning),
+        "selected_layer": "hermes_powered_expert_agent" if complex_reasoning else "fast_router_then_agent",
+        "reason": "complex_legal_reasoning_or_high_confidence_expert_route" if complex_reasoning else "simple_or_intake_first_route",
+        "keeps_fast_models_for_simple_tasks": not complex_reasoning,
+        "target_expert": top.expert,
+    }
 
 
 def _knowledge_context_for_route(matter_context: dict[str, Any]) -> dict[str, Any]:

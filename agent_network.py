@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from dc_guardrails import evaluate_dc_guardrails
 from dc_knowledge_rag import rag_backend_status, retrieve_dc_knowledge
+from hermes_intelligence import agent_hermes_metadata, hermes_observe, hermes_reason, hermes_status
 from llm_providers import generate_legal_draft, generate_research_answer, llm_provider_status
 from mercy_context import get_matter_context, set_langgraph_runtime, update_matter_context as persist_matter_context
 from mercy_storage import persistent_storage_configured, record_langgraph_checkpoint
@@ -601,6 +602,7 @@ class BaseLegalAgent:
             "description": self.description,
             "skills": list(self.skill_names),
             "react_enabled": True,
+            "hermes": agent_hermes_metadata(self.name, self.expert),
             "react_loop": {
                 "version": REACT_LOOP_VERSION,
                 "cycle": "Reason -> Act -> Observe -> Repeat",
@@ -616,12 +618,20 @@ class BaseLegalAgent:
     def reason(self, state: dict[str, Any]) -> dict[str, Any]:
         react = _react_state(state)
         cycle = int(react.get("cycle") or 0) + 1
-        thought = self._thought_for_cycle(state, cycle)
+        hermes = hermes_reason(agent_name=self.name, expert=self.expert, state=state, cycle=cycle, available_skills=list(self.skill_names))
+        thought = str(hermes.get("reasoning_summary") or self._thought_for_cycle(state, cycle))
         step = {
             "cycle": cycle,
             "phase": "reason",
             "agent": self.name,
             "thought": thought,
+            "hermes": {
+                "version": hermes.get("version"),
+                "skill_plan": hermes.get("skill_plan", []),
+                "workflow_reflection": hermes.get("workflow_reflection"),
+                "used_llm": hermes.get("llm", {}).get("used_llm") if isinstance(hermes.get("llm"), dict) else False,
+                "model": hermes.get("llm", {}).get("model") if isinstance(hermes.get("llm"), dict) else None,
+            },
             "timestamp": datetime.now(UTC).isoformat(),
         }
         with trace_span(
@@ -632,7 +642,7 @@ class BaseLegalAgent:
             metadata={"agent": self.name, "cycle": cycle, "thought": thought},
         ):
             trace_event(name="agent_react_reason", surface_context="agent_network", category="agent", route=state.get("route"), metadata=step)
-        return {**state, "react": {**react, "cycle": cycle, "current_reason": thought, "steps": [*react.get("steps", []), step]}}
+        return {**state, "hermes": hermes, "react": {**react, "cycle": cycle, "current_reason": thought, "steps": [*react.get("steps", []), step]}}
 
     def act(self, state: dict[str, Any]) -> dict[str, Any]:
         react = _react_state(state)
@@ -686,6 +696,10 @@ class BaseLegalAgent:
             trace_event(name="agent_react_observe", surface_context="agent_network", category="agent", route=state.get("route"), metadata=observation)
         result = {
             **result,
+            "hermes": {
+                "reasoning": state.get("hermes") if isinstance(state.get("hermes"), dict) else {},
+                "reflection": hermes_observe(agent_name=self.name, expert=self.expert, state=state, observation=observation),
+            },
             "react_loop": {
                 "version": REACT_LOOP_VERSION,
                 "enabled": True,
@@ -896,6 +910,7 @@ class AgentNetwork:
                 "restricted_execution": True,
                 "arbitrary_code_execution": False,
             },
+            "hermes": hermes_status(),
             "agents": [agent.metadata() for agent in self.agents.values()],
             "skills": [skill.metadata() for skill in self.skills.values()],
             "rag_backend": rag_backend_status(),
@@ -954,6 +969,7 @@ class AgentNetwork:
                 "citations": result.get("citations", []),
                 "grounding_policy": result.get("grounding_policy") or _grounding_policy(status),
                 "react_loop": result.get("react_loop"),
+                "hermes": result.get("hermes"),
                 "human_review_required": True,
                 "executed_at": datetime.now(UTC).isoformat(),
             }
@@ -964,6 +980,8 @@ class AgentNetwork:
                 "status": status,
                 "skill_count": len(response["mcp_skills_used"]),
                 "react_cycles": (result.get("react_loop") or {}).get("cycles_completed") if isinstance(result.get("react_loop"), dict) else None,
+                "hermes_enabled": True,
+                "hermes_model": (result.get("hermes", {}).get("reasoning", {}).get("llm") or {}).get("model") if isinstance(result.get("hermes"), dict) else None,
                 "langgraph_runtime": self._langgraph_runtime.get("runtime"),
                 "langgraph_available": self._langgraph_runtime.get("available"),
                 "llm_used": bool(result.get("llm", {}).get("used_llm")) if isinstance(result.get("llm"), dict) else False,
@@ -995,6 +1013,7 @@ class AgentNetwork:
                         "route": route,
                         "skills_used": response["mcp_skills_used"],
                         "react_loop": response["react_loop"],
+                        "hermes": response["hermes"],
                     },
                 )
             return response

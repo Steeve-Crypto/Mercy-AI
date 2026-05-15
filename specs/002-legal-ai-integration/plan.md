@@ -342,3 +342,11 @@ These tasks promote the remaining security, stability, and quality risks from ca
 **Required Change**: Upgrade specialized agents to stateful ReACT cycles (`Reason -> Act -> Observe -> Repeat`) through LangGraph when available, keep deterministic local fallback, and route all MCP skill handlers through a restricted sandbox that validates inputs, sanitizes outputs, blocks invalid execution, and returns user-safe failure messages without arbitrary code execution.
 
 **Acceptance**: `/v1/agent/skills` reports `react_enabled` and `sandbox_status` per skill; `python -m scripts.test_agent_react --agent=ResearchAgent --cycles=3` works; Research, Drafting, Compliance, Intake, and Citation Verifier agents produce ReACT metadata and sandboxed skill results; PD044 full regression remains at `overall_score >= 0.97`.
+
+### PD045c: Hermes Intelligence Layer Inside Expert Agents
+
+**Problem**: ReACT cycles and sandboxing improve control, but expert agents still need a dedicated internal intelligence layer for persistent memory, skill reuse, domain learning, and repeated workflow improvement.
+
+**Required Change**: Add Hermes as the internal reasoning/reflection layer for every specialized agent. Hermes must keep tenant-scoped memory across ReACT cycles, learn from PD038 seeded D.C. knowledge and PD044 golden/regression metadata, reuse successful sandboxed MCP skills, reflect on LangSmith/local traces, use Hermes-class LiteLLM models when provider keys are configured, and fall back to deterministic structured reasoning otherwise.
+
+**Acceptance**: `/v1/agent/skills` exposes Hermes status; `python -m scripts.test_hermes --agent=DraftingAgent --cycles=3` works; all expert agents include Hermes reasoning/reflection metadata; the MoE router includes `hermes_delegation` metadata for complex legal tasks; PD044 full regression remains at `overall_score >= 0.97`.

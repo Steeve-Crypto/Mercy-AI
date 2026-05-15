@@ -26,6 +26,8 @@ class LegalTaskRouterTests(unittest.TestCase):
         self.assertIn(decision.guardrail_status, {"pass", "warn", "block"})
         self.assertTrue(decision.execute)
         self.assertEqual(decision.confidentiality["training_use"], "client data is not used for model training by Mercy")
+        self.assertTrue(decision.hermes_delegation["delegate_to_hermes"])
+        self.assertEqual(decision.hermes_delegation["selected_layer"], "hermes_powered_expert_agent")
 
     def test_citation_fast_filter_returns_citation_verifier(self) -> None:
         decision = moe_route(
@@ -37,6 +39,7 @@ class LegalTaskRouterTests(unittest.TestCase):
         self.assertEqual(decision.route_mode, "source_verification")
         self.assertTrue(decision.citations)
         self.assertIn("candidate_unverified", {citation["verification_status"] for citation in decision.citations})
+        self.assertTrue(decision.hermes_delegation["delegate_to_hermes"])
 
     def test_unsafe_request_falls_back_to_compliance(self) -> None:
         decision = moe_route(

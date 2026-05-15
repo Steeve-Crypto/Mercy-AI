@@ -9,6 +9,7 @@
     "dc_knowledge_rag.py",
     "evals",
     "finetune",
+    "hermes_intelligence.py",
     "legal_task_router.py",
     "llm_providers.py",
     "main.py",

@@ -202,35 +202,42 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: `python -m scripts.test_agent_react --agent=ResearchAgent --cycles=3` completed 3 cycles with sandboxed `cite_and_verify`; all specialized agents passed CLI smoke checks; targeted agent tests, Ruff, and Pyright passed; full PD044 regression passed with 200 cases and `overall_score=0.9731`.
    - **Dependencies**: PD026, PD029, PD030, PD032, PD038, PD044.
 
-20. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+20. [X] PD045c [Core Agents] Add Hermes intelligence layer inside expert agents.
+   - **Target Paths**: `hermes_intelligence.py`, `agent_network.py`, `llm_providers.py`, `legal_task_router.py`, `scripts/test_hermes.py`, `tests/test_agent_network.py`, `tests/test_legal_task_router.py`, `pyrightconfig.json`, `specs/002-legal-ai-integration/plan.md`, `specs/002-legal-ai-integration/tasks.md`.
+   - **Definition of Done**: Research, Drafting, Compliance, Intake, and Citation Verifier agents use Hermes as the internal intelligence layer across ReACT cycles; Hermes keeps tenant-scoped memory, recommends MCP skill reuse, learns from PD038 seeded D.C. knowledge and PD044 golden/regression metadata, reflects over ReACT observations and LangSmith/local trace summaries, uses Hermes-class LiteLLM models when configured, and falls back gracefully without provider keys. The MoE router marks complex legal tasks for Hermes-powered expert delegation while keeping simple routes on fast paths.
+   - **Result**: Added `hermes-agent-intelligence-1.0`, Hermes reasoning/reflection hooks in every agent `reason` and `observe` phase, tenant/matter-scoped in-process memory, domain learning snapshots from seeded knowledge and regression health, workflow improvement summaries, OpenRouter/NouseResearch Hermes model preference through LiteLLM, `/v1/agent/skills` Hermes status, router `hermes_delegation` metadata, and `python -m scripts.test_hermes --agent=DraftingAgent --cycles=3`.
+   - **Verification**: Hermes CLI passed for Drafting, Research, Compliance, Citation Verifier, and Intake agents; targeted agent/router tests, Ruff, and Pyright passed; full PD044 regression passed with 200 cases and `overall_score=0.9731`.
+   - **Dependencies**: PD029, PD038, PD044, PD045b.
+
+21. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
    - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-21. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+22. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
    - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-22. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+23. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-23. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+24. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-24. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+25. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-25. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+26. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

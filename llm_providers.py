@@ -33,6 +33,7 @@ PROVIDER_KEYS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "groq": "GROQ_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 
 DEFAULT_MODELS = {
@@ -52,6 +53,10 @@ DEFAULT_MODELS = {
         "fast": "gemini/gemini-2.0-flash",
         "reasoning": "gemini/gemini-2.0-flash",
     },
+    "openrouter": {
+        "fast": "openrouter/nousresearch/hermes-3-mixtral-8x7b",
+        "reasoning": "openrouter/nousresearch/hermes-3-llama-3.1-405b",
+    },
 }
 
 REASONING_TASKS = {
@@ -60,6 +65,7 @@ REASONING_TASKS = {
     "research_generation",
     "complex_research",
     "compliance_analysis",
+    "hermes_reasoning",
 }
 
 FAST_TASKS = {
@@ -78,6 +84,8 @@ APPROXIMATE_PRICING_PER_1M = {
     "llama-3.1-8b": (0.05, 0.08),
     "llama-3.3-70b": (0.59, 0.79),
     "gemini-2.0-flash": (0.10, 0.40),
+    "hermes-3": (0.90, 0.90),
+    "mixtral-8x7b": (0.24, 0.24),
 }
 
 ATTORNEY_REVIEW_DISCLAIMER = "This is AI-assisted drafting - attorney must review and verify all content before use."
@@ -154,12 +162,29 @@ def llm_provider_status() -> dict[str, Any]:
         "selected_models": {
             "fast": selected[1] if selected else None,
             "reasoning": reasoning[1] if reasoning else None,
+            "hermes": hermes_model_status().get("selected_model"),
         },
         "supported_provider_env": sorted(PROVIDER_KEYS.values()),
         "smart_routing": {
             "fast_tasks": sorted(FAST_TASKS),
             "reasoning_tasks": sorted(REASONING_TASKS),
         },
+    }
+
+
+def hermes_model_status() -> dict[str, Any]:
+    selected = _select_provider("hermes_reasoning")
+    preferred = os.getenv("MERCY_HERMES_MODEL") or "openrouter/nousresearch/hermes-3-llama-3.1-405b"
+    fallback = os.getenv("MERCY_HERMES_FALLBACK_MODEL") or "openrouter/nousresearch/hermes-3-mixtral-8x7b"
+    return {
+        "enabled": selected is not None and LITELLM_AVAILABLE,
+        "litellm_available": LITELLM_AVAILABLE,
+        "preferred_model": preferred,
+        "fallback_model": fallback,
+        "selected_provider": selected[0].provider if selected else None,
+        "selected_model": selected[1] if selected else None,
+        "fallback_active": selected is None or not LITELLM_AVAILABLE,
+        "fallback_reason": _fallback_reason(active_provider_configs()),
     }
 
 
@@ -332,6 +357,29 @@ def classify_moe_route(
     }
 
 
+def complete_hermes_reasoning(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    matter_context: dict[str, Any] | None = None,
+    route: dict[str, Any] | None = None,
+    fallback: str,
+    prompt_template: dict[str, Any] | None = None,
+    max_tokens: int = 900,
+) -> LLMCallResult:
+    return complete_legal_task(
+        task_type="hermes_reasoning",
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        matter_context=matter_context,
+        route=route,
+        fallback=fallback,
+        prompt_template=prompt_template,
+        max_tokens=max_tokens,
+        temperature=0.1,
+    )
+
+
 def generate_research_answer(
     query: str,
     retrieval: dict[str, Any],
@@ -414,6 +462,11 @@ def _select_provider(task_type: str) -> tuple[LLMProviderConfig, str] | None:
     if not active:
         return None
     tier = "reasoning" if task_type in REASONING_TASKS else "fast"
+    if task_type == "hermes_reasoning":
+        hermes_override = os.getenv("MERCY_HERMES_MODEL")
+        openrouter = next((item for item in active if item.provider == "openrouter"), None)
+        config = openrouter or active[0]
+        return config, hermes_override or config.reasoning_model
     override = os.getenv("MERCY_LLM_REASONING_MODEL" if tier == "reasoning" else "MERCY_LLM_FAST_MODEL")
     config = active[0]
     model = override or (config.reasoning_model if tier == "reasoning" else config.fast_model)
@@ -601,5 +654,7 @@ __all__ = [
     "generate_legal_draft",
     "generate_research_answer",
     "generate_workspace_draft",
+    "complete_hermes_reasoning",
+    "hermes_model_status",
     "llm_provider_status",
 ]
