@@ -212,6 +212,7 @@ prompts/registry.py
 prompts/fewshot/dc_examples.jsonl
 datasets/
 reports/
+finetune/
 docs/compliance/
 tests/
 mercy-legal-web/
@@ -325,3 +326,19 @@ These tasks promote the remaining security, stability, and quality risks from ca
 **Required Change**: Add an advanced regression harness under `evals/`, generate a 200+ case D.C. golden set, evaluate the complete 1,145+ chunk PD038 seeded corpus, record legal metrics and failure taxonomy, write regression reports, push LangSmith-compatible traces, and surface latest regression health in RAG and monitoring endpoints.
 
 **Acceptance**: `python -m evals.run_regression --corpus=full` produces a passing report under `evals/reports/`, latest health is readable from `/v1/rag/status` and `/v1/monitoring/metrics`, and thresholds cover faithfulness, context precision, answer relevancy, citation accuracy, D.C. grounding, overall score, and pass rate.
+
+### PD045a: LoRA/QLoRA Fine-Tune Pipeline Skeleton
+
+**Problem**: Mercy needs a repeatable path to adapt open-weight models to D.C.-specific legal workflows without mixing production client data into training artifacts.
+
+**Required Change**: Add a dedicated `finetune/` package that prepares LoRA/QLoRA chat datasets from the PD044 golden set and high-quality LangSmith traces, attaches PD039 system prompts and official D.C. source metadata, records QLoRA 4-bit defaults for PEFT/bitsandbytes/Hugging Face Trainer, and wires a post-training PD044 regression comparison path.
+
+**Acceptance**: `python -m scripts.prepare_lora_dataset --golden=dc_regression_golden --output=finetune/data/` creates versioned JSONL train/validation files with 200+ records; `python -m scripts.train_lora --base-model=meta-llama/Meta-Llama-3.1-8B-Instruct --epochs=3` launches a safe plan or real trainer when optional dependencies are enabled; `/v1/rag/status` and `/v1/monitoring/metrics` report fine-tuning readiness without raw PII.
+
+### PD045b: ReACT Loops and Secure Sandboxing Layer
+
+**Problem**: Agent execution used a single LangGraph node and direct in-process skill calls, which limited reasoning control and made MCP skill safety metadata weaker than the rest of the legal guardrail system.
+
+**Required Change**: Upgrade specialized agents to stateful ReACT cycles (`Reason -> Act -> Observe -> Repeat`) through LangGraph when available, keep deterministic local fallback, and route all MCP skill handlers through a restricted sandbox that validates inputs, sanitizes outputs, blocks invalid execution, and returns user-safe failure messages without arbitrary code execution.
+
+**Acceptance**: `/v1/agent/skills` reports `react_enabled` and `sandbox_status` per skill; `python -m scripts.test_agent_react --agent=ResearchAgent --cycles=3` works; Research, Drafting, Compliance, Intake, and Citation Verifier agents produce ReACT metadata and sandboxed skill results; PD044 full regression remains at `overall_score >= 0.97`.

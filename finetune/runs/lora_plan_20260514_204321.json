@@ -1,0 +1,236 @@
+{
+  "base_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+  "dataset": {
+    "generated_at": "2026-05-14T20:43:10.855692+00:00",
+    "langsmith_trace_records": 200,
+    "manifest_path": "finetune\\data\\dataset_manifest.json",
+    "practice_area_counts": {
+      "administrative": 11,
+      "business": 11,
+      "business_llc": 11,
+      "civil_litigation": 11,
+      "civil_procedure": 11,
+      "consumer": 11,
+      "criminal": 11,
+      "education": 11,
+      "employment": 11,
+      "evidence": 11,
+      "family": 10,
+      "health": 10,
+      "housing": 10,
+      "landlord": 10,
+      "probate": 10,
+      "real_estate": 10,
+      "tax": 10,
+      "traffic": 10,
+      "zoning": 10
+    },
+    "regression_report": {
+      "available": true,
+      "dataset_size": 200,
+      "generated_at": "2026-05-14T20:42:59.802384+00:00",
+      "overall_score": 0.9731,
+      "pass_rate": 1.0,
+      "passed": true,
+      "report_path": "evals\\reports\\latest_regression_report.json"
+    },
+    "sha256": "80bd933b86890aad76ccd4d8a3e7e9e957b6c00a065564252408bea9924d63c6",
+    "source_golden_path": "evals\\datasets\\dc_regression_golden.jsonl",
+    "total_records": 200,
+    "train_path": "finetune\\data\\dc_lora_train.jsonl",
+    "train_records": 180,
+    "training_contract": {
+      "attorney_review_required": true,
+      "base_prompt_source": "PD039 PromptRegistry",
+      "default_training_mode": "qlora_4bit",
+      "format": "chat_messages_jsonl",
+      "golden_source": "PD044 DC RAGAS regression golden set",
+      "official_dc_grounding_required": true,
+      "source_id_required": true
+    },
+    "validation_path": "finetune\\data\\dc_lora_validation.jsonl",
+    "validation_records": 20,
+    "version": "dc-lora-qlora-dataset-1.0"
+  },
+  "dataset_manifest_path": "finetune\\data\\dataset_manifest.json",
+  "dependencies": {
+    "accelerate": false,
+    "bitsandbytes": false,
+    "datasets": true,
+    "peft": false,
+    "torch": false,
+    "transformers": false
+  },
+  "epochs": 3,
+  "launched_at": "2026-05-14T20:43:21.930157+00:00",
+  "mode": "plan_only",
+  "output_dir": "finetune\\runs",
+  "plan_path": "finetune\\runs\\lora_plan_20260514_204321.json",
+  "qlora_config": {
+    "bnb_4bit_compute_dtype": "bfloat16",
+    "bnb_4bit_quant_type": "nf4",
+    "bnb_4bit_use_double_quant": true,
+    "load_in_4bit": true,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "lora_r": 16,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "trainer": {
+    "bitsandbytes_4bit": true,
+    "class": "transformers.Trainer",
+    "peft": true,
+    "safe_default": "plan_only unless MERCY_ENABLE_REAL_LORA_TRAINING=true and dependencies are installed"
+  },
+  "validation": {
+    "base_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "baseline": {
+      "answer_relevancy": 0.918,
+      "available": true,
+      "citation_accuracy": 0.9476,
+      "context_precision": 1.0,
+      "corpus": {
+        "chunk_count": 1145,
+        "jurisdiction": "District of Columbia",
+        "mode": "full",
+        "official_only": true,
+        "source_count": 74
+      },
+      "dataset_size": 200,
+      "dc_grounding_score": 1.0,
+      "eval_version": "advanced-dc-ragas-regression-1.0",
+      "faithfulness": 1.0,
+      "generated_at": "2026-05-14T20:42:59.802384+00:00",
+      "overall_score": 0.9731,
+      "pass_rate": 1.0,
+      "practice_area_breakdown": {
+        "administrative": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "business": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "business_llc": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "civil_litigation": {
+          "case_count": 11,
+          "overall_score": 0.9802,
+          "pass_rate": 1.0
+        },
+        "civil_procedure": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "consumer": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "criminal": {
+          "case_count": 11,
+          "overall_score": 0.9841,
+          "pass_rate": 1.0
+        },
+        "education": {
+          "case_count": 11,
+          "overall_score": 0.9703,
+          "pass_rate": 1.0
+        },
+        "employment": {
+          "case_count": 11,
+          "overall_score": 0.9677,
+          "pass_rate": 1.0
+        },
+        "evidence": {
+          "case_count": 11,
+          "overall_score": 0.962,
+          "pass_rate": 1.0
+        },
+        "family": {
+          "case_count": 10,
+          "overall_score": 0.9734,
+          "pass_rate": 1.0
+        },
+        "health": {
+          "case_count": 10,
+          "overall_score": 0.9786,
+          "pass_rate": 1.0
+        },
+        "housing": {
+          "case_count": 10,
+          "overall_score": 0.9765,
+          "pass_rate": 1.0
+        },
+        "landlord": {
+          "case_count": 10,
+          "overall_score": 0.9741,
+          "pass_rate": 1.0
+        },
+        "probate": {
+          "case_count": 10,
+          "overall_score": 0.9684,
+          "pass_rate": 1.0
+        },
+        "real_estate": {
+          "case_count": 10,
+          "overall_score": 0.971,
+          "pass_rate": 1.0
+        },
+        "tax": {
+          "case_count": 10,
+          "overall_score": 0.9684,
+          "pass_rate": 1.0
+        },
+        "traffic": {
+          "case_count": 10,
+          "overall_score": 0.9786,
+          "pass_rate": 1.0
+        },
+        "zoning": {
+          "case_count": 10,
+          "overall_score": 0.9859,
+          "pass_rate": 1.0
+        }
+      },
+      "regression": {
+        "overall_delta": 0.0,
+        "pass_rate_delta": 0.0,
+        "previous_generated_at": "2026-05-14T20:40:41.723439+00:00",
+        "previous_run_available": true
+      },
+      "report_path": "evals\\reports\\latest_regression_report.json",
+      "status": "pass",
+      "thresholds": {
+        "answer_relevancy": 0.8,
+        "citation_accuracy": 0.9,
+        "context_precision": 0.9,
+        "dc_grounding_score": 0.95,
+        "faithfulness": 0.9,
+        "overall_score": 0.9,
+        "pass_rate": 0.9
+      }
+    },
+    "command": "python -m evals.run_regression --corpus=full",
+    "compares_against_latest_report": true,
+    "note": "Use --run-validation after a real adapter is available to compare RAGAS scores.",
+    "ran": false,
+    "wired": true
+  },
+  "version": "dc-lora-qlora-training-1.0"
+}

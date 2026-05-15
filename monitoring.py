@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from beta_launch import ACTIVE_USERS, quota_status, strong_monthly_quota
 from evals.regression_status import latest_regression_health
+from finetune.status import fine_tuning_readiness_status
 from observability import TRACE_STORE, langsmith_project_config, trace_event
 from security_controls import redact_pii, sanitize_payload
 
@@ -151,6 +152,7 @@ def monitoring_metrics(days: int = 7) -> dict[str, Any]:
     llm_records = [record for record in records if record.get("category") == "llm"]
     templates = _template_usage_from_beta_and_traces(records)
     regression_health = latest_regression_health()
+    fine_tuning = fine_tuning_readiness_status()
     return {
         "version": MONITORING_VERSION,
         "window_days": days,
@@ -177,6 +179,7 @@ def monitoring_metrics(days: int = 7) -> dict[str, Any]:
             "latest_regression": regression_health,
         },
         "regression_health": regression_health,
+        "fine_tuning_readiness": fine_tuning,
         "grounding_health": _grounding_health(rag_records),
         "guardrail_triggers": dict(guardrails),
         "error_rates": {

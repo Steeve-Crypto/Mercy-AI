@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-05-14T20:43:10.855692+00:00",
+  "langsmith_trace_records": 200,
+  "manifest_path": "finetune\\data\\dataset_manifest.json",
+  "practice_area_counts": {
+    "administrative": 11,
+    "business": 11,
+    "business_llc": 11,
+    "civil_litigation": 11,
+    "civil_procedure": 11,
+    "consumer": 11,
+    "criminal": 11,
+    "education": 11,
+    "employment": 11,
+    "evidence": 11,
+    "family": 10,
+    "health": 10,
+    "housing": 10,
+    "landlord": 10,
+    "probate": 10,
+    "real_estate": 10,
+    "tax": 10,
+    "traffic": 10,
+    "zoning": 10
+  },
+  "regression_report": {
+    "available": true,
+    "dataset_size": 200,
+    "generated_at": "2026-05-14T20:42:59.802384+00:00",
+    "overall_score": 0.9731,
+    "pass_rate": 1.0,
+    "passed": true,
+    "report_path": "evals\\reports\\latest_regression_report.json"
+  },
+  "sha256": "80bd933b86890aad76ccd4d8a3e7e9e957b6c00a065564252408bea9924d63c6",
+  "source_golden_path": "evals\\datasets\\dc_regression_golden.jsonl",
+  "total_records": 200,
+  "train_path": "finetune\\data\\dc_lora_train.jsonl",
+  "train_records": 180,
+  "training_contract": {
+    "attorney_review_required": true,
+    "base_prompt_source": "PD039 PromptRegistry",
+    "default_training_mode": "qlora_4bit",
+    "format": "chat_messages_jsonl",
+    "golden_source": "PD044 DC RAGAS regression golden set",
+    "official_dc_grounding_required": true,
+    "source_id_required": true
+  },
+  "validation_path": "finetune\\data\\dc_lora_validation.jsonl",
+  "validation_records": 20,
+  "version": "dc-lora-qlora-dataset-1.0"
+}

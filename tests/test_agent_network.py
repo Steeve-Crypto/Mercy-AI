@@ -34,6 +34,8 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertIn("llm_providers", manifest)
         self.assertIn("fallback_active", manifest["llm_providers"])
         self.assertIn("runtime", manifest["langgraph"])
+        self.assertTrue(manifest["react_loop"]["enabled"])
+        self.assertTrue(manifest["sandbox"]["enabled"])
         if LANGGRAPH_AVAILABLE:
             self.assertTrue(manifest["langgraph"]["available"])
             self.assertEqual(manifest["langgraph"]["runtime"], "native_state_graph")
@@ -46,6 +48,9 @@ class AgentNetworkTests(unittest.TestCase):
             self.assertIn(expected, skill_names)
         for skill in manifest["skills"]:
             self.assertTrue(skill["mcp_compatible"])
+            self.assertTrue(skill["react_enabled"])
+            self.assertTrue(skill["sandbox_status"]["enabled"])
+            self.assertFalse(skill["sandbox_status"]["arbitrary_code_execution"])
             self.assertEqual(skill["input_schema"]["type"], "object")
             self.assertEqual(skill["output_schema"]["type"], "object")
 
@@ -83,6 +88,19 @@ class AgentNetworkTests(unittest.TestCase):
         self.assertTrue(result["grounding_policy"]["strict_grounding"])
         self.assertIn("llm", result)
         self.assertIn("available", result["langgraph_runtime"])
+        self.assertTrue(result["react_loop"]["enabled"])
+        self.assertGreaterEqual(result["react_loop"]["cycles_completed"], 1)
+        self.assertTrue(result["mcp_skill_results"][0]["sandbox"]["enabled"])
+
+    def test_mcp_sandbox_blocks_invalid_skill_input(self) -> None:
+        from agent_network import execute_mcp_skill_sandboxed, get_agent_network
+
+        skill = get_agent_network().skills["export_to_word"]
+        result = execute_mcp_skill_sandboxed(skill, {"content": "Safe text.", "format": "pdf"})
+
+        self.assertEqual(result["status"], "block")
+        self.assertEqual(result["error"]["code"], "MCP_SANDBOX_BLOCKED")
+        self.assertEqual(result["sandbox"]["status"], "block")
 
     def test_drafting_agent_returns_attorney_review_irac_scaffold(self) -> None:
         result = execute_agent_task(

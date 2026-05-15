@@ -188,35 +188,49 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Verification**: `python -m evals.run_regression --corpus=full --json` passed with 74 sources, 1,145 chunks, 200 cases, `overall_score=0.9731`, `pass_rate=1.0`, `faithfulness=1.0`, `context_precision=1.0`, `citation_accuracy=0.9476`, and `dc_grounding_score=1.0`.
    - **Dependencies**: PD032, PD033, PD038, PD043.
 
-18. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
+18. [X] PD045a [Fine-Tuning] LoRA/QLoRA fine-tune pipeline skeleton.
+   - **Target Paths**: `finetune/lora_setup.py`, `finetune/dataset_builder.py`, `finetune/status.py`, `finetune/data/`, `scripts/prepare_lora_dataset.py`, `scripts/train_lora.py`, `monitoring.py`, `dc_knowledge_rag.py`, `tests/test_finetune_pipeline.py`, `pyrightconfig.json`.
+   - **Definition of Done**: The pipeline prepares LoRA/QLoRA-ready training JSONL from the PD044 200+ case D.C. golden set plus high-quality LangSmith regression traces; records include PD039 system prompts, instruction/response pairs, structured JSON assistant outputs, practice-area/difficulty/source metadata, and attorney-review/official-D.C.-grounding controls. Training launch supports PEFT, bitsandbytes, Hugging Face Trainer, QLoRA 4-bit defaults, and a post-tune PD044 regression validation path.
+   - **Result**: Added `dc-lora-qlora-dataset-1.0`, dataset preparation CLI, safe QLoRA launch CLI, generated 180 train / 20 validation records under `finetune/data/`, launch-plan artifacts under `finetune/runs/`, dependency-aware `plan_only` fallback when optional ML packages are absent, and fine-tuning readiness status in `/v1/rag/status` and `/v1/monitoring/metrics`.
+   - **Verification**: `python -m scripts.prepare_lora_dataset --golden=dc_regression_golden --output=finetune/data/` produced 200 records with 200 LangSmith trace references; `python -m scripts.train_lora --base-model=meta-llama/Meta-Llama-3.1-8B-Instruct --epochs=3` produced a QLoRA launch plan; targeted fine-tune/monitoring/RAGAS tests, Ruff, and Pyright passed.
+   - **Dependencies**: PD038, PD039, PD044.
+
+19. [X] PD045b [Core Agents] Add ReACT loops and secure MCP sandbox layer.
+   - **Target Paths**: `agent_network.py`, `scripts/test_agent_react.py`, `tests/test_agent_network.py`, `specs/002-legal-ai-integration/plan.md`, `specs/002-legal-ai-integration/tasks.md`.
+   - **Definition of Done**: Research, Drafting, Compliance, Intake, and Citation Verifier agents execute stateful ReACT cycles (`Reason -> Act -> Observe -> Repeat`) through LangGraph when available and deterministic local fallback otherwise; every MCP skill runs through a restricted sandbox with input/output validation, sanitization, no arbitrary code execution, tenant-aware context, user-safe blocked failure responses, and LangSmith-compatible traces. `/v1/agent/skills` reports `react_enabled` and `sandbox_status` for each skill, and the full PD044 regression remains at or above `overall_score >= 0.97`.
+   - **Result**: Replaced the single-node agent graph with explicit `reason`, `act`, and `observe` graph nodes plus conditional cycles; added ReACT metadata to agents/results/checkpoints; added `mcp-secure-sandbox-1.0` for allowlisted skill execution; added sandbox metadata to skill manifests; and added `python -m scripts.test_agent_react --agent=ResearchAgent --cycles=3`.
+   - **Verification**: `python -m scripts.test_agent_react --agent=ResearchAgent --cycles=3` completed 3 cycles with sandboxed `cite_and_verify`; all specialized agents passed CLI smoke checks; targeted agent tests, Ruff, and Pyright passed; full PD044 regression passed with 200 cases and `overall_score=0.9731`.
+   - **Dependencies**: PD026, PD029, PD030, PD032, PD038, PD044.
+
+20. [X] PD004 [Standalone Platform] Replace remaining mock matter/dashboard data with live core data.
    - **Target Paths**: `mercy-legal-web/src/lib/data.ts`, dashboard components, `src/store/app-store.ts`.
    - **Definition of Done**: Live matter/capability state is used where available; demo-only panels are clearly labeled.
    - **Result**: Removed dashboard mock data and the Zustand demo store, replaced dashboard stats/activity/documents/clause/analyzer panels with live session state from the FastAPI core, and kept marketing-only static data isolated from dashboard workflows.
    - **Dependencies**: PD001, PD003, PD006, PD028, PD029.
 
-19. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
+21. [X] PD007 [Standalone Platform] Wire document vault uploads to discovery upload endpoint.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, upload components, `src/lib/core-client.ts`.
    - **Definition of Done**: Dashboard can submit legal PDFs to `/v1/workspace/discovery/upload` and render facts, risks, guardrails, and source placeholders.
    - **Result**: Document Vault now uploads selected PDFs to `/v1/workspace/discovery/upload`, passes selected matter IDs, renders discovered facts, and displays response-envelope citations/guardrails.
    - **Dependencies**: PD001, PD003, PD029.
 
-20. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
+22. [X] PD008 [Standalone Platform] Connect AI assistant panel to core routing/drafting/research.
    - **Target Paths**: `mercy-legal-web/src/components/dashboard/ai-assistant-panel.tsx`, `src/lib/core-client.ts`.
    - **Definition of Done**: Assistant prompts include matter context and display route, missing-input, fallback, guardrail, and verification metadata.
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-21. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+23. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-22. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+24. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-23. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+25. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

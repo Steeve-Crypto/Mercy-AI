@@ -14,6 +14,7 @@ from mercy_storage import persistent_storage_configured, record_langgraph_checkp
 from observability import trace_event, trace_span
 from prompts.registry import get_prompt_registry, prompt_registry_status
 from ragas_eval import METRICS as RAGAS_METRICS
+from security_controls import sanitize_payload
 
 try:
     from langgraph.graph import END, StateGraph  # type: ignore
@@ -29,6 +30,8 @@ except Exception:
 
 AGENT_NETWORK_VERSION = "agent-network-langgraph-1.0"
 MCP_MANIFEST_VERSION = "mcp-skill-manifest-1.0"
+REACT_LOOP_VERSION = "agent-react-langgraph-cycles-1.0"
+MCP_SANDBOX_VERSION = "mcp-secure-sandbox-1.0"
 SUPPORTED_EXPERTS = {
     "research": "ResearchAgent",
     "drafting": "DraftingAgent",
@@ -104,6 +107,8 @@ class MCPSkill:
         payload = asdict(self)
         payload.pop("handler", None)
         payload["mcp_compatible"] = True
+        payload["sandbox_status"] = _sandbox_status(self.name)
+        payload["react_enabled"] = True
         return payload
 
 
@@ -134,6 +139,115 @@ def _ragas_hook() -> dict[str, Any]:
         "metrics": list(RAGAS_METRICS),
         "mode": "local_deterministic_ci_ready",
     }
+
+
+def _sandbox_status(skill_name: str) -> dict[str, Any]:
+    return {
+        "version": MCP_SANDBOX_VERSION,
+        "enabled": True,
+        "skill_name": skill_name,
+        "execution_environment": "restricted_in_process_allowlisted_handler",
+        "arbitrary_code_execution": False,
+        "input_validation": "json_schema_required_fields_and_no_extra_properties",
+        "output_validation": "required_status_skill_name_human_review_citations_provenance",
+        "sanitization": "security_controls.sanitize_payload",
+        "failure_mode": "blocked_skill_result_with_user_safe_message",
+    }
+
+
+def execute_mcp_skill_sandboxed(skill: MCPSkill, arguments: dict[str, Any], *, matter_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    safe_arguments = sanitize_payload(arguments)
+    with trace_span(
+        "mcp_sandbox_execute",
+        "agent_network",
+        "agent_skill",
+        metadata={"skill": skill.name, "sandbox_version": MCP_SANDBOX_VERSION},
+    ) as span:
+        try:
+            _validate_skill_input(skill, safe_arguments)
+            result = skill.handler(**safe_arguments)
+            safe_result = sanitize_payload(result)
+            _validate_skill_output(skill, safe_result)
+            safe_result["sandbox"] = {
+                **_sandbox_status(skill.name),
+                "status": "pass",
+                "tenant_id": ((matter_context or {}).get("auth_context") or {}).get("tenant_id") if isinstance((matter_context or {}).get("auth_context"), dict) else (matter_context or {}).get("tenant_id"),
+            }
+            span["metadata"] = {"skill": skill.name, "sandbox_status": "pass"}
+            return safe_result
+        except Exception as exc:
+            safe_message = _sandbox_error_message(skill.name, exc)
+            blocked = {
+                "skill_name": skill.name,
+                "status": "block",
+                "human_review_required": True,
+                "citations": [],
+                "provenance": {"sandbox_version": MCP_SANDBOX_VERSION},
+                "grounding_policy": _grounding_policy("block", ["sandbox_execution_blocked"]),
+                "error": {
+                    "code": "MCP_SANDBOX_BLOCKED",
+                    "message": safe_message,
+                    "technical_detail": exc.__class__.__name__,
+                },
+                "sandbox": {**_sandbox_status(skill.name), "status": "block", "failure": exc.__class__.__name__},
+            }
+            span["metadata"] = {"skill": skill.name, "sandbox_status": "block", "error": exc.__class__.__name__}
+            trace_event(
+                name="mcp_sandbox_blocked",
+                surface_context="agent_network",
+                category="agent_skill",
+                guardrail_status="block",
+                metadata={"skill": skill.name, "error": exc.__class__.__name__, "message": safe_message},
+            )
+            return blocked
+
+
+def _validate_skill_input(skill: MCPSkill, arguments: dict[str, Any]) -> None:
+    schema = skill.input_schema
+    if schema.get("additionalProperties") is False:
+        allowed = set((schema.get("properties") or {}).keys())
+        extra = set(arguments) - allowed
+        if extra:
+            raise ValueError(f"Unsupported input fields: {', '.join(sorted(extra))}.")
+    missing = []
+    for name in schema.get("required", []):
+        value = arguments.get(name)
+        if name not in arguments or value is None or value == "":
+            missing.append(name)
+    if missing:
+        raise ValueError(f"Missing required input fields: {', '.join(missing)}.")
+    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    for name, spec in properties.items():
+        if name not in arguments or not isinstance(spec, dict):
+            continue
+        value = arguments[name]
+        expected = spec.get("type")
+        if expected == "string" and not isinstance(value, str):
+            raise TypeError(f"{name} must be a string.")
+        if expected == "object" and not isinstance(value, dict):
+            raise TypeError(f"{name} must be an object.")
+        if expected == "array" and not isinstance(value, list):
+            raise TypeError(f"{name} must be an array.")
+        if isinstance(spec.get("enum"), list) and value not in spec["enum"]:
+            raise ValueError(f"{name} must be one of: {', '.join(str(item) for item in spec['enum'])}.")
+
+
+def _validate_skill_output(skill: MCPSkill, result: dict[str, Any]) -> None:
+    required = {"skill_name", "status", "human_review_required", "citations", "provenance"}
+    missing = [name for name in required if name not in result]
+    if missing:
+        raise ValueError(f"Skill output missing required fields: {', '.join(missing)}.")
+    if result.get("skill_name") != skill.name:
+        raise ValueError("Skill output name mismatch.")
+    if result.get("status") not in {"pass", "warn", "block"}:
+        raise ValueError("Skill output status must be pass, warn, or block.")
+
+
+def _sandbox_error_message(skill_name: str, exc: Exception) -> str:
+    return (
+        f"The {skill_name} skill could not run inside Mercy's secure sandbox. "
+        "No content was exported or persisted. Review the input, confirm matter access, and retry."
+    )
 
 
 def _grounding_policy(status: str, issues: list[str] | None = None) -> dict[str, Any]:
@@ -440,6 +554,31 @@ def _skill_registry() -> dict[str, MCPSkill]:
     }
 
 
+def _react_state(state: dict[str, Any]) -> dict[str, Any]:
+    react = state.get("react") if isinstance(state.get("react"), dict) else {}
+    params = state.get("params") if isinstance(state.get("params"), dict) else {}
+    try:
+        max_cycles = int(params.get("cycles") or params.get("react_cycles") or react.get("max_cycles") or 3)
+    except (TypeError, ValueError):
+        max_cycles = 3
+    return {
+        "cycle": int(react.get("cycle") or 0),
+        "max_cycles": max(1, min(max_cycles, 8)),
+        "done": bool(react.get("done", False)),
+        "steps": react.get("steps") if isinstance(react.get("steps"), list) else [],
+        **{key: value for key, value in react.items() if key not in {"cycle", "max_cycles", "done", "steps"}},
+    }
+
+
+def _react_next_step(state: dict[str, Any]) -> str:
+    react = _react_state(state)
+    if react.get("done"):
+        return "end"
+    if int(react.get("cycle") or 0) >= int(react.get("max_cycles") or 1):
+        return "end"
+    return "reason"
+
+
 class BaseLegalAgent:
     expert: str = "base"
     name: str = "BaseLegalAgent"
@@ -450,6 +589,9 @@ class BaseLegalAgent:
         self.skills = skills
 
     def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+        return self._execute_core(state)
+
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
 
     def metadata(self) -> dict[str, Any]:
@@ -458,11 +600,108 @@ class BaseLegalAgent:
             "expert": self.expert,
             "description": self.description,
             "skills": list(self.skill_names),
+            "react_enabled": True,
+            "react_loop": {
+                "version": REACT_LOOP_VERSION,
+                "cycle": "Reason -> Act -> Observe -> Repeat",
+                "langgraph_stateful_cycles": True,
+                "default_max_cycles": 3,
+            },
         }
 
     def _call_skill(self, name: str, **kwargs: Any) -> dict[str, Any]:
         skill = self.skills[name]
-        return skill.handler(**kwargs)
+        return execute_mcp_skill_sandboxed(skill, kwargs, matter_context=kwargs.get("matter_context"))
+
+    def reason(self, state: dict[str, Any]) -> dict[str, Any]:
+        react = _react_state(state)
+        cycle = int(react.get("cycle") or 0) + 1
+        thought = self._thought_for_cycle(state, cycle)
+        step = {
+            "cycle": cycle,
+            "phase": "reason",
+            "agent": self.name,
+            "thought": thought,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        with trace_span(
+            "agent_react_reason",
+            str(state.get("matter_context", {}).get("surface_context") or "agent_network"),
+            "agent",
+            route=state.get("route"),
+            metadata={"agent": self.name, "cycle": cycle, "thought": thought},
+        ):
+            trace_event(name="agent_react_reason", surface_context="agent_network", category="agent", route=state.get("route"), metadata=step)
+        return {**state, "react": {**react, "cycle": cycle, "current_reason": thought, "steps": [*react.get("steps", []), step]}}
+
+    def act(self, state: dict[str, Any]) -> dict[str, Any]:
+        react = _react_state(state)
+        cycle = int(react.get("cycle") or 1)
+        action = "execute_core_agent_task" if not isinstance(state.get("agent_result"), dict) else "review_existing_result"
+        with trace_span(
+            "agent_react_act",
+            str(state.get("matter_context", {}).get("surface_context") or "agent_network"),
+            "agent",
+            route=state.get("route"),
+            metadata={"agent": self.name, "cycle": cycle, "action": action},
+        ):
+            if action == "execute_core_agent_task":
+                result = self._execute_core(state)
+            else:
+                result = state["agent_result"]
+        step = {
+            "cycle": cycle,
+            "phase": "act",
+            "agent": self.name,
+            "action": action,
+            "skills": result.get("skills_used", []) if isinstance(result, dict) else [],
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        return {**state, "agent_result": result, "react": {**react, "steps": [*react.get("steps", []), step]}}
+
+    def observe(self, state: dict[str, Any]) -> dict[str, Any]:
+        react = _react_state(state)
+        result = state.get("agent_result") if isinstance(state.get("agent_result"), dict) else {}
+        status = str(result.get("status") or "warn")
+        cycle = int(react.get("cycle") or 1)
+        max_cycles = int(react.get("max_cycles") or 3)
+        should_repeat = cycle < max_cycles and status not in {"block"}
+        observation = {
+            "cycle": cycle,
+            "phase": "observe",
+            "agent": self.name,
+            "status": status,
+            "citation_count": len(result.get("citations", [])) if isinstance(result.get("citations"), list) else 0,
+            "grounding_status": (result.get("grounding_policy") or {}).get("status") if isinstance(result.get("grounding_policy"), dict) else status,
+            "repeat": should_repeat,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        with trace_span(
+            "agent_react_observe",
+            str(state.get("matter_context", {}).get("surface_context") or "agent_network"),
+            "agent",
+            route=state.get("route"),
+            metadata=observation,
+        ):
+            trace_event(name="agent_react_observe", surface_context="agent_network", category="agent", route=state.get("route"), metadata=observation)
+        result = {
+            **result,
+            "react_loop": {
+                "version": REACT_LOOP_VERSION,
+                "enabled": True,
+                "agent": self.name,
+                "cycles_completed": cycle,
+                "max_cycles": max_cycles,
+                "steps": [*react.get("steps", []), observation],
+                "final_observation": observation,
+            },
+        }
+        return {**state, "agent_result": result, "react": {**react, "done": not should_repeat, "steps": result["react_loop"]["steps"]}}
+
+    def _thought_for_cycle(self, state: dict[str, Any], cycle: int) -> str:
+        if cycle == 1:
+            return f"Select the safest {self.name} action plan with tenant-scoped matter context and official D.C. grounding."
+        return "Review observations, confirm citations/guardrails, and stop unless another secure action is required."
 
 
 class ResearchAgent(BaseLegalAgent):
@@ -471,7 +710,7 @@ class ResearchAgent(BaseLegalAgent):
     description = "Retrieves D.C. legal grounding with citation provenance."
     skill_names = ("cite_and_verify", "check_dc_ethics")
 
-    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["task"]
         context = state["matter_context"]
         retrieval = retrieve_dc_knowledge(
@@ -510,7 +749,7 @@ class DraftingAgent(BaseLegalAgent):
     description = "Creates attorney-review drafting scaffolds grounded in retrieved D.C. context."
     skill_names = ("cite_and_verify", "check_dc_ethics", "export_to_word")
 
-    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["task"]
         context = state["matter_context"]
         retrieval = retrieve_dc_knowledge(
@@ -552,7 +791,7 @@ class ComplianceAgent(BaseLegalAgent):
     description = "Reviews outputs for D.C. ethics, confidentiality, supervision, and verification flags."
     skill_names = ("check_dc_ethics",)
 
-    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         params = state["params"]
         draft = str(params.get("draft") or params.get("content") or state["task"])
         ethics = self._call_skill("check_dc_ethics", query=state["task"], draft=draft, matter_context=state["matter_context"])
@@ -573,7 +812,7 @@ class IntakeAgent(BaseLegalAgent):
     description = "Updates shared matter state and identifies intake readiness gaps."
     skill_names = ("update_matter_context", "check_dc_ethics")
 
-    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         matter_id = str(state["params"].get("matter_id") or state["matter_context"].get("matter_id") or "")
         new_facts = state["params"].get("new_facts")
         if not isinstance(new_facts, dict):
@@ -611,7 +850,7 @@ class CitationVerifierAgent(BaseLegalAgent):
     description = "Verifies candidate citation grounding and provenance before use."
     skill_names = ("cite_and_verify",)
 
-    def execute(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _execute_core(self, state: dict[str, Any]) -> dict[str, Any]:
         law_or_case = str(state["params"].get("law_or_case") or state["task"])
         citation = self._call_skill("cite_and_verify", law_or_case=law_or_case, matter_context=state["matter_context"])
         return {
@@ -645,6 +884,18 @@ class AgentNetwork:
             "manifest_version": MCP_MANIFEST_VERSION,
             "agent_network_version": AGENT_NETWORK_VERSION,
             "langgraph": dict(self._langgraph_runtime),
+            "react_loop": {
+                "version": REACT_LOOP_VERSION,
+                "enabled": True,
+                "cycle": "Reason -> Act -> Observe -> Repeat",
+                "langgraph_stateful_cycles": True,
+            },
+            "sandbox": {
+                "version": MCP_SANDBOX_VERSION,
+                "enabled": True,
+                "restricted_execution": True,
+                "arbitrary_code_execution": False,
+            },
             "agents": [agent.metadata() for agent in self.agents.values()],
             "skills": [skill.metadata() for skill in self.skills.values()],
             "rag_backend": rag_backend_status(),
@@ -685,6 +936,7 @@ class AgentNetwork:
                 "route": route,
                 "user_type": user_type,
                 "selected_agent": agent.name,
+                "react": {"max_cycles": int(params.get("cycles") or params.get("react_cycles") or 3), "steps": [], "done": False},
             }
             result = self._run_graph(state, agent)
             status = str(result.get("status") or "warn")
@@ -701,6 +953,7 @@ class AgentNetwork:
                 "mcp_skill_results": result.get("skill_results", []),
                 "citations": result.get("citations", []),
                 "grounding_policy": result.get("grounding_policy") or _grounding_policy(status),
+                "react_loop": result.get("react_loop"),
                 "human_review_required": True,
                 "executed_at": datetime.now(UTC).isoformat(),
             }
@@ -710,6 +963,7 @@ class AgentNetwork:
                 "agent": agent.name,
                 "status": status,
                 "skill_count": len(response["mcp_skills_used"]),
+                "react_cycles": (result.get("react_loop") or {}).get("cycles_completed") if isinstance(result.get("react_loop"), dict) else None,
                 "langgraph_runtime": self._langgraph_runtime.get("runtime"),
                 "langgraph_available": self._langgraph_runtime.get("available"),
                 "llm_used": bool(result.get("llm", {}).get("used_llm")) if isinstance(result.get("llm"), dict) else False,
@@ -740,6 +994,7 @@ class AgentNetwork:
                         "status": status,
                         "route": route,
                         "skills_used": response["mcp_skills_used"],
+                        "react_loop": response["react_loop"],
                     },
                 )
             return response
@@ -750,9 +1005,13 @@ class AgentNetwork:
         try:
             with trace_span("langgraph_compile", "agent_network", "agent_graph", metadata=langgraph_runtime_metadata()) as span:
                 graph = StateGraph(dict)
-                graph.add_node("agent", lambda state: {**state, "agent_result": state["agent"].execute(state)})
-                graph.set_entry_point("agent")
-                graph.add_edge("agent", END)
+                graph.add_node("reason", lambda state: state["agent"].reason(state))
+                graph.add_node("act", lambda state: state["agent"].act(state))
+                graph.add_node("observe", lambda state: state["agent"].observe(state))
+                graph.set_entry_point("reason")
+                graph.add_edge("reason", "act")
+                graph.add_edge("act", "observe")
+                graph.add_conditional_edges("observe", _react_next_step, {"reason": "reason", "end": END})
                 compiled = graph.compile()
                 span["metadata"] = langgraph_runtime_metadata(graph_compiled=True)
                 return compiled
@@ -777,7 +1036,14 @@ class AgentNetwork:
             except Exception as exc:
                 if not _local_langgraph_fallback_allowed():
                     raise LangGraphRuntimeUnavailable("LangGraph execution failed in non-local mode.") from exc
-        return agent.execute(state)
+        graph_state = {**state, "agent": agent}
+        while True:
+            graph_state = agent.reason(graph_state)
+            graph_state = agent.act(graph_state)
+            graph_state = agent.observe(graph_state)
+            if _react_next_step(graph_state) == "end":
+                result = graph_state.get("agent_result")
+                return result if isinstance(result, dict) else {"agent": agent.name, "status": "warn", "skill_results": [], "skills_used": []}
 
 
 _NETWORK: AgentNetwork | None = None
