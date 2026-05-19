@@ -467,6 +467,19 @@ export type CoreBetaAnalytics = {
   generated_at: string;
 };
 
+export type CoreMonitoringMetrics = {
+  version?: string;
+  generated_at?: string;
+  beta?: Record<string, unknown>;
+  costs?: Record<string, unknown>;
+  ragas?: Record<string, unknown>;
+  guardrails?: Record<string, unknown>;
+  errors?: Record<string, unknown>;
+  quotas?: Record<string, unknown>;
+  alerts?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 function browserAuthContext(): CoreAuthContext {
   if (typeof window === "undefined") {
     return {};
@@ -620,6 +633,10 @@ export async function getBetaAnalytics(auth?: CoreAuthContext): Promise<CoreClie
   return coreFetch<CoreBetaAnalytics>("/v1/beta/analytics", undefined, auth);
 }
 
+export async function getMonitoringMetrics(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMonitoringMetrics>> {
+  return coreFetch<CoreMonitoringMetrics>("/v1/monitoring/metrics", undefined, auth);
+}
+
 export async function submitBetaFeedback(payload: {
   rating: "up" | "down";
   comment?: string;
@@ -644,6 +661,10 @@ export async function submitBetaFeedback(payload: {
 
 export async function getMatter(matterId: string, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter>> {
   return coreFetch<CoreMatter>(`/v1/matters/${encodeURIComponent(matterId)}`, undefined, auth);
+}
+
+export async function listMatters(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter[]>> {
+  return coreFetch<CoreMatter[]>("/v1/matters", undefined, auth);
 }
 
 export async function createMatter(payload: {
