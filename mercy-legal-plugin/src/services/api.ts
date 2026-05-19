@@ -11,6 +11,7 @@ import {
   AnalysisResult,
   ChatMessage,
   CoreMatterContext,
+  CoreMatterListItem,
   CoreMcpManifest,
   CoreMcpSkillResult,
   CoreResponseMetadata,
@@ -31,6 +32,8 @@ const viteEnv = (import.meta as ImportMeta & {
 }).env;
 const CORE_API_URL = (viteEnv?.VITE_MERCY_CORE_API_URL || DEFAULT_CORE_URL).replace(/\/+$/, "");
 const MATTER_ID = "word-addin-session-matter";
+let ACTIVE_MATTER_ID = MATTER_ID;
+let ACTIVE_MATTER: CoreMatterListItem | null = null;
 const CACHE_PREFIX = "mercy-agent-cache:";
 const QUEUE_KEY = "mercy-agent-offline-queue";
 const RECENT_SAFE_RESPONSES_KEY = "mercy-agent-recent-safe-responses";
@@ -232,8 +235,8 @@ function stableHash(value: string): string {
 function cacheKey(action: string, request: AgentRequest): string {
   const fingerprint = {
     action,
-    matter_id: request.matter_id ?? MATTER_ID,
-    surface_context: request.surface_context ?? "mercy_legal_plugin",
+    matter_id: request.matter_id ?? ACTIVE_MATTER_ID,
+    surface_context: request.surface_context ?? "office_addin",
     user_type: request.user_type ?? "solo",
     task_class: action,
     param_keys: Object.keys(request.params ?? {}).sort(),
@@ -369,7 +372,7 @@ async function postCoreIntake(payload: Record<string, unknown>): Promise<CoreInt
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      matter_id: MATTER_ID,
+      matter_id: ACTIVE_MATTER_ID,
       client: {
         client_id: "word-addin-client",
         client_name: "Word add-in client"
@@ -395,7 +398,7 @@ async function postCoreIntake(payload: Record<string, unknown>): Promise<CoreInt
       consent: {
         sensitivity_flags: ["confidential_word_document"]
       },
-      surface_context: "mercy_legal_plugin",
+      surface_context: "office_addin",
       user_type: "solo",
       ...payload
     })
@@ -407,14 +410,17 @@ async function postAgent(request: AgentRequest): Promise<CoreAgentResponse> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      matter_id: MATTER_ID,
+      matter_id: ACTIVE_MATTER_ID,
       matter_context: {
         jurisdiction: "District of Columbia",
-        surface_context: "mercy_legal_plugin",
+        surface_context: "office_addin",
+        matter_id: ACTIVE_MATTER_ID,
+        matter_name: ACTIVE_MATTER?.name,
+        documents: ACTIVE_MATTER?.documents ?? [{ document_id: "active-office-document", title: "Active Office document", source: "office_addin" }],
         ...(request.matter_context ?? {})
       },
       user_type: "solo",
-      surface_context: "mercy_legal_plugin",
+      surface_context: "office_addin",
       ...request
     })
   });
@@ -519,6 +525,20 @@ async function getBetaStatus(): Promise<CoreBetaStatus | null> {
   } catch {
     return null;
   }
+}
+
+async function listMatters(): Promise<CoreMatterListItem[]> {
+  try {
+    const matters = await coreFetch<CoreMatterListItem[]>("/v1/matters");
+    return matters;
+  } catch {
+    return [];
+  }
+}
+
+function setActiveMatter(matter: CoreMatterListItem | null): void {
+  ACTIVE_MATTER = matter;
+  ACTIVE_MATTER_ID = matter?.matter_id ?? MATTER_ID;
 }
 
 function addReviewDisclaimer(content: string): string {
@@ -719,13 +739,13 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
     } else if (key === "draft" || key === "content" || key === "query") {
       params[key] = normalizedText;
     } else if (key === "matter_id") {
-      params[key] = MATTER_ID;
+      params[key] = ACTIVE_MATTER_ID;
     } else if (key === "new_facts") {
       params[key] = { word_addin_note: normalizedText };
     } else if (key === "format") {
       params[key] = "docx";
     } else if (key === "matter_context" || key === "auth_context") {
-      params[key] = { matter_id: MATTER_ID, jurisdiction: "District of Columbia", auth_context: authContext() };
+      params[key] = { matter_id: ACTIVE_MATTER_ID, jurisdiction: "District of Columbia", auth_context: authContext() };
     }
   }
   if (!Object.keys(params).length) {
@@ -733,7 +753,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
       law_or_case: normalizedText,
       draft: normalizedText,
       content: normalizedText,
-      matter_id: MATTER_ID,
+      matter_id: ACTIVE_MATTER_ID,
       new_facts: { word_addin_note: normalizedText },
       format: "docx"
     };
@@ -774,6 +794,8 @@ export const api = {
   getAgentSkills,
   getTemplateGallery,
   getBetaStatus,
+  listMatters,
+  setActiveMatter,
   syncOfflineAgentQueue,
   queuedAgentRequestCount,
   recentSafeResponses,
@@ -798,10 +820,12 @@ export const api = {
           matter_context: {
             matter_id: intake.matter_id,
             jurisdiction: "District of Columbia",
-            document_text: documentText
+            document_text: documentText,
+            attached_documents: ACTIVE_MATTER?.documents ?? [{ document_id: "active-word-document", title: "Active Word document", source: "office_addin" }]
           },
           params: {
             document_text: documentText,
+            attached_document_ids: (ACTIVE_MATTER?.documents ?? []).map((document) => document.document_id ?? document.id).filter(Boolean),
             top_k: 4,
             format: "docx"
           }
@@ -842,10 +866,12 @@ export const api = {
           matter_context: {
             matter_id: intake.matter_id,
             jurisdiction: "District of Columbia",
-            selected_text: selectedText
+            selected_text: selectedText,
+            attached_documents: ACTIVE_MATTER?.documents ?? [{ document_id: "active-word-selection", title: "Selected Word clause", source: "office_addin_selection" }]
           },
           params: {
             selected_text: selectedText,
+            attached_document_ids: (ACTIVE_MATTER?.documents ?? []).map((document) => document.document_id ?? document.id).filter(Boolean),
             top_k: 4,
             format: "docx"
           }
@@ -888,11 +914,13 @@ export const api = {
           matter_context: {
             matter_id: intake.matter_id,
             jurisdiction: "District of Columbia",
-            document_text: context
+            document_text: context,
+            attached_documents: ACTIVE_MATTER?.documents ?? [{ document_id: "active-word-draft-context", title: "Active Word drafting context", source: "office_addin" }]
           },
           params: {
             instruction,
             document_text: context,
+            attached_document_ids: (ACTIVE_MATTER?.documents ?? []).map((document) => document.document_id ?? document.id).filter(Boolean),
             top_k: 4,
             format: "docx"
           }
@@ -930,8 +958,13 @@ export const api = {
       skillName,
       {
         task: taskBySkill[skillName] ?? discoveredSkill?.description ?? `Run MCP skill ${skillName}.`,
-        matter_id: MATTER_ID,
-        matter_context: { matter_id: MATTER_ID, jurisdiction: "District of Columbia", selected_text: activeText },
+        matter_id: ACTIVE_MATTER_ID,
+        matter_context: {
+          matter_id: ACTIVE_MATTER_ID,
+          jurisdiction: "District of Columbia",
+          selected_text: activeText,
+          attached_documents: ACTIVE_MATTER?.documents ?? [{ document_id: "active-office-selection", title: "Selected Office content", source: "office_addin" }]
+        },
         params: skillParams
       },
       `Preview fallback: ${skillName} queued for sync.`
@@ -975,7 +1008,8 @@ export const api = {
             jurisdiction: "District of Columbia",
             matter_type: template.matter_type,
             practice_area: template.practice_area,
-            document_text: documentText
+            document_text: documentText,
+            attached_documents: ACTIVE_MATTER?.documents ?? []
           },
           params: {
             template_id: template.template_id,
@@ -983,6 +1017,7 @@ export const api = {
             template_title: template.title,
             required_inputs: template.required_inputs,
             source_query: template.source_query,
+            attached_document_ids: (ACTIVE_MATTER?.documents ?? []).map((document) => document.document_id ?? document.id).filter(Boolean),
             top_k: 5,
             format: "docx"
           }

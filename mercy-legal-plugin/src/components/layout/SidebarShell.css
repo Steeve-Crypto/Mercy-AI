@@ -2,8 +2,8 @@
   min-height: 100vh;
   padding: 16px;
   background:
-    linear-gradient(180deg, rgba(14, 42, 74, 0.1), rgba(255, 255, 255, 0) 220px),
-    #eef2f6;
+    linear-gradient(180deg, rgba(79, 70, 229, 0.08), rgba(255, 255, 255, 0) 220px),
+    #f8fafc;
 }
 
 .mercyLogo {
@@ -12,11 +12,11 @@
   height: 40px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(201, 164, 76, 0.62);
+  border: 1px solid rgba(79, 70, 229, 0.34);
   border-radius: 8px;
-  background: #0e2a4a;
-  color: #f5d47d;
+  background: #312e81;
+  color: #ffffff;
   font-weight: 800;
   letter-spacing: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.2);
 }

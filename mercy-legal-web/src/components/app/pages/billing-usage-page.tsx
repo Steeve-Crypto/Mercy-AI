@@ -5,22 +5,41 @@ import { CreditCard, FileText, Gauge, Loader2, Receipt, Sparkles, Zap } from "lu
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { useMercySession } from "@/components/auth/session-provider";
-import type { CoreBetaStatus, CoreMonitoringMetrics } from "@/lib/core-client";
+import type { CoreBetaStatus, CoreBillingInvoice, CoreMonitoringMetrics } from "@/lib/core-client";
 
 type BillingUsagePageProps = {
   betaStatus: CoreBetaStatus | null;
   metrics: CoreMonitoringMetrics | null;
+  invoices: CoreBillingInvoice[];
+  customerPortalUrl: string | null;
   betaError: string | null;
   metricsError: string | null;
+  invoicesError: string | null;
 };
 
-export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError }: BillingUsagePageProps) {
+const PLAN_PRICES = {
+  Solo: "$170/month",
+  Beta: "$98/month",
+  Firm: "Custom",
+} as const;
+
+export function BillingUsagePage({
+  betaStatus,
+  metrics,
+  invoices,
+  customerPortalUrl,
+  betaError,
+  metricsError,
+  invoicesError,
+}: BillingUsagePageProps) {
   const { session } = useMercySession();
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const usage = metrics?.usage && typeof metrics.usage === "object" ? metrics.usage as Record<string, unknown> : {};
   const cost = metrics?.cost && typeof metrics.cost === "object" ? metrics.cost as Record<string, unknown> : {};
   const plan = betaStatus?.beta_mode ? "Beta" : session.roles.includes("firm_admin") ? "Firm" : "Solo";
+  const price = PLAN_PRICES[plan as keyof typeof PLAN_PRICES] ?? "Custom";
   const totalTokens = Number(usage.prompt_tokens ?? 0) + Number(usage.completion_tokens ?? 0);
   const period = betaStatus?.quota.period ?? "Current month";
   const quotaPct = useMemo(() => {
@@ -51,6 +70,32 @@ export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError 
     }
   }
 
+  async function manageBilling() {
+    setPortalBusy(true);
+    setCheckoutError(null);
+    try {
+      if (customerPortalUrl) {
+        window.location.href = customerPortalUrl;
+        return;
+      }
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await response.json()) as { url?: string; message?: string };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setCheckoutError(data.message ?? "Stripe customer portal is not configured.");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Stripe customer portal could not be opened.");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -60,7 +105,7 @@ export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError 
       >
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-            {plan} plan
+            {plan} plan · {price}
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             {session.tenantId}
@@ -76,7 +121,7 @@ export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError 
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={CreditCard} label="Current plan" value={plan} detail={betaStatus?.access ?? "Tenant workspace"} />
+          <MetricCard icon={CreditCard} label="Current plan" value={plan} detail={`${price} · ${betaStatus?.access ?? "Tenant workspace"}`} />
           <MetricCard icon={Gauge} label="Messages" value={Number(usage.messages ?? 0)} detail="Agent, drafting, and LLM traces" />
           <MetricCard icon={Zap} label="Tokens" value={totalTokens.toLocaleString()} detail="Prompt + completion tokens" />
           <MetricCard icon={Receipt} label="Estimated cost" value={`$${Number(cost.estimated_total_usd ?? 0).toFixed(4)}`} detail={`${cost.event_count ?? 0} cost event(s)`} />
@@ -117,6 +162,15 @@ export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError 
             <div className="mt-5 grid gap-2">
               <button
                 type="button"
+                onClick={manageBilling}
+                disabled={portalBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-4 py-2.5 text-sm font-semibold text-[#4338CA] hover:bg-[#E0E7FF] disabled:opacity-60"
+              >
+                {portalBusy ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />}
+                Manage Billing in Stripe
+              </button>
+              <button
+                type="button"
                 onClick={() => startCheckout("solo")}
                 disabled={checkoutBusy}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
@@ -138,17 +192,58 @@ export function BillingUsagePage({ betaStatus, metrics, betaError, metricsError 
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-lg font-semibold text-slate-950">
-            <FileText className="size-5 text-[#4F46E5]" />
-            Invoice history
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-950">
+              <FileText className="size-5 text-[#4F46E5]" />
+              Invoice history
+            </div>
+            {invoicesError ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                Stripe invoice API pending
+              </span>
+            ) : null}
           </div>
-          <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-            No invoices are available in this beta workspace yet. Stripe invoice history will appear here once subscription billing is active.
-          </div>
+          {invoices.length ? (
+            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+              <div className="grid grid-cols-[1fr_0.7fr_0.6fr_auto] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span>Invoice</span>
+                <span>Period</span>
+                <span>Status</span>
+                <span className="text-right">Amount</span>
+              </div>
+              <div className="divide-y divide-slate-200">
+                {invoices.map((invoice) => (
+                  <a
+                    key={invoice.invoice_id}
+                    href={invoice.hosted_invoice_url ?? invoice.pdf_url ?? "#"}
+                    target={invoice.hosted_invoice_url || invoice.pdf_url ? "_blank" : undefined}
+                    rel="noreferrer"
+                    className="grid grid-cols-1 gap-2 px-4 py-4 text-sm hover:bg-slate-50 md:grid-cols-[1fr_0.7fr_0.6fr_auto] md:items-center"
+                  >
+                    <span className="font-semibold text-slate-950">{invoice.number ?? invoice.invoice_id}</span>
+                    <span className="text-slate-500">{formatPeriod(invoice)}</span>
+                    <span className="w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{invoice.status}</span>
+                    <span className="font-semibold text-slate-950 md:text-right">${invoice.amount_due_usd.toFixed(2)}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-500">
+              No invoices are available in this beta workspace yet. Use the Stripe customer portal when a subscription customer is connected.
+            </div>
+          )}
         </section>
       </div>
     </>
   );
+}
+
+function formatPeriod(invoice: CoreBillingInvoice) {
+  if (invoice.period_start && invoice.period_end) {
+    return `${invoice.period_start} - ${invoice.period_end}`;
+  }
+  return invoice.created_at ?? "Current period";
 }
 
 function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string | number; detail: string }) {

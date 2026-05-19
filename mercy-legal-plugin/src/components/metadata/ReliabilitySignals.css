@@ -1,16 +1,24 @@
 .reliabilitySignals {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin-top: 10px;
-  border: 1px solid #dde4ee;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   padding: 10px;
 }
 
 .reliabilitySignals.compact {
   margin-top: 6px;
   padding: 8px;
+}
+
+.reliabilityTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .signalRow {
@@ -21,7 +29,7 @@
 
 .signalText {
   display: block;
-  color: #5d6b7c;
+  color: #64748b;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -40,10 +48,10 @@
 
 .actionText {
   display: block;
-  border: 1px solid #e7edf5;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
-  background: #ffffff;
-  color: #38465a;
+  background: #f8fafc;
+  color: #334155;
   font-size: 11px;
   line-height: 1.45;
   padding: 7px;
@@ -52,15 +60,15 @@
 .signalMetricGrid > div,
 .citationItem {
   min-width: 0;
-  border: 1px solid #e7edf5;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
-  background: #ffffff;
+  background: #f8fafc;
   padding: 7px;
 }
 
 .metricLabel {
   display: block;
-  color: #7a8698;
+  color: #64748b;
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
@@ -71,7 +79,7 @@
   display: block;
   margin-top: 3px;
   overflow-wrap: anywhere;
-  color: #0e2a4a;
+  color: #0f172a;
   font-size: 11px;
   font-weight: 700;
   line-height: 1.35;
@@ -83,13 +91,13 @@
 }
 
 .warningText {
-  color: #8a6110;
+  color: #b45309;
   font-weight: 600;
 }
 
 .attorneyWarning {
   display: block;
-  color: #7a4b00;
+  color: #4338ca;
   font-size: 11px;
   font-weight: 700;
   line-height: 1.35;

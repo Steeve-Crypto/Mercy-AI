@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+  <Id>8be0c5e2-a1d8-4e1b-89d3-b7d7c69f6a40</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Mercy Legal</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Mercy Legal AI for Outlook" />
+  <Description DefaultValue="Agent X legal AI assistance for D.C. attorneys inside Outlook." />
+  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
+  <SupportUrl DefaultValue="https://localhost:3000/support.html" />
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5" />
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteMailbox</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.5">
+        <bt:Set Name="Mailbox" />
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <FunctionFile resid="Commands.Url" />
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="MercyLegal.MailGroup">
+                <Label resid="MercyLegal.GroupLabel" />
+                <Control xsi:type="Button" id="MercyLegal.MailOpenTaskpane">
+                  <Label resid="MercyLegal.OpenTaskpane.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.OpenTaskpane.Label" />
+                    <Description resid="ML.MailOpen.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.MailAnalyze">
+                  <Label resid="ML.Analyze.Label" />
+                  <Supertip>
+                    <Title resid="ML.Analyze.Label" />
+                    <Description resid="ML.MailAnalyze.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>analyzeActiveDocument</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.MailCiteAndVerify">
+                  <Label resid="MercyLegal.CiteAndVerify.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.CiteAndVerify.Label" />
+                    <Description resid="ML.MailCite.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>citeAndVerify</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.MailCheckEthics">
+                  <Label resid="MercyLegal.CheckEthics.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.CheckEthics.Label" />
+                    <Description resid="ML.MailEthics.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>checkDcEthics</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="MercyLegal.MailComposeGroup">
+                <Label resid="MercyLegal.GroupLabel" />
+                <Control xsi:type="Button" id="MercyLegal.MailComposeOpenTaskpane">
+                  <Label resid="MercyLegal.OpenTaskpane.Label" />
+                  <Supertip>
+                    <Title resid="MercyLegal.OpenTaskpane.Label" />
+                    <Description resid="ML.MailOpen.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="MercyLegal.MailDraftRevision">
+                  <Label resid="ML.Draft.Label" />
+                  <Supertip>
+                    <Title resid="ML.Draft.Label" />
+                    <Description resid="ML.MailDraft.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>draftRevision</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://localhost:3000/assets/icon-16.png" />
+        <bt:Image id="Icon.32x32" DefaultValue="https://localhost:3000/assets/icon-32.png" />
+        <bt:Image id="Icon.80x80" DefaultValue="https://localhost:3000/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html" />
+        <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/commands.html" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="MercyLegal.GroupLabel" DefaultValue="Mercy Legal" />
+        <bt:String id="MercyLegal.OpenTaskpane.Label" DefaultValue="Open Mercy Legal" />
+        <bt:String id="ML.Analyze.Label" DefaultValue="Analyze Message" />
+        <bt:String id="ML.Draft.Label" DefaultValue="Draft Revision" />
+        <bt:String id="MercyLegal.CiteAndVerify.Label" DefaultValue="Verify Cite" />
+        <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Ethics Check" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="ML.MailOpen.Tip" DefaultValue="Launch Agent X for the selected Outlook message or draft." />
+        <bt:String id="ML.MailAnalyze.Tip" DefaultValue="Analyze the active Outlook message through /v1/agent/execute with D.C. guardrails and attorney-review metadata." />
+        <bt:String id="ML.MailCite.Tip" DefaultValue="Run citation verification on the active Outlook message through Agent X." />
+        <bt:String id="ML.MailEthics.Tip" DefaultValue="Check the active Outlook message for D.C. ethics, confidentiality, citation, and attorney-review flags." />
+        <bt:String id="ML.MailDraft.Tip" DefaultValue="Draft attorney-review language from the active Outlook draft context." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

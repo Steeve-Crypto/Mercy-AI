@@ -1,6 +1,6 @@
 export type RiskLevel = "high" | "medium" | "low";
 
-export type SidebarView = "risk" | "templates" | "clauses" | "chat" | "report";
+export type SidebarView = "risk" | "templates" | "clauses" | "chat" | "actions" | "report";
 
 export type ProcessingState = "idle" | "analyzing" | "explaining" | "inserting" | "drafting" | "syncing" | "skill";
 
@@ -211,6 +211,13 @@ export interface CoreMatterContext {
   missing_information?: string[];
   history?: Array<Record<string, unknown>>;
   last_updated?: string;
+}
+
+export interface CoreMatterListItem extends CoreMatterContext {
+  tier?: string;
+  facts?: Record<string, unknown>;
+  drafts?: Array<Record<string, unknown>>;
+  billing_events?: Array<Record<string, unknown>>;
 }
 
 export interface CoreIntakeSummary {

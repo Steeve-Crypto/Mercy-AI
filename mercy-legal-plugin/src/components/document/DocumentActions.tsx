@@ -1,5 +1,12 @@
 import { Button, Text } from "@fluentui/react-components";
-import { DocumentBulletList24Regular, Sparkle24Regular } from "@fluentui/react-icons";
+import {
+  CheckmarkCircle24Regular,
+  DocumentBulletList24Regular,
+  DocumentSearch24Regular,
+  Edit24Regular,
+  ShieldCheckmark24Regular,
+  Sparkle24Regular
+} from "@fluentui/react-icons";
 import { motion } from "framer-motion";
 import { AnalysisResult } from "../../types";
 import { insertRiskReport } from "../../services/word";
@@ -10,9 +17,22 @@ interface DocumentActionsProps {
   isBusy: boolean;
   compact?: boolean;
   onAnalyzeDocument: () => Promise<void>;
+  onDraftRevision?: () => Promise<void>;
+  onRedline?: () => Promise<void>;
+  onCiteCheck?: () => Promise<void>;
+  onEthicsCheck?: () => Promise<void>;
 }
 
-export function DocumentActions({ analysis, isBusy, compact = false, onAnalyzeDocument }: DocumentActionsProps) {
+export function DocumentActions({
+  analysis,
+  isBusy,
+  compact = false,
+  onAnalyzeDocument,
+  onDraftRevision,
+  onRedline,
+  onCiteCheck,
+  onEthicsCheck
+}: DocumentActionsProps) {
   const handleReport = async () => {
     const report = analysis
       ? `Mercy Legal Risk Report\n\nScore: ${analysis.score}/100\n\nRoute: ${
@@ -66,6 +86,26 @@ export function DocumentActions({ analysis, isBusy, compact = false, onAnalyzeDo
         <Button appearance="primary" icon={<Sparkle24Regular />} onClick={onAnalyzeDocument} disabled={isBusy}>
           {isBusy ? "Reviewing" : "Analyze"}
         </Button>
+        {onDraftRevision ? (
+          <Button icon={<Edit24Regular />} onClick={onDraftRevision} disabled={isBusy}>
+            Draft
+          </Button>
+        ) : null}
+        {onRedline ? (
+          <Button icon={<DocumentSearch24Regular />} onClick={onRedline} disabled={isBusy}>
+            Redline
+          </Button>
+        ) : null}
+        {onCiteCheck ? (
+          <Button icon={<CheckmarkCircle24Regular />} onClick={onCiteCheck} disabled={isBusy}>
+            Cite
+          </Button>
+        ) : null}
+        {onEthicsCheck ? (
+          <Button icon={<ShieldCheckmark24Regular />} onClick={onEthicsCheck} disabled={isBusy}>
+            Ethics
+          </Button>
+        ) : null}
         <Button icon={<DocumentBulletList24Regular />} onClick={handleReport} disabled={isBusy}>
           Report
         </Button>

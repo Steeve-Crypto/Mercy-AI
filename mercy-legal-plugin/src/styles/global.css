@@ -5,14 +5,15 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #eef2f6;
-  color: #172033;
+  background: #f8fafc;
+  color: #0f172a;
   font-family: "Segoe UI", system-ui, sans-serif;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -34,7 +35,7 @@ textarea {
 .appTitle {
   display: block;
   margin: 0;
-  color: #0e2a4a;
+  color: #0f172a;
   font-size: 19px;
   font-weight: 700;
   line-height: 1.2;
@@ -42,33 +43,75 @@ textarea {
 
 .appSubtitle {
   display: block;
-  color: #5c6676;
+  color: #64748b;
   font-size: 12px;
 }
 
 .jurisdictionBadge {
-  border-color: rgba(201, 164, 76, 0.72);
-  color: #0e2a4a;
+  border-color: rgba(79, 70, 229, 0.36);
+  color: #4338ca;
   font-weight: 700;
+}
+
+.contextBar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  padding: 10px;
+}
+
+.matterPicker {
+  display: grid;
+  min-width: min(100%, 230px);
+  flex: 1;
+  gap: 5px;
+}
+
+.matterPicker span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.matterPicker select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  padding: 6px 9px;
+}
+
+.matterPicker select:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  outline: none;
 }
 
 .reviewHero {
   display: grid;
   gap: 16px;
   margin-bottom: 12px;
-  border: 1px solid rgba(14, 42, 74, 0.18);
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(201, 164, 76, 0.14)),
-    #0e2a4a;
-  box-shadow: 0 18px 46px rgba(14, 42, 74, 0.16);
-  color: #ffffff;
+  background: #ffffff;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+  color: #0f172a;
   padding: 18px;
 }
 
 .heroKicker {
   display: block;
-  color: #f5d47d;
+  color: #4f46e5;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -85,8 +128,8 @@ textarea {
 
 .heroCopy {
   display: block;
-  max-width: 33ch;
-  color: rgba(255, 255, 255, 0.78);
+  max-width: 36ch;
+  color: #64748b;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -98,15 +141,15 @@ textarea {
 }
 
 .heroStats > div {
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #f8fafc;
   padding: 10px;
 }
 
 .statValue {
   display: block;
-  color: #f5d47d;
+  color: #4f46e5;
   font-size: 23px;
   font-weight: 800;
   line-height: 1;
@@ -115,14 +158,14 @@ textarea {
 .statLabel {
   display: block;
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.72);
+  color: #64748b;
   font-size: 11px;
 }
 
 .viewTabs {
   margin-top: 14px;
   padding: 3px;
-  border: 1px solid #dde4ee;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
 }
@@ -142,11 +185,11 @@ textarea {
   bottom: 16px;
   z-index: 10;
   max-width: 280px;
-  border: 1px solid rgba(201, 164, 76, 0.45);
+  border: 1px solid rgba(79, 70, 229, 0.28);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 14px 36px rgba(14, 42, 74, 0.16);
-  color: #0e2a4a;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+  color: #312e81;
   font-size: 13px;
   font-weight: 600;
   padding: 12px 14px;
@@ -161,11 +204,11 @@ textarea {
   align-items: center;
   max-width: 320px;
   gap: 10px;
-  border: 1px solid #ead08a;
+  border: 1px solid #fecaca;
   border-radius: 8px;
-  background: #fff8e1;
-  box-shadow: 0 14px 36px rgba(14, 42, 74, 0.16);
-  color: #735b13;
+  background: #fff1f2;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14);
+  color: #9f1239;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
@@ -173,10 +216,10 @@ textarea {
 }
 
 .errorToast button {
-  border: 1px solid #d6b457;
+  border: 1px solid #fecdd3;
   border-radius: 6px;
   background: #ffffff;
-  color: #0e2a4a;
+  color: #9f1239;
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
@@ -189,5 +232,5 @@ textarea {
 }
 
 .muted {
-  color: #667085;
+  color: #64748b;
 }

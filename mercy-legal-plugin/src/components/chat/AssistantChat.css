@@ -16,20 +16,20 @@
 }
 
 .message.assistant {
-  border: 1px solid #e4e8ef;
+  border: 1px solid #e2e8f0;
   background: #ffffff;
 }
 
 .message.user {
   margin-left: 24px;
-  background: #0e2a4a;
+  background: #4f46e5;
   color: #ffffff;
 }
 
 .messageMeta {
   display: block;
   margin-top: 8px;
-  color: #5d6b7c;
+  color: #64748b;
   font-size: 11px;
   line-height: 1.45;
 }

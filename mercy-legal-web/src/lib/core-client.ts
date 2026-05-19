@@ -511,6 +511,55 @@ export type CoreMonitoringMetrics = {
   [key: string]: unknown;
 };
 
+export type CoreUserProfile = {
+  user_id: string;
+  tenant_id: string;
+  name?: string | null;
+  email?: string | null;
+  firm_name?: string | null;
+  dc_bar_number?: string | null;
+  role?: string | null;
+  preferences?: Record<string, unknown>;
+  updated_at?: string | null;
+};
+
+export type CoreBillingInvoice = {
+  invoice_id: string;
+  number?: string | null;
+  status: "paid" | "open" | "draft" | "void" | "uncollectible" | string;
+  amount_due_usd: number;
+  amount_paid_usd?: number;
+  period_start?: string | null;
+  period_end?: string | null;
+  hosted_invoice_url?: string | null;
+  pdf_url?: string | null;
+  created_at?: string | null;
+};
+
+export type CoreBillingInvoicesEnvelope = {
+  tenant_id: string;
+  invoices: CoreBillingInvoice[];
+  customer_portal_url?: string | null;
+  generated_at?: string;
+};
+
+export type CoreFirmSeat = {
+  user_id: string;
+  name?: string | null;
+  email: string;
+  role: string;
+  status: "active" | "invited" | "disabled" | string;
+  last_active_at?: string | null;
+};
+
+export type CoreFirmSeatsEnvelope = {
+  tenant_id: string;
+  used: number;
+  total: number;
+  seats: CoreFirmSeat[];
+  invite_endpoint?: string;
+};
+
 function browserAuthContext(): CoreAuthContext {
   if (typeof window === "undefined") {
     return {};
@@ -666,6 +715,46 @@ export async function getBetaAnalytics(auth?: CoreAuthContext): Promise<CoreClie
 
 export async function getMonitoringMetrics(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMonitoringMetrics>> {
   return coreFetch<CoreMonitoringMetrics>("/v1/monitoring/metrics", undefined, auth);
+}
+
+export async function getUserProfile(auth?: CoreAuthContext): Promise<CoreClientResult<CoreUserProfile>> {
+  return coreFetch<CoreUserProfile>("/v1/user/profile", undefined, auth);
+}
+
+export async function updateUserProfile(payload: Partial<CoreUserProfile>, auth?: CoreAuthContext): Promise<CoreClientResult<CoreUserProfile>> {
+  return coreFetch<CoreUserProfile>(
+    "/v1/user/profile",
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
+}
+
+export async function listBillingInvoices(auth?: CoreAuthContext): Promise<CoreClientResult<CoreBillingInvoicesEnvelope>> {
+  return coreFetch<CoreBillingInvoicesEnvelope>("/v1/billing/invoices", undefined, auth);
+}
+
+export async function getFirmSeats(auth?: CoreAuthContext): Promise<CoreClientResult<CoreFirmSeatsEnvelope>> {
+  return coreFetch<CoreFirmSeatsEnvelope>("/v1/firm/seats", undefined, auth);
+}
+
+export async function inviteFirmSeat(payload: { email: string; role: string }, auth?: CoreAuthContext): Promise<CoreClientResult<CoreFirmSeatsEnvelope>> {
+  return coreFetch<CoreFirmSeatsEnvelope>(
+    "/v1/firm/seats/invite",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
 }
 
 export async function submitBetaFeedback(payload: {

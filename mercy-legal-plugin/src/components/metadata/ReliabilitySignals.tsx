@@ -56,6 +56,12 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
 
   return (
     <div className={compact ? "reliabilitySignals compact" : "reliabilitySignals"}>
+      <div className="reliabilityTitleRow">
+        <Text className="metricValue">Agent X Reliability</Text>
+        <Badge appearance="tint" color="brand">
+          Hermes MoE
+        </Badge>
+      </div>
       <div className="signalRow">
         <Tooltip content="D.C. guardrail status from the shared Mercy core." relationship="label">
           <Badge appearance="tint" color={tone(core.guardrailStatus)}>
