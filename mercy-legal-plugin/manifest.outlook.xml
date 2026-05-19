@@ -10,7 +10,7 @@
   <ProviderName>Mercy Legal</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Mercy Legal AI for Outlook" />
-  <Description DefaultValue="Agent X legal AI assistance for D.C. attorneys inside Outlook." />
+  <Description DefaultValue="Professional D.C.-focused legal AI assistance for attorneys inside Microsoft Outlook." />
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
   <SupportUrl DefaultValue="https://localhost:3000/support.html" />
@@ -180,9 +180,9 @@
         <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Ethics Check" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="ML.MailOpen.Tip" DefaultValue="Launch Agent X for the selected Outlook message or draft." />
+        <bt:String id="ML.MailOpen.Tip" DefaultValue="Launch Mercy Legal AI for the selected Outlook message or draft." />
         <bt:String id="ML.MailAnalyze.Tip" DefaultValue="Analyze the active Outlook message through /v1/agent/execute with D.C. guardrails and attorney-review metadata." />
-        <bt:String id="ML.MailCite.Tip" DefaultValue="Run citation verification on the active Outlook message through Agent X." />
+        <bt:String id="ML.MailCite.Tip" DefaultValue="Run citation verification on the active Outlook message through Mercy Legal AI." />
         <bt:String id="ML.MailEthics.Tip" DefaultValue="Check the active Outlook message for D.C. ethics, confidentiality, citation, and attorney-review flags." />
         <bt:String id="ML.MailDraft.Tip" DefaultValue="Draft attorney-review language from the active Outlook draft context." />
       </bt:LongStrings>

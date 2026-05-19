@@ -9,8 +9,8 @@
   <Version>1.0.0.0</Version>
   <ProviderName>Mercy Legal</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Mercy Legal Plugin" />
-  <Description DefaultValue="A modern DC-focused legal AI assistant for solo attorneys and small law firms." />
+  <DisplayName DefaultValue="Mercy Legal AI for Word" />
+  <Description DefaultValue="Professional D.C.-focused legal AI assistance for attorneys inside Microsoft Word." />
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
   <SupportUrl DefaultValue="https://localhost:3000/support.html" />
@@ -194,7 +194,7 @@
         <bt:String id="MercyLegal.ExportWord.Label" DefaultValue="Export" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Open the Mercy Legal sidebar to analyze contracts, explain clauses, draft DC-specific revisions, and generate risk reports." />
+        <bt:String id="GetStarted.Description" DefaultValue="Open the Mercy Legal AI sidebar to analyze documents, draft revisions, verify citations, and review D.C. reliability metadata." />
         <bt:String id="MercyLegal.OpenTaskpane.Tooltip" DefaultValue="Launch the DC-focused legal AI assistant for this Word document." />
         <bt:String id="ML.Analyze.Tip" DefaultValue="Analyze the full active document through /v1/agent/execute with D.C. guardrails, source grounding, and attorney-review metadata." />
         <bt:String id="ML.Explain.Tip" DefaultValue="Explain the selected clause under D.C. law through the live Mercy agent network." />

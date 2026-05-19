@@ -1,64 +1,101 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Badge, Divider, Tab, TabList, Text } from "@fluentui/react-components";
+import { Badge, Button, Spinner, Text, Textarea, Tooltip } from "@fluentui/react-components";
 import {
-  Chat24Regular,
+  ArrowClockwise24Regular,
+  CheckmarkCircle24Regular,
   DocumentBulletList24Regular,
-  DocumentAdd24Regular,
-  DocumentEdit24Regular,
-  Library24Regular,
-  ShieldCheckmark24Regular
+  DocumentSearch24Regular,
+  Edit24Regular,
+  Send24Regular,
+  ShieldCheckmark24Regular,
+  Sparkle24Regular
 } from "@fluentui/react-icons";
 import { MercyLogo } from "./components/brand/MercyLogo";
-import { BetaWelcome } from "./components/beta/BetaWelcome";
-import { AssistantChat } from "./components/chat/AssistantChat";
-import { ClauseLibrary } from "./components/clauses/ClauseLibrary";
-import { DocumentActions } from "./components/document/DocumentActions";
-import { SidebarShell } from "./components/layout/SidebarShell";
-import { RiskSummary } from "./components/risk/RiskSummary";
-import { McpSkillPanel } from "./components/skills/McpSkillPanel";
-import { TemplateGallery } from "./components/templates/TemplateGallery";
 import { ReliabilitySignals } from "./components/metadata/ReliabilitySignals";
-import { api } from "./services/api";
-import { insertTextAtCursor, readDocumentText, readSelectedText } from "./services/word";
-import { AgentActionResult, AnalysisResult, Clause, CoreMatterListItem, ProcessingState, SidebarView } from "./types";
+import { api, initializeAuthHandoff, MercyAuthStatus } from "./services/api";
+import { insertRiskReport, readDocumentText, readSelectedText } from "./services/word";
+import { AgentActionResult, AnalysisResult, CoreMatterListItem, ProcessingState } from "./types";
 
-const views: Array<{ value: SidebarView; label: string; icon: JSX.Element }> = [
-  { value: "risk", label: "Risk", icon: <ShieldCheckmark24Regular /> },
-  { value: "actions", label: "Actions", icon: <DocumentEdit24Regular /> },
-  { value: "templates", label: "Templates", icon: <DocumentAdd24Regular /> },
-  { value: "clauses", label: "Clauses", icon: <Library24Regular /> },
-  { value: "chat", label: "Chat", icon: <Chat24Regular /> },
-  { value: "report", label: "Report", icon: <DocumentBulletList24Regular /> }
-];
+type WorkflowKey = "analyze" | "draft" | "redline" | "cite" | "ethics" | "report";
+
+const workflowCopy: Record<WorkflowKey, { label: string; description: string; icon: JSX.Element }> = {
+  analyze: {
+    label: "Analyze",
+    description: "Review the active document or message for D.C. legal risk.",
+    icon: <Sparkle24Regular />
+  },
+  draft: {
+    label: "Draft",
+    description: "Prepare attorney-review language from the selected text.",
+    icon: <Edit24Regular />
+  },
+  redline: {
+    label: "Redline",
+    description: "Suggest revisions while preserving client intent.",
+    icon: <DocumentSearch24Regular />
+  },
+  cite: {
+    label: "Cite",
+    description: "Check citation status and D.C. source grounding.",
+    icon: <CheckmarkCircle24Regular />
+  },
+  ethics: {
+    label: "Ethics",
+    description: "Run D.C. confidentiality, review, and scope guardrails.",
+    icon: <ShieldCheckmark24Regular />
+  },
+  report: {
+    label: "Report",
+    description: "Insert a reliability-backed review report.",
+    icon: <DocumentBulletList24Regular />
+  }
+};
+
+function officeSurface(): "Word" | "Outlook" | "Office" {
+  if (typeof Office === "undefined") {
+    return "Office";
+  }
+  if (Office.context?.mailbox) {
+    return "Outlook";
+  }
+  return "Word";
+}
+
+function authLabel(auth: MercyAuthStatus): string {
+  if (auth.source === "local-dev") {
+    return "local dev session";
+  }
+  if (auth.source === "url-handoff") {
+    return "web handoff";
+  }
+  if (auth.source === "office-settings") {
+    return "Office session";
+  }
+  if (auth.source === "web-session") {
+    return "web session";
+  }
+  return "configured session";
+}
 
 export function App() {
-  const [activeView, setActiveView] = useState<SidebarView>("risk");
   const [processing, setProcessing] = useState<ProcessingState>("idle");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [lastAgentAction, setLastAgentAction] = useState<AgentActionResult | null>(null);
+  const [lastResponse, setLastResponse] = useState<AgentActionResult | null>(null);
   const [matters, setMatters] = useState<CoreMatterListItem[]>([]);
   const [activeMatterId, setActiveMatterId] = useState("");
+  const [auth, setAuth] = useState<MercyAuthStatus>(() => initializeAuthHandoff());
   const [coreStatus, setCoreStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [composer, setComposer] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isThinking = processing !== "idle";
-
-  useEffect(() => {
-    const sync = async () => {
-      const synced = await api.syncOfflineAgentQueue();
-      if (synced) {
-        setSuccessMessage(`${synced} queued agent request${synced === 1 ? "" : "s"} synced`);
-      }
-    };
-    window.addEventListener("online", sync);
-    void sync();
-    return () => window.removeEventListener("online", sync);
-  }, []);
+  const surface = useMemo(() => officeSurface(), []);
+  const isBusy = processing !== "idle";
 
   useEffect(() => {
-    const loadMatters = async () => {
+    const load = async () => {
+      setAuth(initializeAuthHandoff());
       setCoreStatus("checking");
       try {
         const loadedMatters = await api.listMatters();
@@ -73,212 +110,169 @@ export function App() {
       }
     };
 
-    void loadMatters();
+    void load();
+  }, []);
+
+  useEffect(() => {
+    const sync = async () => {
+      const synced = await api.syncOfflineAgentQueue();
+      if (synced) {
+        setNotice(`${synced} queued Mercy request${synced === 1 ? "" : "s"} synced`);
+      }
+    };
+    window.addEventListener("online", sync);
+    void sync();
+    return () => window.removeEventListener("online", sync);
   }, []);
 
   const handleMatterChange = (matterId: string) => {
     const matter = matters.find((candidate) => candidate.matter_id === matterId) ?? null;
     setActiveMatterId(matterId);
     api.setActiveMatter(matter);
-    setSuccessMessage(matter ? `${matter.name} context active` : "Using active Office document context");
+    setNotice(matter ? `${matter.name} context active` : "Using active Office content only");
   };
 
-  const handleAnalyzeDocument = async () => {
-    setProcessing("analyzing");
-    setSuccessMessage(null);
+  const setResult = (result: AgentActionResult) => {
+    setLastResponse(result);
     setErrorMessage(null);
+  };
 
+  const runAnalyze = async () => {
+    setProcessing("analyzing");
+    setNotice(null);
+    setErrorMessage(null);
     try {
       const documentText = await readDocumentText();
       const result = await api.analyzeDocument(documentText);
       setAnalysis(result);
-      setLastAgentAction({ title: "document analysis", content: result.summary, core: result.core! });
-      setActiveView("risk");
-      setSuccessMessage("Document analysis complete");
+      setResult({ title: "Analyze", content: result.summary, core: result.core! });
+      setNotice("Analysis complete");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Document analysis could not be completed. Retry when Word and the Mercy core are available.");
+      setErrorMessage(error instanceof Error ? error.message : "Mercy could not analyze the active Office content.");
     } finally {
       setProcessing("idle");
     }
   };
 
-  const handleExplainSelection = async () => {
-    setProcessing("explaining");
-    setSuccessMessage(null);
-    setErrorMessage(null);
-
-    try {
-      const selectedText = await readSelectedText();
-      const response = await api.explainClause(selectedText);
-      if (response.core) {
-        setLastAgentAction({ title: "selection analysis", content: response.content, core: response.core });
-      }
-      setActiveView("chat");
-      setSuccessMessage("Clause explanation ready");
-      return response;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Clause explanation could not be completed. Select text and retry.");
-      return {
-        id: crypto.randomUUID(),
-        role: "assistant" as const,
-        content: "Core service temporarily unavailable - working in offline mode. Retry with the selected clause before relying on this explanation."
-      };
-    } finally {
-      setProcessing("idle");
-    }
-  };
-
-  const handleInsertClause = async (clause: Clause) => {
-    setProcessing("inserting");
-    setSuccessMessage(null);
-    setErrorMessage(null);
-
-    try {
-      await insertTextAtCursor(clause.text);
-      setSuccessMessage(`${clause.title} inserted`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Word insert failed. Place the cursor in the document and retry.");
-    } finally {
-      window.setTimeout(() => setProcessing("idle"), 220);
-    }
-  };
-
-  const handleBusyChange = (busy: boolean) => {
-    setProcessing(busy ? "skill" : "idle");
-  };
-
-  const handleAgentAction = (result: AgentActionResult) => {
-    setLastAgentAction(result);
-    setErrorMessage(null);
-    setSuccessMessage(`${result.title} complete`);
-  };
-
-  const runSelectionDraft = async (title: string, instruction: string) => {
+  const runDraftingAction = async (title: string, instruction: string) => {
     setProcessing("drafting");
-    setSuccessMessage(null);
+    setNotice(null);
     setErrorMessage(null);
-
     try {
       const selectedText = await readSelectedText();
       const response = await api.draftRevision(instruction, selectedText);
       if (response.core) {
-        handleAgentAction({ title, content: response.content, core: response.core });
+        setResult({ title, content: response.content, core: response.core });
       }
-      setActiveView("chat");
-      setSuccessMessage(`${title} ready`);
+      setNotice(`${title} ready`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : `${title} could not be completed. Retry when the Mercy core is available.`);
+      setErrorMessage(error instanceof Error ? error.message : `${title} could not be completed.`);
     } finally {
       setProcessing("idle");
     }
   };
 
-  const handleDraftFromSelection = () =>
-    runSelectionDraft(
-      "draft from selection",
+  const runDraft = () =>
+    runDraftingAction(
+      "Draft",
       "Draft attorney-review language from the selected Office text with D.C. law context, source grounding, and concise drafting notes."
     );
 
-  const handleRedline = () =>
-    runSelectionDraft(
-      "redline suggestions",
+  const runRedline = () =>
+    runDraftingAction(
+      "Redline",
       "Suggest redline-style revisions for the selected Office text. Explain risk, preserve client intent, and mark every recommendation as attorney review required."
     );
 
-  const handleCiteCheck = async () => {
+  const runSkill = async (title: string, skillName: "cite_and_verify" | "check_dc_ethics") => {
     setProcessing("skill");
-    setSuccessMessage(null);
+    setNotice(null);
     setErrorMessage(null);
-
     try {
-      const selectedText = await readSelectedText();
-      const result = await api.runMcpSkill("cite_and_verify", selectedText);
-      handleAgentAction(result);
-      setActiveView("chat");
+      const text = skillName === "check_dc_ethics" ? await readDocumentText() : await readSelectedText();
+      const result = await api.runMcpSkill(skillName, text);
+      setResult({ ...result, title });
+      setNotice(`${title} complete`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Citation check could not be completed. Retry when Agent X is available.");
+      setErrorMessage(error instanceof Error ? error.message : `${title} could not be completed by Mercy.`);
     } finally {
       setProcessing("idle");
     }
   };
 
-  const handleEthicsCheck = async () => {
-    setProcessing("skill");
-    setSuccessMessage(null);
+  const runComposer = async () => {
+    if (!composer.trim()) {
+      return;
+    }
+    setProcessing("drafting");
+    setNotice(null);
     setErrorMessage(null);
-
     try {
-      const documentText = await readDocumentText();
-      const result = await api.runMcpSkill("check_dc_ethics", documentText);
-      handleAgentAction(result);
-      setActiveView("chat");
+      const context = await readDocumentText();
+      const response = await api.draftRevision(composer.trim(), context);
+      if (response.core) {
+        setResult({ title: "Ask Mercy", content: response.content, core: response.core });
+      }
+      setComposer("");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "D.C. ethics check could not be completed. Retry when Agent X is available.");
+      setErrorMessage(error instanceof Error ? error.message : "Mercy could not complete that request.");
     } finally {
       setProcessing("idle");
     }
   };
 
-  const content = (() => {
-    switch (activeView) {
-      case "clauses":
-        return <ClauseLibrary onInsertClause={handleInsertClause} />;
-      case "templates":
-        return <TemplateGallery isBusy={isThinking} onBusyChange={handleBusyChange} onResult={handleAgentAction} />;
-      case "chat":
-        return <AssistantChat onExplainSelection={handleExplainSelection} />;
-      case "actions":
-        return (
-          <DocumentActions
-            analysis={analysis}
-            onAnalyzeDocument={handleAnalyzeDocument}
-            onDraftRevision={handleDraftFromSelection}
-            onRedline={handleRedline}
-            onCiteCheck={handleCiteCheck}
-            onEthicsCheck={handleEthicsCheck}
-            isBusy={isThinking}
-          />
-        );
-      case "report":
-        return (
-          <DocumentActions
-            analysis={analysis}
-            onAnalyzeDocument={handleAnalyzeDocument}
-            onDraftRevision={handleDraftFromSelection}
-            onRedline={handleRedline}
-            onCiteCheck={handleCiteCheck}
-            onEthicsCheck={handleEthicsCheck}
-            isBusy={isThinking}
-          />
-        );
-      case "risk":
-      default:
-        return <RiskSummary analysis={analysis} isBusy={isThinking} onAnalyzeDocument={handleAnalyzeDocument} />;
-    }
-  })();
+  const runReport = async () => {
+    const core = lastResponse?.core ?? analysis?.core;
+    const report = analysis
+      ? `Mercy Legal AI Review Report\n\nMatter: ${
+          matters.find((matter) => matter.matter_id === activeMatterId)?.name ?? "Active Office content"
+        }\nRoute: ${
+          core?.route
+            ? `${core.route.expert_label} (${core.route.route_mode}, ${Math.round(core.route.confidence * 100)}% confidence)`
+            : "pending"
+        }\nGuardrails: ${core?.guardrailStatus ?? "review required"}\nD.C. grounding: ${
+          core?.officialSourceGrounding ?? core?.groundingStatus ?? "pending"
+        }\nCitations: ${core?.citations?.map((citation) => `${citation.label} - ${citation.verification_status}`).join("; ") ?? "[VERIFY CITE]"}\nLangSmith: ${
+          core?.langsmithUrl ?? core?.traceId ?? "not available"
+        }\nAttorney review: required\n\n${analysis.summary}\n\nFindings:\n${analysis.findings
+          .map((finding) => `- ${finding.level.toUpperCase()}: ${finding.title} - ${finding.recommendation}`)
+          .join("\n")}`
+      : `Mercy Legal AI Review Report\n\nRun Analyze before generating a full report.\n\nLast response:\n${lastResponse?.content ?? "No Mercy response yet."}`;
+    await insertRiskReport(report);
+    setNotice("Report inserted");
+  };
+
+  const runWorkflow = (workflow: WorkflowKey) => {
+    if (workflow === "analyze") void runAnalyze();
+    if (workflow === "draft") void runDraft();
+    if (workflow === "redline") void runRedline();
+    if (workflow === "cite") void runSkill("Cite", "cite_and_verify");
+    if (workflow === "ethics") void runSkill("Ethics", "check_dc_ethics");
+    if (workflow === "report") void runReport();
+  };
 
   return (
-    <SidebarShell>
-      <header className="appHeader">
-        <div className="brandRow">
-          <MercyLogo active={isThinking} />
-          <div>
-            <Text as="h1" className="appTitle">
+    <div className="officePane">
+      <header className="paneHeader">
+        <div className="brandLine">
+          <MercyLogo active={isBusy} />
+          <div className="brandText">
+            <Text as="h1" className="paneTitle">
               Mercy Legal AI
             </Text>
-            <Text className="appSubtitle">Ask Agent X inside Word and Outlook</Text>
+            <Text className="paneSubtitle">{surface} task pane</Text>
           </div>
         </div>
-        <Badge appearance="outline" className="jurisdictionBadge">
-          DC / Office
+        <Badge appearance="tint" color={coreStatus === "online" ? "success" : coreStatus === "checking" ? "subtle" : "warning"}>
+          {coreStatus === "online" ? "Core online" : coreStatus === "checking" ? "Checking" : "Local fallback"}
         </Badge>
       </header>
 
-      <section className="contextBar" aria-label="Matter context">
+      <section className="matterPanel" aria-label="Matter context">
         <label className="matterPicker">
-          <span>Current matter</span>
+          <span>Client matter</span>
           <select value={activeMatterId} onChange={(event) => handleMatterChange(event.target.value)}>
-            <option value="">Active Office document only</option>
+            <option value="">Active Office content only</option>
             {matters.map((matter) => (
               <option key={matter.matter_id} value={matter.matter_id}>
                 {matter.name}
@@ -286,112 +280,107 @@ export function App() {
             ))}
           </select>
         </label>
-        <Badge appearance="tint" color={coreStatus === "online" ? "success" : coreStatus === "checking" ? "subtle" : "warning"}>
-          Core {coreStatus}
-        </Badge>
-        <Badge appearance="tint" color="brand">
-          surface office_addin
-        </Badge>
-      </section>
-
-      <section className="reviewHero">
-        <div>
-          <Text className="heroKicker">Active Office Surface</Text>
-          <Text as="h2" className="heroTitle">
-            Agent X workspace
-          </Text>
-          <Text className="heroCopy">Analyze selections, draft revisions, check citations, and run D.C. ethics review without leaving Word or Outlook.</Text>
-        </div>
-        <div className="heroStats">
-          <div>
-            <Text className="statValue">{lastAgentAction?.core.route ? Math.round(lastAgentAction.core.route.confidence * 100) : analysis?.core?.route ? Math.round(analysis.core.route.confidence * 100) : "--"}</Text>
-            <Text className="statLabel">Route confidence</Text>
-          </div>
-          <div>
-            <Text className="statValue">
-              {lastAgentAction?.core.cacheStatus === "queued"
-                ? "Q"
-                : lastAgentAction?.core.guardrailStatus ?? analysis?.core?.guardrailStatus ?? "--"}
-            </Text>
-            <Text className="statLabel">Reliability</Text>
-          </div>
+        <div className="sessionLine">
+          <span>{authLabel(auth)}</span>
+          <span>{auth.tenantId}</span>
         </div>
       </section>
 
-      <BetaWelcome lastResult={lastAgentAction} />
+      <section className="composerPanel" aria-label="Ask Mercy">
+        <Textarea
+          className="mercyComposer"
+          resize="vertical"
+          value={composer}
+          onChange={(_, data) => setComposer(data.value)}
+          placeholder="Ask Mercy anything..."
+        />
+        <div className="composerActions">
+          <Text className="composerHint">Uses selected matter, active Office content, D.C. guardrails, and attorney-review metadata.</Text>
+          <Button appearance="primary" icon={isBusy ? <Spinner size="tiny" /> : <Send24Regular />} onClick={runComposer} disabled={isBusy || !composer.trim()}>
+            Ask
+          </Button>
+        </div>
+      </section>
 
-      {(lastAgentAction?.core ?? analysis?.core) && (
-        <ReliabilitySignals core={lastAgentAction?.core ?? analysis?.core} compact />
-      )}
+      <section className="workflowSection" aria-label="Workflows">
+        <div className="sectionHeader">
+          <Text weight="semibold">Workflows</Text>
+          <Tooltip content="Retry queued requests once Mercy core is reachable." relationship="label">
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<ArrowClockwise24Regular />}
+              onClick={async () => {
+                const synced = await api.syncOfflineAgentQueue();
+                setNotice(synced ? `${synced} request${synced === 1 ? "" : "s"} synced` : "No queued requests");
+              }}
+              disabled={isBusy}
+            />
+          </Tooltip>
+        </div>
+        <div className="workflowList">
+          {(Object.keys(workflowCopy) as WorkflowKey[]).map((key) => (
+            <button key={key} type="button" className="workflowButton" onClick={() => runWorkflow(key)} disabled={isBusy}>
+              <span className="workflowIcon">{workflowCopy[key].icon}</span>
+              <span>
+                <strong>{workflowCopy[key].label}</strong>
+                <small>{workflowCopy[key].description}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <DocumentActions
-        analysis={analysis}
-        onAnalyzeDocument={handleAnalyzeDocument}
-        onDraftRevision={handleDraftFromSelection}
-        onRedline={handleRedline}
-        onCiteCheck={handleCiteCheck}
-        onEthicsCheck={handleEthicsCheck}
-        isBusy={isThinking}
-        compact
-      />
+      <section className="responseSection" aria-label="Mercy response">
+        <div className="sectionHeader">
+          <Text weight="semibold">Mercy response</Text>
+          {isBusy ? <Badge appearance="tint">Working</Badge> : null}
+        </div>
+        <AnimatePresence mode="wait">
+          {lastResponse ? (
+            <motion.article
+              key={`${lastResponse.title}-${lastResponse.core.traceId ?? lastResponse.content.slice(0, 16)}`}
+              className="responseCard"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <Text className="responseTitle">{lastResponse.title}</Text>
+              <Text className="responseBody">{lastResponse.content}</Text>
+              <ReliabilitySignals core={lastResponse.core} compact />
+            </motion.article>
+          ) : (
+            <motion.div className="emptyResponse" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <Text>Ask Mercy or run a workflow to see the response and reliability panel.</Text>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
 
-      <McpSkillPanel isBusy={isThinking} onBusyChange={handleBusyChange} onResult={handleAgentAction} />
-
-      <TabList
-        className="viewTabs"
-        selectedValue={activeView}
-        onTabSelect={(_, data) => setActiveView(data.value as SidebarView)}
-      >
-        {views.map((view) => (
-          <Tab key={view.value} value={view.value} icon={view.icon}>
-            {view.label}
-          </Tab>
-        ))}
-      </TabList>
-
-      <Divider className="softDivider" />
-
-      <AnimatePresence mode="wait">
-        <motion.main
-          key={activeView}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
-          className="viewContent"
-        >
-          {content}
-        </motion.main>
-      </AnimatePresence>
+      <footer className="reviewFooter">Requires attorney review before client use. Verify all citations and D.C. source grounding.</footer>
 
       <AnimatePresence>
-        {errorMessage && (
-          <motion.div
-            className="errorToast"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-          >
+        {errorMessage ? (
+          <motion.div className="officeToast error" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
             <span>{errorMessage}</span>
             <button type="button" onClick={() => setErrorMessage(null)}>
               Dismiss
             </button>
           </motion.div>
-        )}
-        {successMessage && (
+        ) : null}
+        {notice ? (
           <motion.div
-            className="successToast"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-            onAnimationComplete={() => window.setTimeout(() => setSuccessMessage(null), 1800)}
+            className="officeToast"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            onAnimationComplete={() => window.setTimeout(() => setNotice(null), 1800)}
           >
-            {successMessage}
+            {notice}
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
-    </SidebarShell>
+    </div>
   );
 }

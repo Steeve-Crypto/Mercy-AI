@@ -138,7 +138,7 @@ export function McpSkillPanel({ isBusy, onBusyChange, onResult }: McpSkillPanelP
     <section className="mcpPanel">
       <div className="mcpHeader">
         <div>
-          <Text weight="semibold">Agent skills</Text>
+          <Text weight="semibold">Mercy skills</Text>
           <Text className="mcpSubtext">
             {manifest ? "Live MCP discovery from /v1/agent/skills" : "Using cached skill metadata until the core responds"}
           </Text>

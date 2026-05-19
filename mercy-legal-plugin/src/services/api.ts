@@ -39,6 +39,14 @@ const QUEUE_KEY = "mercy-agent-offline-queue";
 const RECENT_SAFE_RESPONSES_KEY = "mercy-agent-recent-safe-responses";
 let unsafeStoragePurged = false;
 
+export type MercyAuthStatus = {
+  tenantId: string;
+  userId: string;
+  roles: string;
+  hasToken: boolean;
+  source: "web-session" | "office-settings" | "url-handoff" | "env" | "local-dev";
+};
+
 type CoreIntakeResponse = {
   matter_context: CoreMatterContext;
   matter_id: string;
@@ -139,6 +147,7 @@ const STORAGE_SAFE_AGENT_RESULT = {
 };
 
 function authContext(): { token?: string; tenantId: string; userId: string; roles: string } {
+  initializeAuthHandoff();
   const store = storage();
   const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
   return {
@@ -628,6 +637,86 @@ function metadataFromAgent(
   };
 }
 
+function officeRoamingSettings(): { get?: (key: string) => unknown; set?: (key: string, value: unknown) => void; saveAsync?: () => void } | null {
+  const officeContext = typeof Office !== "undefined" ? Office.context : undefined;
+  return (officeContext as { roamingSettings?: { get?: (key: string) => unknown; set?: (key: string, value: unknown) => void; saveAsync?: () => void } } | undefined)?.roamingSettings ?? null;
+}
+
+function persistAuthValue(key: string, value: string, source: MercyAuthStatus["source"]): void {
+  const store = storage();
+  store?.setItem(key, value);
+  store?.setItem("mercy.auth.source", source);
+  const roaming = officeRoamingSettings();
+  roaming?.set?.(key, value);
+  roaming?.set?.("mercy.auth.source", source);
+  roaming?.saveAsync?.();
+}
+
+function hydrateAuthFromUrl(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const params = new URLSearchParams(`${window.location.search.replace(/^\?/, "")}&${window.location.hash.replace(/^#/, "")}`);
+  const values = {
+    "mercy.auth.token": params.get("mercy_token") || params.get("access_token"),
+    "mercy.auth.tenantId": params.get("mercy_tenant") || params.get("tenant_id"),
+    "mercy.auth.userId": params.get("mercy_user") || params.get("user_id"),
+    "mercy.auth.roles": params.get("mercy_roles") || params.get("roles")
+  };
+  let hydrated = false;
+  Object.entries(values).forEach(([key, value]) => {
+    if (value) {
+      persistAuthValue(key, value, "url-handoff");
+      hydrated = true;
+    }
+  });
+  return hydrated;
+}
+
+function hydrateAuthFromOffice(): boolean {
+  const roaming = officeRoamingSettings();
+  const store = storage();
+  if (!roaming || !store) {
+    return false;
+  }
+  let hydrated = false;
+  ["mercy.auth.token", "mercy.auth.tenantId", "mercy.auth.userId", "mercy.auth.roles"].forEach((key) => {
+    const existing = store.getItem(key);
+    const value = roaming.get?.(key);
+    if (!existing && typeof value === "string" && value.trim()) {
+      store.setItem(key, value);
+      hydrated = true;
+    }
+  });
+  if (hydrated) {
+    store.setItem("mercy.auth.source", "office-settings");
+  }
+  return hydrated;
+}
+
+export function initializeAuthHandoff(): MercyAuthStatus {
+  const store = storage();
+  const fromUrl = hydrateAuthFromUrl();
+  const fromOffice = hydrateAuthFromOffice();
+  const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
+  const tenantId = store?.getItem("mercy.auth.tenantId") || viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant";
+  const userId = store?.getItem("mercy.auth.userId") || viteEnv?.VITE_MERCY_USER_ID || "office-addin-user";
+  const roles = store?.getItem("mercy.auth.roles") || "attorney";
+  const storedSource = store?.getItem("mercy.auth.source") as MercyAuthStatus["source"] | null;
+  const source: MercyAuthStatus["source"] = fromUrl
+    ? "url-handoff"
+    : fromOffice
+      ? "office-settings"
+      : token && storedSource
+        ? storedSource
+        : token
+          ? viteEnv?.VITE_MERCY_API_TOKEN
+            ? "env"
+            : "web-session"
+          : "local-dev";
+  return { tenantId, userId, roles, hasToken: Boolean(token), source };
+}
+
 function scoreFromMetadata(metadata: CoreResponseMetadata): number {
   const status = metadata.guardrailStatus ?? metadata.groundingStatus;
   if (status === "pass") {
@@ -641,12 +730,12 @@ function scoreFromMetadata(metadata: CoreResponseMetadata): number {
 }
 
 function findingFromAgent(content: string, metadata: CoreResponseMetadata): RiskFinding[] {
-  const excerpt = content.split(/\n+/).find((line) => line.trim().length > 20)?.trim() ?? "Agent output requires attorney review.";
+  const excerpt = content.split(/\n+/).find((line) => line.trim().length > 20)?.trim() ?? "Mercy output requires attorney review.";
   return [
     {
       id: "agent-review",
       level: metadata.guardrailStatus === "pass" ? "low" : metadata.guardrailStatus === "block" ? "high" : "medium",
-      title: "Agent network review signal",
+      title: "Mercy review signal",
       excerpt: excerpt.slice(0, 180),
       dcContext:
         "This output was routed through the MoE legal router and agent network with D.C. ethics, citation, grounding, and attorney-review checks.",
@@ -795,6 +884,7 @@ export const api = {
   getTemplateGallery,
   getBetaStatus,
   listMatters,
+  initializeAuthHandoff,
   setActiveMatter,
   syncOfflineAgentQueue,
   queuedAgentRequestCount,

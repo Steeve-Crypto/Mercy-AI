@@ -57,9 +57,9 @@ export function ReliabilitySignals({ core, compact = false }: ReliabilitySignals
   return (
     <div className={compact ? "reliabilitySignals compact" : "reliabilitySignals"}>
       <div className="reliabilityTitleRow">
-        <Text className="metricValue">Agent X Reliability</Text>
+        <Text className="metricValue">Reliability Panel</Text>
         <Badge appearance="tint" color="brand">
-          Hermes MoE
+          Mercy Core
         </Badge>
       </div>
       <div className="signalRow">
