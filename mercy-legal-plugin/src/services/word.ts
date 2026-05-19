@@ -1,6 +1,15 @@
+export type OfficeTextSource = "word-selection" | "word-document" | "outlook-selection" | "outlook-body" | "fallback";
+
+export type OfficeTextContext = {
+  text: string;
+  source: OfficeTextSource;
+};
+
 export async function readDocumentText(): Promise<string> {
   if (typeof Word === "undefined") {
-    return readOutlookBodyText("Office document body is unavailable. Open Mercy in Word or Outlook with an active document/message.");
+    return (
+      await readOutlookBodyText("Office document body is unavailable. Open Mercy in Word or Outlook with an active document/message.")
+    ).text;
   }
 
   return Word.run(async (context) => {
@@ -13,7 +22,11 @@ export async function readDocumentText(): Promise<string> {
 
 export async function readSelectedText(): Promise<string> {
   if (typeof Word === "undefined") {
-    return readOutlookBodyText("Office selection is unavailable. Select text in Word, or open an Outlook message to analyze the message body.");
+    return (
+      await readOutlookSelectedTextOrBody(
+        "Office selection is unavailable. Select text in Word, or open an Outlook message to analyze the message body."
+      )
+    ).text;
   }
 
   return Word.run(async (context) => {
@@ -57,7 +70,66 @@ export async function insertRiskReport(reportText: string): Promise<void> {
   });
 }
 
-async function readOutlookBodyText(fallback: string): Promise<string> {
+export async function readSelectedTextContext(): Promise<OfficeTextContext> {
+  if (typeof Word === "undefined") {
+    return readOutlookSelectedTextOrBody(
+      "Office selection is unavailable. Select text in Word, or open an Outlook message to analyze the message body."
+    );
+  }
+
+  return Word.run(async (context) => {
+    const selection = context.document.getSelection();
+    selection.load("text");
+    await context.sync();
+    const text = selection.text?.trim();
+    if (text) {
+      return { text, source: "word-selection" };
+    }
+    const body = context.document.body;
+    body.load("text");
+    await context.sync();
+    return { text: body.text, source: "word-document" };
+  });
+}
+
+async function readOutlookSelectedTextOrBody(fallback: string): Promise<OfficeTextContext> {
+  const selected = await readOutlookSelectedText();
+  if (selected.trim()) {
+    return { text: selected, source: "outlook-selection" };
+  }
+  return readOutlookBodyText(fallback);
+}
+
+async function readOutlookSelectedText(): Promise<string> {
+  const item = typeof Office !== "undefined" ? Office.context?.mailbox?.item : undefined;
+  const mailboxItem = item as
+    | {
+        getSelectedDataAsync?: (
+          coercionType: Office.CoercionType,
+          callback: (result: Office.AsyncResult<string>) => void
+        ) => void;
+        body?: {
+          getSelectedDataAsync?: (
+            coercionType: Office.CoercionType,
+            callback: (result: Office.AsyncResult<string>) => void
+          ) => void;
+        };
+      }
+    | undefined;
+
+  const itemSelection = await readOutlookAsyncText(Boolean(mailboxItem?.getSelectedDataAsync), (callback) =>
+    mailboxItem?.getSelectedDataAsync?.(Office.CoercionType.Text, callback)
+  );
+  if (itemSelection.trim()) {
+    return itemSelection;
+  }
+
+  return readOutlookAsyncText(Boolean(mailboxItem?.body?.getSelectedDataAsync), (callback) =>
+    mailboxItem?.body?.getSelectedDataAsync?.(Office.CoercionType.Text, callback)
+  );
+}
+
+async function readOutlookBodyText(fallback: string): Promise<OfficeTextContext> {
   const item = typeof Office !== "undefined" ? Office.context?.mailbox?.item : undefined;
   const body = item?.body as
     | {
@@ -69,17 +141,40 @@ async function readOutlookBodyText(fallback: string): Promise<string> {
     | undefined;
 
   if (!body?.getAsync) {
-    return fallback;
+    return { text: fallback, source: "fallback" };
   }
 
   return new Promise((resolve) => {
     body.getAsync!(Office.CoercionType.Text, (result) => {
       if (result.status === Office.AsyncResultStatus.Succeeded && result.value?.trim()) {
-        resolve(result.value);
+        resolve({ text: result.value, source: "outlook-body" });
         return;
       }
-      resolve(fallback);
+      resolve({ text: fallback, source: "fallback" });
     });
+  });
+}
+
+async function readOutlookAsyncText(
+  available: boolean,
+  run: (callback: (result: Office.AsyncResult<string>) => void) => void | undefined
+): Promise<string> {
+  if (typeof Office === "undefined" || !available) {
+    return "";
+  }
+
+  return new Promise((resolve) => {
+    try {
+      run((result) => {
+        if (result.status === Office.AsyncResultStatus.Succeeded && typeof result.value === "string") {
+          resolve(result.value);
+          return;
+        }
+        resolve("");
+      });
+    } catch {
+      resolve("");
+    }
   });
 }
 

@@ -22,6 +22,12 @@ export default defineConfig(async () => {
           taskpane: resolve(__dirname, "taskpane.html"),
           commands: resolve(__dirname, "commands.html"),
           support: resolve(__dirname, "support.html")
+        },
+        output: {
+          manualChunks: {
+            react: ["react", "react-dom"],
+            fluent: ["@fluentui/react-components", "@fluentui/react-icons"]
+          }
         }
       }
     }

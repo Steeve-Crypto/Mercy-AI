@@ -90,6 +90,20 @@ button {
   letter-spacing: 0;
 }
 
+.mercyLogo.active {
+  animation: mercyPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes mercyPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(96, 65, 166, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(96, 65, 166, 0.14);
+  }
+}
+
 .matterPanel,
 .composerPanel,
 .workflowSection,
@@ -127,6 +141,12 @@ button {
   padding: 5px 7px;
 }
 
+.matterSearchInput input {
+  min-height: 30px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .matterPicker select:focus,
 .mercyComposer textarea:focus {
   border-color: #6041a6;
@@ -144,6 +164,10 @@ button {
 }
 
 .sessionLine span + span::before {
+  content: "";
+}
+
+.sessionTenant::before {
   content: "Tenant ";
   color: #858992;
 }
@@ -253,7 +277,19 @@ button {
 .responseCard {
   display: grid;
   gap: 8px;
+  animation: responseIn 0.16s ease-out;
   padding: 9px;
+}
+
+@keyframes responseIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .responseTitle {

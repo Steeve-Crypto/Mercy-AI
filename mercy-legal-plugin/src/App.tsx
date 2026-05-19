@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Badge, Button, Spinner, Text, Textarea, Tooltip } from "@fluentui/react-components";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Badge, Button, Input, Spinner, Text, Textarea, Tooltip } from "@fluentui/react-components";
 import {
   ArrowClockwise24Regular,
   CheckmarkCircle24Regular,
@@ -14,10 +13,11 @@ import {
 import { MercyLogo } from "./components/brand/MercyLogo";
 import { ReliabilitySignals } from "./components/metadata/ReliabilitySignals";
 import { api, initializeAuthHandoff, MercyAuthStatus } from "./services/api";
-import { insertRiskReport, readDocumentText, readSelectedText } from "./services/word";
+import { insertRiskReport, readDocumentText, readSelectedText, readSelectedTextContext } from "./services/word";
 import { AgentActionResult, AnalysisResult, CoreMatterListItem, ProcessingState } from "./types";
 
 type WorkflowKey = "analyze" | "draft" | "redline" | "cite" | "ethics" | "report";
+const RECENT_MATTERS_KEY = "mercy.office.recentMatterIds";
 
 const workflowCopy: Record<WorkflowKey, { label: string; description: string; icon: JSX.Element }> = {
   analyze: {
@@ -78,15 +78,54 @@ function authLabel(auth: MercyAuthStatus): string {
   return "configured session";
 }
 
+function readRecentMatterIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_MATTERS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberMatter(matterId: string): void {
+  if (!matterId) {
+    return;
+  }
+  try {
+    const recent = readRecentMatterIds().filter((id) => id !== matterId);
+    window.localStorage.setItem(RECENT_MATTERS_KEY, JSON.stringify([matterId, ...recent].slice(0, 8)));
+  } catch {
+    return;
+  }
+}
+
+function sortRecentFirst(matters: CoreMatterListItem[]): CoreMatterListItem[] {
+  const recent = readRecentMatterIds();
+  return [...matters].sort((left, right) => {
+    const leftIndex = recent.indexOf(left.matter_id);
+    const rightIndex = recent.indexOf(right.matter_id);
+    if (leftIndex === -1 && rightIndex === -1) {
+      return (right.last_updated ?? "").localeCompare(left.last_updated ?? "");
+    }
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+}
+
 export function App() {
   const [processing, setProcessing] = useState<ProcessingState>("idle");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [lastResponse, setLastResponse] = useState<AgentActionResult | null>(null);
   const [matters, setMatters] = useState<CoreMatterListItem[]>([]);
   const [activeMatterId, setActiveMatterId] = useState("");
+  const activeMatterIdRef = useRef("");
+  const [matterSearch, setMatterSearch] = useState("");
+  const [matterLoading, setMatterLoading] = useState(false);
   const [auth, setAuth] = useState<MercyAuthStatus>(() => initializeAuthHandoff());
   const [coreStatus, setCoreStatus] = useState<"checking" | "online" | "offline">("checking");
   const [composer, setComposer] = useState("");
+  const [detectedSelection, setDetectedSelection] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -98,9 +137,10 @@ export function App() {
       setAuth(initializeAuthHandoff());
       setCoreStatus("checking");
       try {
-        const loadedMatters = await api.listMatters();
+        const loadedMatters = sortRecentFirst(await api.listMatters());
         setMatters(loadedMatters);
         const firstMatter = loadedMatters[0] ?? null;
+        activeMatterIdRef.current = firstMatter?.matter_id ?? "";
         setActiveMatterId(firstMatter?.matter_id ?? "");
         api.setActiveMatter(firstMatter);
         setCoreStatus("online");
@@ -114,6 +154,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const handle = window.setTimeout(async () => {
+      setMatterLoading(true);
+      const loadedMatters = sortRecentFirst(await api.listMatters(matterSearch));
+      setMatters(loadedMatters);
+      if (activeMatterIdRef.current && !loadedMatters.some((matter) => matter.matter_id === activeMatterIdRef.current)) {
+        const activeMatter = loadedMatters[0] ?? null;
+        activeMatterIdRef.current = activeMatter?.matter_id ?? "";
+        setActiveMatterId(activeMatter?.matter_id ?? "");
+        api.setActiveMatter(activeMatter);
+      }
+      setMatterLoading(false);
+    }, 240);
+
+    return () => window.clearTimeout(handle);
+  }, [matterSearch]);
+
+  useEffect(() => {
     const sync = async () => {
       const synced = await api.syncOfflineAgentQueue();
       if (synced) {
@@ -125,9 +182,46 @@ export function App() {
     return () => window.removeEventListener("online", sync);
   }, []);
 
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+    const handle = window.setTimeout(() => setNotice(null), 1800);
+    return () => window.clearTimeout(handle);
+  }, [notice]);
+
+  useEffect(() => {
+    if (surface !== "Outlook") {
+      return;
+    }
+
+    let mounted = true;
+    const loadSelection = async () => {
+      const context = await readSelectedTextContext();
+      if (!mounted || context.source !== "outlook-selection" || !context.text.trim()) {
+        return;
+      }
+      const selected = context.text.trim();
+      setDetectedSelection(selected);
+      setComposer((current) =>
+        current.trim()
+          ? current
+          : `Analyze this selected Outlook text for D.C. legal risk, citations, and ethics guardrails:\n\n${selected.slice(0, 1200)}`
+      );
+      setNotice("Selected Outlook text loaded into Mercy");
+    };
+
+    void loadSelection();
+    return () => {
+      mounted = false;
+    };
+  }, [surface]);
+
   const handleMatterChange = (matterId: string) => {
     const matter = matters.find((candidate) => candidate.matter_id === matterId) ?? null;
+    activeMatterIdRef.current = matterId;
     setActiveMatterId(matterId);
+    rememberMatter(matterId);
     api.setActiveMatter(matter);
     setNotice(matter ? `${matter.name} context active` : "Using active Office content only");
   };
@@ -142,11 +236,15 @@ export function App() {
     setNotice(null);
     setErrorMessage(null);
     try {
-      const documentText = await readDocumentText();
+      const selectionContext = surface === "Outlook" ? await readSelectedTextContext() : null;
+      const documentText =
+        selectionContext?.source === "outlook-selection" && selectionContext.text.trim()
+          ? selectionContext.text
+          : await readDocumentText();
       const result = await api.analyzeDocument(documentText);
       setAnalysis(result);
       setResult({ title: "Analyze", content: result.summary, core: result.core! });
-      setNotice("Analysis complete");
+      setNotice(selectionContext?.source === "outlook-selection" ? "Selected text analysis complete" : "Analysis complete");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Mercy could not analyze the active Office content.");
     } finally {
@@ -208,7 +306,8 @@ export function App() {
     setNotice(null);
     setErrorMessage(null);
     try {
-      const context = await readDocumentText();
+      const selectionContext = await readSelectedTextContext();
+      const context = selectionContext.source.includes("selection") ? selectionContext.text : await readDocumentText();
       const response = await api.draftRevision(composer.trim(), context);
       if (response.core) {
         setResult({ title: "Ask Mercy", content: response.content, core: response.core });
@@ -271,6 +370,13 @@ export function App() {
       <section className="matterPanel" aria-label="Matter context">
         <label className="matterPicker">
           <span>Client matter</span>
+          <Input
+            className="matterSearchInput"
+            value={matterSearch}
+            onChange={(_, data) => setMatterSearch(data.value)}
+            placeholder="Search matters"
+            aria-label="Search matters"
+          />
           <select value={activeMatterId} onChange={(event) => handleMatterChange(event.target.value)}>
             <option value="">Active Office content only</option>
             {matters.map((matter) => (
@@ -282,7 +388,8 @@ export function App() {
         </label>
         <div className="sessionLine">
           <span>{authLabel(auth)}</span>
-          <span>{auth.tenantId}</span>
+          <span className="sessionTenant">{auth.tenantId}</span>
+          <span>{matterLoading ? "Searching matters" : `${matters.length} matter${matters.length === 1 ? "" : "s"}`}</span>
         </div>
       </section>
 
@@ -295,7 +402,11 @@ export function App() {
           placeholder="Ask Mercy anything..."
         />
         <div className="composerActions">
-          <Text className="composerHint">Uses selected matter, active Office content, D.C. guardrails, and attorney-review metadata.</Text>
+          <Text className="composerHint">
+            {detectedSelection
+              ? "Selected Outlook text is loaded. Mercy will still require attorney review and citation verification."
+              : "Uses selected matter, active Office content, D.C. guardrails, and attorney-review metadata."}
+          </Text>
           <Button appearance="primary" icon={isBusy ? <Spinner size="tiny" /> : <Send24Regular />} onClick={runComposer} disabled={isBusy || !composer.trim()}>
             Ask
           </Button>
@@ -336,51 +447,34 @@ export function App() {
           <Text weight="semibold">Mercy response</Text>
           {isBusy ? <Badge appearance="tint">Working</Badge> : null}
         </div>
-        <AnimatePresence mode="wait">
-          {lastResponse ? (
-            <motion.article
-              key={`${lastResponse.title}-${lastResponse.core.traceId ?? lastResponse.content.slice(0, 16)}`}
-              className="responseCard"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-            >
+        {lastResponse ? (
+            <article key={`${lastResponse.title}-${lastResponse.core.traceId ?? lastResponse.content.slice(0, 16)}`} className="responseCard">
               <Text className="responseTitle">{lastResponse.title}</Text>
               <Text className="responseBody">{lastResponse.content}</Text>
               <ReliabilitySignals core={lastResponse.core} compact />
-            </motion.article>
-          ) : (
-            <motion.div className="emptyResponse" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            </article>
+        ) : (
+            <div className="emptyResponse">
               <Text>Ask Mercy or run a workflow to see the response and reliability panel.</Text>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
       </section>
 
       <footer className="reviewFooter">Requires attorney review before client use. Verify all citations and D.C. source grounding.</footer>
 
-      <AnimatePresence>
-        {errorMessage ? (
-          <motion.div className="officeToast error" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+      {errorMessage ? (
+          <div className="officeToast error">
             <span>{errorMessage}</span>
             <button type="button" onClick={() => setErrorMessage(null)}>
               Dismiss
             </button>
-          </motion.div>
-        ) : null}
-        {notice ? (
-          <motion.div
-            className="officeToast"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            onAnimationComplete={() => window.setTimeout(() => setNotice(null), 1800)}
-          >
+          </div>
+      ) : null}
+      {notice ? (
+          <div className="officeToast">
             {notice}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          </div>
+      ) : null}
     </div>
   );
 }

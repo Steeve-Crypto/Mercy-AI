@@ -536,9 +536,10 @@ async function getBetaStatus(): Promise<CoreBetaStatus | null> {
   }
 }
 
-async function listMatters(): Promise<CoreMatterListItem[]> {
+async function listMatters(search = ""): Promise<CoreMatterListItem[]> {
   try {
-    const matters = await coreFetch<CoreMatterListItem[]>("/v1/matters");
+    const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+    const matters = await coreFetch<CoreMatterListItem[]>(`/v1/matters${query}`);
     return matters;
   } catch {
     return [];
@@ -694,10 +695,33 @@ function hydrateAuthFromOffice(): boolean {
   return hydrated;
 }
 
+function promoteWebSessionToOffice(): boolean {
+  const store = storage();
+  const roaming = officeRoamingSettings();
+  const token = store?.getItem("mercy.auth.token");
+  const tenantId = store?.getItem("mercy.auth.tenantId");
+  const userId = store?.getItem("mercy.auth.userId");
+  if (!store || !roaming || !token || !tenantId || !userId) {
+    return false;
+  }
+
+  ["mercy.auth.token", "mercy.auth.tenantId", "mercy.auth.userId", "mercy.auth.roles"].forEach((key) => {
+    const value = store.getItem(key);
+    if (value) {
+      roaming.set?.(key, value);
+    }
+  });
+  store.setItem("mercy.auth.source", "web-session");
+  roaming.set?.("mercy.auth.source", "web-session");
+  roaming.saveAsync?.();
+  return true;
+}
+
 export function initializeAuthHandoff(): MercyAuthStatus {
   const store = storage();
   const fromUrl = hydrateAuthFromUrl();
   const fromOffice = hydrateAuthFromOffice();
+  const fromWebSession = promoteWebSessionToOffice();
   const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
   const tenantId = store?.getItem("mercy.auth.tenantId") || viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant";
   const userId = store?.getItem("mercy.auth.userId") || viteEnv?.VITE_MERCY_USER_ID || "office-addin-user";
@@ -707,6 +731,8 @@ export function initializeAuthHandoff(): MercyAuthStatus {
     ? "url-handoff"
     : fromOffice
       ? "office-settings"
+      : fromWebSession
+        ? "web-session"
       : token && storedSource
         ? storedSource
         : token
