@@ -14,7 +14,9 @@ Mercy now follows a "One Brain, Multiple Surfaces" model:
 3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, exposes the shared D.C. template gallery and limited beta status, and now redacts local offline storage.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
-The implementation is functional for local development and demo workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, a D.C. knowledge seeding pipeline, LangGraph runtime activation, LiteLLM-backed provider integration, and stronger eval thresholds in place; remaining hardening centers on encryption/retention policy, full official source text extraction, real MCP transport, and deployment operations.
+The implementation is functional for local development and controlled beta-candidate workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, a D.C. knowledge seeding pipeline, LangGraph runtime activation, LiteLLM-backed provider integration, stronger eval thresholds, Office add-in core integration, limited beta infrastructure, monitoring, and SOC 2 preparation in place.
+
+The main remaining blocker is no longer the legal AI core. It is **frontend productization and beta readiness**: the Next.js app must become a polished authenticated matter workspace, the Office add-in needs production release packaging, and the product must clearly distinguish seeded/candidate source grounding from verified official legal authority.
 
 ## Technical Context
 
@@ -108,6 +110,8 @@ Local smoke surfaces
 | Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist and report active LLM provider/model status. | MCP compatibility is manifest/schema-level, not a served MCP transport. |
 | Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
+
+**Current frontend correction**: the Standalone Web now uses live core client calls for several workflows and no longer depends solely on mock dashboard state, but it remains basic as a product. It still needs real auth/session handling, clean route grouping, a matter-centered workflow, stronger document/source UX, entitlement integration, and beta polish before real D.C. attorneys should be invited.
 
 ## Data Model Summary
 
@@ -244,6 +248,89 @@ tools/
 ## High-Priority Risk Resolution Plan
 
 These tasks promote the remaining security, stability, and quality risks from caveats into the active hardening queue. They are not new product features.
+
+## Frontend Productization & Beta Readiness Phase
+
+This is the next active phase after PD045. The goal is to turn Mercy from a strong local/beta legal AI backend with connected surfaces into a professional product that D.C. solo attorneys and small firms can use safely.
+
+### Productization Principles
+
+- Keep the FastAPI core as the only legal intelligence brain.
+- Keep `mercy-legal-web/` as the primary standalone web app.
+- Keep `mercy-legal-plugin/` as the primary Office add-in.
+- Do not revive `standalone_platform/` or `word_plugin/` as product surfaces; retain them only as local smoke/demo scaffolds.
+- Make matter context the center of the attorney workflow.
+- Show route, source, guardrail, citation, tenant, and attorney-review metadata consistently.
+- Treat source grounding honestly: distinguish seeded/candidate official-source metadata from verified official legal text and current citation status.
+
+### Phase Goals
+
+1. **Clean Next.js App Router structure**
+   - Keep public pages in `(marketing)`.
+   - Add an authenticated `(app)` route group for matter work.
+   - Keep auth pages separate.
+   - Isolate admin/beta/monitoring pages from attorney matter work.
+
+2. **Production-ready auth and tenant context**
+   - Replace placeholder sign-in/sign-up behavior with a real auth provider or clearly defined auth adapter.
+   - Protect authenticated app routes with middleware.
+   - Pass tenant ID, user ID, roles, and bearer credentials to the FastAPI core.
+   - Remove local/dev tenant defaults from production execution paths.
+
+3. **Matter-centered attorney workflow**
+   - Create/select matter.
+   - Complete structured intake.
+   - Attach/upload documents.
+   - Run research, drafting, document analysis, templates, and citation verification from the selected matter.
+   - Persist and display matter activity, missing inputs, source anchors, drafts, and verification state.
+
+4. **Document and source UX**
+   - Show upload progress, document metadata, extracted facts, quality warnings, source placeholders, and citations.
+   - Avoid presenting local uploads as an approved production document vault until retention, encryption, backups, and export policy are complete.
+   - Normalize source anchors across discovery, RAG, and drafting outputs.
+
+5. **Reliability and attorney-review UX**
+   - Standardize the reliability panel across all web workflows.
+   - Show route mode, expert, confidence, fallback state, citations, source verification, guardrail status, RAGAS/regression status where relevant, trace ID, tenant isolation, and data posture.
+
+6. **Office add-in release readiness**
+   - Finalize HTTPS hosting plan.
+   - Generate and validate production manifest.
+   - Prepare sideload instructions and AppSource notes.
+   - Confirm privacy, terms, support URL, icons, screenshots, and test-account requirements.
+   - Connect auth/matter selection cleanly to the same core and tenant model as the web app.
+
+7. **Entitlements and beta operations**
+   - Connect Stripe checkout and beta quotas to tenant capability metadata.
+   - Gate strong-model, template, premium document, billing, and audit workflows consistently.
+   - Keep D.C. fee-reasonableness warnings visible for billing and saved-time outputs.
+
+8. **Beta go/no-go verification**
+   - Add end-to-end checks for auth, matter creation, intake, document upload, research, drafting, reliability metadata, Office connectivity, feedback, and data deletion.
+   - Use `docs/beta-readiness-checklist.md` as the release gate before inviting real attorneys.
+
+### Recommended PD Sequence
+
+- **PD046**: Restructure `mercy-legal-web` route groups and product boundaries.
+- **PD047**: Add production-ready auth and tenant/session propagation.
+- **PD048**: Build the coherent matter workspace workflow.
+- **PD049**: Make document review and source-anchor UX attorney-ready.
+- **PD050**: Standardize reliability metadata UI across workflows.
+- **PD051**: Prepare Office add-in production release package.
+- **PD052**: Connect Stripe/beta quotas to tenant capability gates.
+- **PD053**: Upgrade D.C. source verification from seeded/candidate metadata toward verified official text and current citation status.
+- **PD054**: Add end-to-end beta workflow verification.
+
+### Beta Readiness Exit Criteria
+
+Mercy should not invite real D.C. attorneys until:
+
+- A beta user can sign in and land in an authenticated tenant workspace.
+- A beta user can create a matter, complete intake, run research, draft/analyze, and view reliability metadata without developer assistance.
+- The Office add-in can connect to the same core and tenant context over HTTPS.
+- Data retention, deletion, audit, and support expectations are documented.
+- The product clearly labels AI output, source status, and attorney-review requirements.
+- The canonical verification sequence plus beta workflow checks pass.
 
 ### PD028: Stop Standalone Server-Render Matter Mutation
 

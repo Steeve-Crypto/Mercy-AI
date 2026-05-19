@@ -6,7 +6,20 @@ description: "Active Kanban backlog for specs/002-legal-ai-integration"
 
 **Feature Branch**: `002-legal-ai-integration`
 **Primary Source Of Truth**: [spec.md](./spec.md) and [plan.md](./plan.md)
-**Current Priority**: Keep Spec Kit aligned with the real brownfield codebase and continue hardening the existing core, Standalone Platform, and Office add-in without creating duplicate surfaces.
+**Current Priority**: Frontend productization and beta readiness. The shared FastAPI core, Agent X agent network, D.C. RAG, RAGAS regression, Office add-in integration, beta infrastructure, security controls, and monitoring are substantially implemented for local/beta use. The main remaining blocker is turning the stable-but-basic Next.js frontend into a polished authenticated attorney product with a coherent matter workflow.
+
+## Current State Snapshot
+
+Mercy now has a strong backend and integration layer:
+
+- **Shared Intelligence Core**: FastAPI endpoints for health, capabilities, auth-protected matters, intake, router inspection, RAG retrieval/status/ingest/evaluation, observability, Agent X execution, templates, beta, monitoring, security, discovery, and drafting.
+- **Agent X**: `agent_network.py` and `hermes_intelligence.py` provide LangGraph-compatible ReACT agents, Hermes reflection/memory hooks, MCP-compatible skill manifests, sandboxed skill execution, and deterministic local fallback.
+- **D.C. Knowledge Base**: seeded official D.C. source records and chunks exist, with PostgreSQL/pgvector support and local fallback.
+- **RAGAS/Regression**: deterministic reports show the current seeded corpus passing local thresholds, including the 200-case advanced regression report.
+- **Office Add-in**: `mercy-legal-plugin/` calls the core for intake and agent execution and redacts offline local storage.
+- **Standalone Web**: `mercy-legal-web/` has a typed core client and live dashboard panels, but the product experience remains basic and needs real auth, route separation, matter-centered workflows, and beta polish.
+
+Legacy root docs may still describe older in-memory/basic behavior. This task file and `plan.md` are the active implementation status source of truth.
 
 ## Kanban Policy
 
@@ -74,7 +87,7 @@ description: "Active Kanban backlog for specs/002-legal-ai-integration"
 
 ## To Do
 
-Pull these in priority order. These are logical next steps from the existing backlog, not new scope.
+Pull these in priority order. These are logical next steps from the existing backlog, not new scope. PD001-PD045c are largely backend/integration milestones and are marked Done where current code and reports support that status. PD046+ are the current productization priorities.
 
 1. [X] PD028 [Standalone Platform Security] Stop dashboard server-render mutation of shared demo matter.
    - **Target Paths**: `mercy-legal-web/src/lib/core-client.ts`, `mercy-legal-web/src/app/dashboard/page.tsx`, dashboard matter/intake consumers.
@@ -227,17 +240,62 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Result**: Assistant panel now calls `/v1/rag/retrieve` for D.C. research and `/v1/agent/execute` for drafting/analysis with selected matter context, then displays MoE route, confidence, guardrail/grounding status, citations, matter snapshot, attorney-review warnings, and LangSmith trace links when present.
    - **Dependencies**: PD001, PD003, PD006, PD015, PD028, PD029.
 
-24. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
+24. [ ] PD046 [Frontend Architecture] Restructure `mercy-legal-web` around clean App Router product boundaries.
+   - **Target Paths**: `mercy-legal-web/src/app/`, `mercy-legal-web/src/components/`, `mercy-legal-web/src/lib/core-client.ts`, `docs/product/web-app-architecture.md`.
+   - **Definition of Done**: Marketing remains under `(marketing)`; auth routes are separate; authenticated app routes live under an `(app)` group; admin/beta/monitoring routes are isolated; dashboard code no longer mixes public marketing concerns with matter-workspace concerns.
+   - **Dependencies**: PD001, PD004, PD028, PD041.
+
+25. [ ] PD047 [Frontend Auth] Add production-ready web auth and tenant/session propagation.
+   - **Target Paths**: `mercy-legal-web/src/app/`, `mercy-legal-web/src/middleware.ts`, `mercy-legal-web/src/lib/core-client.ts`, auth components, deployment docs.
+   - **Definition of Done**: Protected app routes require a real session outside local dev; tenant ID, user ID, roles, and API auth are passed to the core without relying on localStorage defaults in production; sign-in/sign-up pages are no longer placeholders.
+   - **Dependencies**: PD029, PD046.
+
+26. [ ] PD048 [Frontend Matter Workflow] Replace the dashboard-shell feel with a coherent attorney matter workspace.
+   - **Target Paths**: `mercy-legal-web/src/app/(app)/matters/`, dashboard components, matter/intake/document/research/drafting components.
+   - **Definition of Done**: A beta attorney can create/select a matter, complete intake, upload or attach documents, run D.C. research, draft/analyze, inspect reliability metadata, and review activity in one clear workflow.
+   - **Dependencies**: PD006, PD025, PD040, PD046, PD047.
+
+27. [ ] PD049 [Frontend Documents] Make document review and source-anchor UX attorney-ready.
+   - **Target Paths**: `mercy-legal-web/src/components/dashboard/document-vault.tsx`, `contract-analyzer.tsx`, source/citation display components, `core-client.ts`.
+   - **Definition of Done**: Upload status, document metadata, extracted facts, risks, source placeholders, citations, guardrails, retry states, and data-posture warnings are visible without implying an approved production document vault before retention/storage controls are finalized.
+   - **Dependencies**: PD007, PD016, PD021, PD048.
+
+28. [ ] PD050 [Frontend Reliability UX] Standardize route/source/guardrail display across all web workflows.
+   - **Target Paths**: `mercy-legal-web/src/components/dashboard/reliability-panel.tsx`, assistant, templates, clauses, document review, activity feed.
+   - **Definition of Done**: Research, drafting, templates, clause review, document review, and intake all show consistent route mode, confidence, expert, citations, source status, attorney-review requirement, RAGAS/regression signal where applicable, trace ID, fallback state, and tenant/data posture.
+   - **Dependencies**: PD003, PD036, PD048.
+
+29. [ ] PD051 [Office Release] Prepare the production Office add-in release package.
+   - **Target Paths**: `mercy-legal-plugin/manifest.xml`, `mercy-legal-plugin/scripts/`, `mercy-legal-plugin/DEPLOYMENT.md`, `docs/product/office-addin-release-runbook.md`.
+   - **Definition of Done**: HTTPS hosting plan, production manifest generation, sideload instructions, privacy/support URLs, icon/screenshot checklist, auth handoff, and AppSource/test-account notes are documented and validated.
+   - **Dependencies**: PD027, PD041, PD042.
+
+30. [ ] PD052 [Entitlements] Connect Stripe/beta quotas to real tenant capability gates.
+   - **Target Paths**: `mercy-legal-web/src/app/api/checkout/route.ts`, backend beta/monitoring/cost modules, web pricing/auth flows.
+   - **Definition of Done**: Plan state, beta access, strong-model quota, template generation, premium workflows, and checkout success state map to tenant-visible capability metadata. Fee-reasonableness and engagement-term warnings remain visible for billing/saved-time outputs.
+   - **Dependencies**: PD041, PD043, PD047.
+
+31. [ ] PD053 [Source Verification] Move D.C. source grounding from seeded metadata toward attorney-trustworthy verification.
+   - **Target Paths**: `dc_knowledge_rag.py`, `scripts/seed_dc_knowledge.py`, `response_envelope.py`, web reliability/source displays, evals.
+   - **Definition of Done**: Official body-text extraction, refresh dates, pinpoint anchors, citation currentness status, and attorney verification labels are represented consistently. UI distinguishes candidate source metadata from verified official source text.
+   - **Dependencies**: PD016, PD032, PD038, PD044, PD050.
+
+32. [ ] PD054 [Beta Verification] Add end-to-end beta workflow tests.
+   - **Target Paths**: `scripts/verify.py`, web test setup, add-in smoke scripts, docs/beta-readiness-checklist.md.
+   - **Definition of Done**: Automated or documented checks cover auth, matter creation, intake, document upload, research, drafting, citation/reliability display, Office add-in core connectivity, and beta feedback.
+   - **Dependencies**: PD046-PD053.
+
+33. [ ] PD016 [Core Source Anchors] Normalize source-anchor fields across discovery, RAG, and drafting.
    - **Target Paths**: `bridge.py`, `dc_knowledge_rag.py`, `response_envelope.py`, `main.py`.
    - **Definition of Done**: Outputs consistently carry authority, page/Bates/chunk, document, URL, verification status, and provenance.
    - **Dependencies**: PD003, PD015, PD032.
 
-25. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
+34. [ ] PD020 [Security] Define auth and tenant isolation boundary for production client-data use.
    - **Target Paths**: `mercy-legal-web/`, `main.py`, deployment/config docs.
    - **Definition of Done**: Auth provider, API access control, tenant identity, and client-data boundary are documented before persistent production use.
    - **Dependencies**: PD001, PD006, PD029.
 
-26. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
+35. [ ] PD022 [Verification] Add brownfield smoke-test checklist/runner.
    - **Target Paths**: `tests/`, `specs/002-legal-ai-integration/quickstart.md` if later created, package scripts where appropriate.
    - **Definition of Done**: Checks cover FastAPI endpoints, web build/typecheck/lint, add-in build/lint/manifest, and critical legal metadata flows.
    - **Dependencies**: PD001-PD034.

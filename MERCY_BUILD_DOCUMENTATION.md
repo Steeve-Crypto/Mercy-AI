@@ -1,233 +1,125 @@
-# Mercy AI Build Documentation
+# Mercy Legal AI Build Documentation
 
-Mercy AI is an AI-native legal workspace for D.C. appellate and administrative
-practice. The current build implements the blueprint's "One Brain, Two Windows"
-model:
+Mercy Legal AI is a D.C.-native legal AI platform for solo attorneys and small firms. The current build follows a **One Brain, Multiple Surfaces** model:
 
-- Brain: Mercy Shared Intelligence Core, a FastAPI service in `main.py`.
-- Window 1: Standalone Platform, a browser workspace at `/dashboard`.
-- Window 2: Word Plugin, a Microsoft Word taskpane scaffold under
-  `/word_plugin`.
+- **Brain**: FastAPI Shared Intelligence Core in `main.py`.
+- **Agent X**: LangGraph-compatible legal agent network in `agent_network.py` with Hermes intelligence in `hermes_intelligence.py`.
+- **Standalone Web App**: Next.js app in `mercy-legal-web/`.
+- **Office Add-in**: Vite/React Microsoft Word add-in in `mercy-legal-plugin/`.
+- **Discovery Engine**: Brownfield legal discovery engine in `legal_discovery_ai/`.
+
+Current posture: **strong backend and agent layer; stable but still basic frontend; beta productization in progress**.
 
 ## Product Position
 
-Mercy is designed as a D.C.-native, affordable alternative to enterprise legal
-AI platforms. The product is focused on solo and boutique D.C. lawyers who need
-record-grounded drafting, local-rule checks, and attorney-supervised AI output.
+Mercy is designed for D.C. solo attorneys and small firms that need practical AI help with matter intake, legal research, document review, drafting, citation/source verification, and Word-based drafting workflows.
 
-The public-market inspiration is Harvey's legal/professional-services focus:
-secure AI, complex workflows, document-heavy legal work, and high-value drafting.
-Mercy differs by starting narrower: D.C. Circuit, administrative records, solo
-lawyer adoption, pass-through case pricing, and local ethics guardrails.
+Mercy is inspired by high-trust professional legal AI products, but it starts with a narrower wedge:
 
-## Core Files
+- D.C. law and practice.
+- Matter-centered workflows.
+- Small-firm affordability.
+- Attorney-review-required output.
+- Visible route, source, guardrail, and citation metadata.
+- Office add-in workflow for drafting in Word.
 
-| Path | Purpose |
-| --- | --- |
-| `main.py` | FastAPI app, route definitions, static dashboard/plugin hosting. |
-| `bridge.py` | Root bridge into `legal_discovery_ai` without modifying original discovery code. |
-| `Mercy_Folder/bridge.py` | Compatibility shim for the earlier typoed path. |
-| `system_prompts.py` | D.C. Clerk Operating System prompt and D.C. rule schema. |
-| `dc_guardrails.py` | Middleware that attaches Rule 28, Rule 32, and Ethics Opinion 388 checks to API output. |
-| `mercy_context.py` | In-memory matter context, tier metadata, and billing report generation. |
-| `standalone_platform/` | Browser dashboard UI. |
-| `word_plugin/` | Word taskpane scaffold and manifest. |
-| `tools/mercy_cli.py` | Local CLI for health, capabilities, matters, drafting, and billing reports. |
-| `DEPLOYMENT.md` | Local, Docker, and production deployment notes. |
-| `PRODUCT_BLUEPRINT_ALIGNMENT.md` | Blueprint alignment and remaining product gaps. |
-| `Dockerfile` | Container build for the FastAPI service. |
-| `.env.example` | Environment variable template. |
+## Current System Map
 
-## API Surface
+| Area | Path | Current State |
+| --- | --- | --- |
+| FastAPI Core | `main.py` | Live local/beta API with router, matters, intake, RAG, agents, beta, monitoring, security, templates, discovery, and drafting endpoints. |
+| Router | `legal_task_router.py` | MoE task routing with route mode, expert, confidence, missing inputs, guardrail profile, citations, fallback, and capability metadata. |
+| Response Envelope | `response_envelope.py` | Standard legal output metadata for route, expert, confidence, guardrails, citations, ethics, matter snapshot, and audit timestamp. |
+| Matter Context | `mercy_context.py`, `mercy_storage.py` | Tenant-aware matter context with PostgreSQL/pgvector persistence when configured and local fallback for explicit local dev. |
+| D.C. RAG | `dc_knowledge_rag.py` | D.C. source registry, ingestion, retrieval, backend status, pgvector path, optional adapter boundaries, and local fallback. |
+| RAGAS/Evals | `ragas_eval.py`, `evals/` | Deterministic RAGAS-style reports, 45-case quick dataset, and 200-case advanced regression suite. |
+| Agent X | `agent_network.py`, `hermes_intelligence.py` | ReACT agents, Hermes reflection/memory hooks, MCP-compatible skills, sandboxed skill execution, LLM provider fallback. |
+| LLM Providers | `llm_providers.py` | LiteLLM abstraction for OpenAI, Anthropic, Groq, Gemini, and compatible providers. |
+| Templates | `template_gallery.py`, `prompts/` | D.C. prompt registry, few-shot examples, and template gallery. |
+| Beta | `beta_launch.py` | Invite/waitlist, quota, legal docs, feedback, and analytics endpoints. |
+| Monitoring | `monitoring.py` | Cost events, metrics, alerts, beta state, and admin endpoints. |
+| Security | `security_controls.py`, `docs/compliance/` | Rate limiting, headers, redaction hooks, audit logging, deletion flow, SOC 2 preparation docs. |
+| Web App | `mercy-legal-web/` | Next.js app connected to core; needs auth, App Router restructuring, matter workflow polish, entitlements, and beta UX. |
+| Office Add-in | `mercy-legal-plugin/` | Word add-in connected to core agent network; needs HTTPS production hosting and release packaging. |
 
-### Health and Product
-
-- `GET /health`
-  Returns service status, product name, and Clerk OS version.
-
-- `GET /v1/product/capabilities`
-  Returns product positioning, free/premium capabilities, and zero-retention
-  posture.
-
-- `GET /v1/workspace/clerk-os`
-  Returns the D.C. Clerk OS system prompt for inspection.
-
-### Matters
-
-- `POST /v1/matters`
-  Creates an in-memory matter with `name` and `tier`.
-
-- `GET /v1/matters`
-  Lists active in-memory matters.
-
-- `GET /v1/matters/{matter_id}`
-  Returns one matter context.
-
-- `GET /v1/matters/{matter_id}/billing-report`
-  Generates a premium billing report from recorded discovery/drafting events.
-
-### Workspace
-
-- `POST /v1/workspace/discovery`
-  Calls the existing `legal_discovery_ai.crew.run_crew` function for document
-  discovery using a file path and optional supplemental text.
-
-- `POST /v1/workspace/discovery/upload`
-  Accepts a PDF upload, saves it to `legal_discovery_ai/data/uploads`, and runs
-  discovery.
-
-- `POST /v1/workspace/draft`
-  Uses Clerk OS to turn facts into Word-ready legal text. If no LLM key is
-  configured, Mercy returns a structured fallback draft with verification
-  placeholders.
-
-## D.C. Clerk Operating System
-
-The Clerk OS is not a general assistant. It is instructed to behave as a senior
-D.C. appellate clerk:
-
-- Prioritize D.C. Circuit rules, D.C. Court of Appeals practice, and controlling
-  authority.
-- Apply Rule 28 and Rule 32 structure/format checks.
-- Treat D.C. Bar Ethics Opinion 388 as a supervision mandate.
-- Never invent cases, record cites, quotations, standards of review, or facts.
-- Mark missing legal support with `[VERIFY CITE]` or bracketed attorney-review
-  placeholders.
-- Produce Word-ready text without chatty commentary.
-
-## Guardrails
-
-`DCGuardrailMiddleware` intercepts `/v1/*` JSON responses and attaches:
-
-- `rule_28` checks for brief components.
-- `rule_32` checks for Word-ready formatting, citation placeholders, and record
-  placeholders.
-- `ethics_388` checks for human review, confidentiality, citation verification,
-  supervising attorney review, and fee reasonableness.
-
-The guardrail result is advisory. It flags `review_required` rather than
-blocking output so an attorney can decide whether to revise.
-
-## Standalone Platform
-
-URL:
+## Important Endpoints
 
 ```text
-http://127.0.0.1:8000/dashboard
+GET  /health
+GET  /v1/product/capabilities
+GET  /v1/security/compliance
+GET  /v1/monitoring/dashboard
+GET  /v1/monitoring/metrics
+GET  /v1/monitoring/cost/breakdown
+DELETE /v1/account/data
+GET  /v1/beta/status
+POST /v1/beta/waitlist
+POST /v1/beta/invites
+POST /v1/beta/invites/accept
+GET  /v1/beta/legal/{document_kind}
+POST /v1/beta/feedback
+GET  /v1/beta/analytics
+GET  /v1/templates/gallery
+POST /v1/matters
+GET  /v1/matters
+GET  /v1/matters/{matter_id}
+POST /v1/matter/intake
+POST /v1/matter/intake/full
+POST /v1/router/inspect
+POST /v1/rag/retrieve
+GET  /v1/rag/status
+POST /v1/rag/ingest
+POST /v1/rag/evaluate
+GET  /v1/observability/trace
+POST /v1/observability/trace
+GET  /v1/agent/skills
+POST /v1/agent/execute
+POST /v1/workspace/discovery
+POST /v1/workspace/discovery/upload
+POST /v1/workspace/draft
 ```
 
-Current capabilities:
+## Verification
 
-- Create a matter workspace.
-- Select free or premium tier.
-- Run record intake by file path or PDF upload.
-- Paste or reuse facts JSON.
-- Generate a D.C. Clerk OS draft.
-- View guardrail output.
-- Generate billing reports.
-- Copy Word-ready drafting output.
-
-Design direction:
-
-- Premium legal command center rather than generic web form.
-- Professional, high-trust palette: ink, parchment, brass, burgundy, and teal.
-- Dense operational layout suited for legal work.
-- Stronger visual hierarchy inspired by legal/professional AI platforms, not a
-  literal clone.
-- Accessible contrast, keyboard focus states, and reduced-motion handling.
-
-## Word Plugin
-
-Manifest:
-
-```text
-word_plugin/manifest.xml
-```
-
-Taskpane:
-
-```text
-http://127.0.0.1:8000/word_plugin/taskpane.html
-```
-
-Current capabilities:
-
-- Accept a Matter ID from the dashboard.
-- Accept facts JSON.
-- Select draft type and requested relief.
-- Call `/v1/workspace/draft`.
-- Insert generated text into the active Word document.
-- Fallback to clipboard copy if Word context is unavailable.
-
-Production note: many Word sideload environments require HTTPS. The current
-local version is served by FastAPI over HTTP for simplicity.
-
-## CLI
-
-Run from the repo root:
+Canonical full verification:
 
 ```powershell
-.\legal_discovery_ai\.venv\Scripts\python.exe tools\mercy_cli.py health
-.\legal_discovery_ai\.venv\Scripts\python.exe tools\mercy_cli.py capabilities --output json
-.\legal_discovery_ai\.venv\Scripts\python.exe tools\mercy_cli.py create-matter "EPA v. Smith" --tier premium
-.\legal_discovery_ai\.venv\Scripts\python.exe tools\mercy_cli.py matters --output json
-.\legal_discovery_ai\.venv\Scripts\python.exe tools\mercy_cli.py draft --facts-json "{""case_summary"":""Agency denied petition.""}"
+.\legal_discovery_ai\.venv\Scripts\python.exe scripts\verify.py
 ```
 
-CLI design is inspired by AgentBrain and SkillX patterns:
+This checks backend tests, compile, Pyright, Ruff, core smoke endpoints, quick RAGAS, web typecheck/lint/build, Office add-in lint/build, and manifest validation.
 
-- Explicit resource commands.
-- `--api-url` override.
-- `--output table|json`.
-- Machine-readable JSON for automation.
-
-## Local Run
+Other useful commands:
 
 ```powershell
-cd "C:\Users\12404\Downloads\Mercy AI"
-.\legal_discovery_ai\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\legal_discovery_ai\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
-```
-
-Open:
-
-```text
-http://127.0.0.1:8000/dashboard
+python -m scripts.check_security_compliance
+python -m scripts.monitoring status --days=7
+python -m evals.run_regression --corpus=full --json
+python -m scripts.seed_dc_knowledge --source=all --refresh
 ```
 
 ## Current Limitations
 
-- Matter context is in-memory and resets when the server restarts.
-- Citation verification is a guardrail scaffold, not a full official-source
-  checker yet.
-- Multi-document administrative record indexing is not fully implemented.
-- Bates-page anchoring is not implemented.
-- Authentication and Stripe are not implemented.
-- Word production hosting should move to HTTPS.
+The old build docs described Mercy as mostly in-memory/basic. That is no longer accurate for the core. The current limitations are more specific:
 
-## Deployment Readiness
-
-The repo includes:
-
-- `Dockerfile`
-- `.env.example`
-- `DEPLOYMENT.md`
-
-Production hardening still needed:
-
-- HTTPS reverse proxy or hosted platform.
-- Authentication and tenant isolation.
-- Encrypted persistence layer if premium matter storage is enabled.
-- Stripe or payment provider.
-- Official citation/audit source integrations.
-- Logging policy that preserves auditability without over-retaining client data.
+- The Next.js frontend is connected to the core but still needs professional authenticated product structure.
+- Sign-in/sign-up are not yet production-ready.
+- Stripe checkout exists but entitlement enforcement is not fully connected.
+- The Office add-in is core-connected but still needs production HTTPS hosting and release packaging.
+- D.C. source grounding is strong for seeded/local regression, but full official body-text extraction and citation finalization remain hardening work.
+- Production storage requires finalized retention, backup, deletion, export, and support processes before broad client-data use.
+- End-to-end web/Office beta workflow tests should be added before external beta.
 
 ## Next Recommended Build Steps
 
-1. Add auth and user identity.
-2. Add persistent encrypted matters with retention controls.
-3. Build citation verification against official court/PACER/CourtListener sources.
-4. Add Bates/record chunk anchors to discovery output.
-5. Add Stripe-backed premium gating.
-6. Package Word add-in over HTTPS.
-7. Add Playwright visual regression checks for dashboard and taskpane.
+1. Restructure `mercy-legal-web` into clean `(marketing)`, `(auth)`, `(app)`, and `(admin)` route groups.
+2. Add real web auth and tenant/session propagation.
+3. Build a polished matter-centered workspace.
+4. Improve document/source-anchor UX.
+5. Standardize reliability metadata across all web workflows.
+6. Prepare Office add-in HTTPS production release package.
+7. Connect Stripe/beta quotas to tenant capability gates.
+8. Upgrade D.C. source verification and official text handling.
+9. Add end-to-end beta workflow verification.
+10. Use `docs/beta-readiness-checklist.md` before inviting real attorneys.
+
