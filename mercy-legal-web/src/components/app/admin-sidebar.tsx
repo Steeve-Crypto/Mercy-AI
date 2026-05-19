@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Activity, BarChart3, Gauge, HeartPulse, Shield, UsersRound } from "lucide-react";
+import { useMercySession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
 
 const adminItems = [
@@ -15,6 +16,7 @@ const adminItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { session } = useMercySession();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-slate-200 bg-slate-950 px-4 py-5 text-white lg:flex lg:flex-col">
@@ -47,9 +49,15 @@ export function AdminSidebar() {
         })}
       </nav>
 
+      <div className="mt-auto rounded-lg border border-slate-800 bg-slate-900 p-3">
+        <p className="text-sm font-semibold">{session.name}</p>
+        <p className="mt-1 truncate text-xs text-slate-400">{session.tenantId}</p>
+        <p className="mt-2 text-xs text-slate-500">{session.roles.join(", ")}</p>
+      </div>
+
       <Link
         href="/dashboard"
-        className="mt-auto rounded-lg border border-slate-800 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900 hover:text-white"
+        className="mt-3 rounded-lg border border-slate-800 px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900 hover:text-white"
       >
         Return to attorney app
       </Link>

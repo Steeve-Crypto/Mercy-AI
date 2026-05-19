@@ -20,6 +20,7 @@ type AgentXChatPageProps = {
   initialTemplateId?: string;
   initialMatterId?: string;
   initialAttachedDocIds?: string[];
+  initialAttachedConfirmation?: boolean;
 };
 
 function agentOutput(result: CoreAgentEnvelope): string {
@@ -62,6 +63,7 @@ export function AgentXChatPage({
   initialTemplateId,
   initialMatterId,
   initialAttachedDocIds = [],
+  initialAttachedConfirmation = false,
 }: AgentXChatPageProps) {
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.template_id === initialTemplateId),
@@ -74,6 +76,7 @@ export function AgentXChatPage({
   const [includeVaultDocuments, setIncludeVaultDocuments] = useState(true);
   const [strictDcJurisdiction, setStrictDcJurisdiction] = useState(true);
   const [attachedDocIds, setAttachedDocIds] = useState(initialAttachedDocIds);
+  const [showAttachConfirmation, setShowAttachConfirmation] = useState(initialAttachedConfirmation && initialAttachedDocIds.length > 0);
   const [prompt, setPrompt] = useState(() => promptFromTemplate(selectedTemplate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +185,14 @@ export function AgentXChatPage({
 
             {attachedDocuments.length ? (
               <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+                {showAttachConfirmation ? (
+                  <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                    <span>Document attached to Ask Agent X. It will be included with this request context.</span>
+                    <button type="button" onClick={() => setShowAttachConfirmation(false)} aria-label="Dismiss attachment confirmation">
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : null}
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <Paperclip className="size-3.5 text-[#4F46E5]" />
                   Attached vault documents
@@ -192,6 +203,7 @@ export function AgentXChatPage({
                       key={document.id}
                       className="inline-flex items-center gap-2 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]"
                     >
+                      <FileText className="size-3.5" />
                       {document.name}
                       <button
                         type="button"

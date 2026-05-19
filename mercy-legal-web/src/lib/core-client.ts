@@ -99,6 +99,37 @@ export type CoreMatter = {
   route_history?: CoreRouteDecision[];
 };
 
+export type CoreMatterDocument = {
+  document_id: string;
+  filename: string;
+  uploaded_at?: string;
+  size?: number;
+  mime_type?: string;
+  type?: string;
+  status?: "Processing..." | "Ready" | "Failed" | string;
+  extraction_status?: "Processing..." | "Ready" | "Failed" | string;
+  extraction_progress?: number;
+  storage_path?: string;
+  facts_extracted?: number;
+  citation_count?: number;
+  source?: string;
+  [key: string]: unknown;
+};
+
+export type CoreMatterDocumentsEnvelope = {
+  matter_id: string;
+  documents: CoreMatterDocument[];
+  generated_at: string;
+};
+
+export type CoreMatterDocumentDeleteEnvelope = {
+  deleted: boolean;
+  deleted_file: boolean;
+  matter_id: string;
+  document_id: string;
+  documents: CoreMatterDocument[];
+};
+
 export type CoreMatterContext = CoreMatter;
 
 export type CoreClientResult<T> = {
@@ -531,7 +562,7 @@ function authHeaders(auth?: CoreAuthContext): HeadersInit {
 
 async function coreFetch<T>(path: string, init?: RequestInit, auth?: CoreAuthContext): Promise<CoreClientResult<T>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(`${MERCY_CORE_API_URL}${path}`, {
@@ -590,14 +621,14 @@ function professionalNetworkError(message: string): string {
   return message;
 }
 
-export async function getCoreSnapshot(): Promise<CoreSnapshot> {
+export async function getCoreSnapshot(auth?: CoreAuthContext): Promise<CoreSnapshot> {
   const [health, capabilities] = await Promise.all([
-    coreFetch<CoreHealth>("/health"),
-    coreFetch<CoreCapabilities>("/v1/product/capabilities"),
+    coreFetch<CoreHealth>("/health", undefined, auth),
+    coreFetch<CoreCapabilities>("/v1/product/capabilities", undefined, auth),
   ]);
 
   const matters = health.ok
-    ? await coreFetch<CoreMatter[]>("/v1/matters")
+    ? await coreFetch<CoreMatter[]>("/v1/matters", undefined, auth)
     : { ok: false, data: null, error: health.error };
 
   const firstError = health.error || capabilities.error || matters.error;
@@ -661,6 +692,52 @@ export async function submitBetaFeedback(payload: {
 
 export async function getMatter(matterId: string, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter>> {
   return coreFetch<CoreMatter>(`/v1/matters/${encodeURIComponent(matterId)}`, undefined, auth);
+}
+
+export async function listMatterDocuments(
+  matterId: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<CoreMatterDocumentsEnvelope>> {
+  return coreFetch<CoreMatterDocumentsEnvelope>(`/v1/matters/${encodeURIComponent(matterId)}/documents`, undefined, auth);
+}
+
+export function matterDocumentPreviewUrl(matterId: string, documentId: string): string {
+  return `${MERCY_CORE_API_URL}/v1/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(documentId)}/preview`;
+}
+
+export async function previewMatterDocument(matterId: string, documentId: string, auth?: CoreAuthContext): Promise<CoreClientResult<string>> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(matterDocumentPreviewUrl(matterId, documentId), {
+      headers: {
+        ...authHeaders(auth),
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return { ok: false, data: null, error: professionalError(response.status) };
+    }
+    const blob = await response.blob();
+    return { ok: true, data: URL.createObjectURL(blob), error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Document preview failed";
+    return { ok: false, data: null, error: professionalNetworkError(message) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function deleteMatterDocument(
+  matterId: string,
+  documentId: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<CoreMatterDocumentDeleteEnvelope>> {
+  return coreFetch<CoreMatterDocumentDeleteEnvelope>(
+    `/v1/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(documentId)}`,
+    { method: "DELETE" },
+    auth,
+  );
 }
 
 export async function listMatters(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMatter[]>> {

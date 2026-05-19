@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
+from hashlib import sha256
 import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
@@ -35,12 +38,16 @@ from mercy_context import (
     CORE_NAME,
     MatterTenantAccessError,
     PRODUCT_NAME,
+    attach_matter_document,
     build_billing_report,
     delete_all_tenant_data,
     get_matter_context,
+    list_matter_documents,
     product_capabilities,
+    remove_matter_document,
     update_matter_context,
 )
+from mercy_config import get_config
 from monitoring import cost_breakdown, monitoring_dashboard, monitoring_metrics
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
@@ -51,7 +58,8 @@ from template_gallery import list_template_gallery, trace_template_usage
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = ROOT_DIR / "legal_discovery_ai" / "data" / "uploads"
+CONFIG = get_config()
+UPLOAD_DIR = CONFIG.upload_dir
 DASHBOARD_DIR = ROOT_DIR / "standalone_platform"
 WORD_PLUGIN_DIR = ROOT_DIR / "word_plugin"
 LANGSMITH_CONFIG = configure_langsmith_environment()
@@ -598,6 +606,105 @@ async def list_matters(tenant_user: TenantUser = Depends(get_current_tenant_user
     return matters
 
 
+@app.get("/v1/matters/{matter_id}/documents")
+async def get_matter_documents(
+    matter_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        documents = list_matter_documents(matter_id, tenant_context=_tenant_context(tenant_user))
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+    record_security_audit(
+        "matter_documents_accessed",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=matter_id,
+        category="matter",
+        metadata={"document_count": len(documents)},
+    )
+    return {
+        "matter_id": matter_id,
+        "documents": documents,
+        "generated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _find_matter_document(matter_id: str, document_id: str, tenant_user: TenantUser) -> dict[str, Any]:
+    try:
+        documents = list_matter_documents(matter_id, tenant_context=_tenant_context(tenant_user))
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+    document = next((item for item in documents if str(item.get("document_id")) == document_id), None)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found for this matter.")
+    return document
+
+
+@app.get("/v1/matters/{matter_id}/documents/{document_id}/preview")
+async def preview_matter_document(
+    matter_id: str,
+    document_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> FileResponse:
+    document = _find_matter_document(matter_id, document_id, tenant_user)
+    storage_path = Path(str(document.get("storage_path") or ""))
+    try:
+        resolved = storage_path.resolve()
+        upload_root = UPLOAD_DIR.resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Document file is unavailable.") from exc
+    if upload_root not in resolved.parents and resolved != upload_root:
+        raise HTTPException(status_code=403, detail="Document path is outside the managed upload vault.")
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Document file is unavailable.")
+    record_security_audit(
+        "matter_document_previewed",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=matter_id,
+        category="document",
+        metadata={"document_id": document_id, "filename": document.get("filename")},
+    )
+    return FileResponse(
+        resolved,
+        media_type=str(document.get("mime_type") or "application/pdf"),
+        filename=str(document.get("filename") or f"{document_id}.pdf"),
+    )
+
+
+@app.delete("/v1/matters/{matter_id}/documents/{document_id}")
+async def delete_matter_document(
+    matter_id: str,
+    document_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    document = _find_matter_document(matter_id, document_id, tenant_user)
+    removed = remove_matter_document(matter_id, document_id, tenant_context=_tenant_context(tenant_user))
+    storage_path = Path(str(document.get("storage_path") or ""))
+    deleted_file = False
+    try:
+        resolved = storage_path.resolve()
+        upload_root = UPLOAD_DIR.resolve()
+        if resolved.exists() and resolved.is_file() and (upload_root in resolved.parents or resolved.parent == upload_root):
+            resolved.unlink()
+            deleted_file = True
+    except OSError:
+        deleted_file = False
+    record_security_audit(
+        "matter_document_deleted",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=matter_id,
+        category="document",
+        metadata={"document_id": document_id, "filename": document.get("filename"), "deleted_file": deleted_file},
+    )
+    return {
+        "deleted": bool(removed),
+        "deleted_file": deleted_file,
+        "matter_id": matter_id,
+        "document_id": document_id,
+        "documents": list_matter_documents(matter_id, tenant_context=_tenant_context(tenant_user)),
+    }
+
+
 @app.get("/v1/matters/{matter_id}")
 async def get_matter(
     matter_id: str,
@@ -1068,8 +1175,11 @@ async def workspace_discovery_upload(
         raise HTTPException(status_code=400, detail="Upload a PDF document.")
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    destination = UPLOAD_DIR / Path(file.filename).name
-    destination.write_bytes(await file.read())
+    content = await file.read()
+    document_id = f"doc_{sha256(content or file.filename.encode()).hexdigest()[:24]}"
+    safe_name = Path(file.filename).name
+    destination = UPLOAD_DIR / f"{document_id}_{safe_name}"
+    destination.write_bytes(content)
     matter_context = {
         **_matter_context(matter_id, tenant_user),
         "matter_id": matter_id,
@@ -1097,6 +1207,24 @@ async def workspace_discovery_upload(
 
     if matter_id:
         result["matter_id"] = matter_id
+        document_metadata = {
+            "document_id": document_id,
+            "filename": safe_name,
+            "uploaded_at": datetime.now(UTC).isoformat(),
+            "size": len(content),
+            "mime_type": file.content_type or "application/pdf",
+            "type": "PDF",
+            "status": "Ready",
+            "extraction_status": "Ready",
+            "extraction_progress": 100,
+            "storage_path": str(destination),
+            "facts_extracted": len(result.get("facts") or {}),
+            "citation_count": len(result.get("citations") or []),
+            "surface_context": "core_discovery_upload",
+            "source": "workspace_discovery_upload",
+        }
+        result["document"] = document_metadata
+        attach_matter_document(matter_id, document_metadata, tenant_context=_tenant_context(tenant_user))
         MATTERS.attach_facts(matter_id, result.get("facts", {}), tenant_context=_tenant_context(tenant_user))
         if "premium_billing_hook" in result:
             MATTERS.attach_billing_event(matter_id, result["premium_billing_hook"], tenant_context=_tenant_context(tenant_user))

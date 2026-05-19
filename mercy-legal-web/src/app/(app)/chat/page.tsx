@@ -1,17 +1,20 @@
 import { AgentXChatPage } from "@/components/app/pages/agent-x-chat-page";
 import { getCoreSnapshot, getTemplateGallery } from "@/lib/core-client";
+import { getServerMercyAuthContext } from "@/lib/auth/session";
 
 type ChatPageProps = {
   searchParams?: Promise<{
     templateId?: string;
     matterId?: string;
     attachedDocs?: string;
+    attached?: string;
   }>;
 };
 
 export default async function ChatPage({ searchParams }: ChatPageProps) {
   const params = await searchParams;
-  const [snapshot, templates] = await Promise.all([getCoreSnapshot(), getTemplateGallery()]);
+  const auth = await getServerMercyAuthContext();
+  const [snapshot, templates] = await Promise.all([getCoreSnapshot(auth), getTemplateGallery(undefined, auth)]);
   return (
     <AgentXChatPage
       initialMatters={snapshot.matters}
@@ -20,6 +23,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
       initialTemplateId={params?.templateId}
       initialMatterId={params?.matterId}
       initialAttachedDocIds={params?.attachedDocs?.split(",").filter(Boolean) ?? []}
+      initialAttachedConfirmation={params?.attached === "1"}
     />
   );
 }

@@ -1,27 +1,36 @@
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, Iterator
 from uuid import uuid4
 
 from observability import trace_event, trace_span
+from mercy_config import get_config
 
-from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, create_engine, text
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+try:
+    from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, create_engine, text
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+    SQLALCHEMY_AVAILABLE = True
+except ModuleNotFoundError:
+    JSON = Boolean = DateTime = Index = String = Text = create_engine = text = None  # type: ignore[assignment]
+    Engine = Session = Any  # type: ignore[misc,assignment]
+    DeclarativeBase = object  # type: ignore[assignment]
+    Mapped = Any  # type: ignore[assignment]
+    mapped_column = sessionmaker = None  # type: ignore[assignment]
+    SQLALCHEMY_AVAILABLE = False
 
 
 STORAGE_VERSION = "mercy-storage-pgvector-1.0"
-SQLALCHEMY_AVAILABLE = True
 _ENGINE: Engine | None = None
 _SESSION_FACTORY: sessionmaker[Session] | None = None
 _INITIALIZED = False
 
 
 def configured_database_url() -> str | None:
-    raw = os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL") or os.getenv("MERCY_DATABASE_URL")
+    raw = get_config().database_url
     if not raw:
         return None
     return _normalize_database_url(raw)
@@ -32,7 +41,7 @@ def persistent_storage_configured() -> bool:
 
 
 def local_memory_fallback_allowed() -> bool:
-    return os.getenv("MERCY_ENV") == "local" and not persistent_storage_configured()
+    return get_config().mercy_env == "local" and not persistent_storage_configured()
 
 
 def storage_mode() -> str:
@@ -52,7 +61,7 @@ def storage_status() -> dict[str, Any]:
         "sqlalchemy_available": SQLALCHEMY_AVAILABLE,
         "database_configured": bool(url),
         "fallback_allowed": local_memory_fallback_allowed(),
-        "required_env": ["POSTGRES_URL", "SUPABASE_URL"],
+        "required_env": ["POSTGRES_URL", "MERCY_DATABASE_URL", "SUPABASE_DB_URL"],
         "optional_backends": ["qdrant", "neo4j"],
         "tenant_isolation": "tenant_id scoped on matters, rag_sources, rag_chunks, and langgraph checkpoints",
     }
@@ -67,116 +76,142 @@ def _normalize_database_url(raw: str) -> str:
     return value
 
 
-class Base(DeclarativeBase):  # type: ignore[misc]
-    pass
+if SQLALCHEMY_AVAILABLE:
+
+    class Base(DeclarativeBase):  # type: ignore[misc]
+        pass
 
 
-class MatterRecord(Base):
-    __tablename__ = "mercy_matters"
+    class MatterRecord(Base):
+        __tablename__ = "mercy_matters"
 
-    matter_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    created_by_user_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    client_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(500), nullable=False)
-    tier: Mapped[str] = mapped_column(String(64), nullable=False, default="free")
-    client_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    matter_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, default="District of Columbia")
-    client_role: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    requested_relief: Mapped[str | None] = mapped_column(Text, nullable=True)
-    opposing_parties: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    deadlines: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    key_facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    documents: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    sensitivity_flags: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    missing_information: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    drafts: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    billing_events: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    route_history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    retention_status: Mapped[str] = mapped_column(String(64), nullable=False, default="active", index=True)
-
-
-class DCRagSourceRecord(Base):
-    __tablename__ = "mercy_dc_sources"
-
-    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    source_id: Mapped[str] = mapped_column(String(256), primary_key=True)
-    title: Mapped[str] = mapped_column(String(1000), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False)
-    citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
-    official_locator: Mapped[str] = mapped_column(Text, nullable=False)
-    url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    file_anchor: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
-    verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
-    refresh_cadence: Mapped[str] = mapped_column(String(128), nullable=False)
-    local_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        matter_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+        tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        created_by_user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+        client_id: Mapped[str] = mapped_column(String(128), nullable=False)
+        name: Mapped[str] = mapped_column(String(500), nullable=False)
+        tier: Mapped[str] = mapped_column(String(64), nullable=False, default="free")
+        client_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+        matter_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+        jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, default="District of Columbia")
+        client_role: Mapped[str | None] = mapped_column(String(200), nullable=True)
+        requested_relief: Mapped[str | None] = mapped_column(Text, nullable=True)
+        opposing_parties: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        deadlines: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        key_facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+        documents: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        sensitivity_flags: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        missing_information: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+        drafts: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        billing_events: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        route_history: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+        deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+        retention_status: Mapped[str] = mapped_column(String(64), nullable=False, default="active", index=True)
 
 
-class DCRagChunkRecord(Base):
-    __tablename__ = "mercy_dc_chunks"
+    class DCRagSourceRecord(Base):
+        __tablename__ = "mercy_dc_sources"
 
-    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    chunk_id: Mapped[str] = mapped_column(String(256), primary_key=True)
-    source_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    source_title: Mapped[str] = mapped_column(String(1000), nullable=False)
-    citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    official_locator: Mapped[str] = mapped_column(Text, nullable=False)
-    url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    entities: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    relationships: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
-    citation_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
-    practice_area: Mapped[str] = mapped_column(String(200), nullable=False)
-    source_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    embedding: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+        source_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+        title: Mapped[str] = mapped_column(String(1000), nullable=False)
+        source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+        authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
+        jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False)
+        citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
+        official_locator: Mapped[str] = mapped_column(Text, nullable=False)
+        url: Mapped[str | None] = mapped_column(Text, nullable=True)
+        file_anchor: Mapped[str | None] = mapped_column(Text, nullable=True)
+        last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
+        verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
+        refresh_cadence: Mapped[str] = mapped_column(String(128), nullable=False)
+        local_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+        active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class LangGraphCheckpointRecord(Base):
-    __tablename__ = "mercy_langgraph_checkpoints"
+    class DCRagChunkRecord(Base):
+        __tablename__ = "mercy_dc_chunks"
 
-    checkpoint_id: Mapped[str] = mapped_column(String(256), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    thread_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
-    state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+        chunk_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+        source_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+        text: Mapped[str] = mapped_column(Text, nullable=False)
+        summary: Mapped[str] = mapped_column(Text, nullable=False)
+        source_title: Mapped[str] = mapped_column(String(1000), nullable=False)
+        citation_label: Mapped[str] = mapped_column(String(500), nullable=False)
+        source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+        authority_type: Mapped[str] = mapped_column(String(128), nullable=False)
+        jurisdiction: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+        official_locator: Mapped[str] = mapped_column(Text, nullable=False)
+        url: Mapped[str | None] = mapped_column(Text, nullable=True)
+        entities: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        relationships: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        verification_status: Mapped[str] = mapped_column(String(128), nullable=False)
+        citation_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+        last_checked: Mapped[str] = mapped_column(String(32), nullable=False)
+        practice_area: Mapped[str] = mapped_column(String(200), nullable=False)
+        source_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+        embedding: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class AuditLogRecord(Base):
-    __tablename__ = "mercy_audit_logs"
+    class LangGraphCheckpointRecord(Base):
+        __tablename__ = "mercy_langgraph_checkpoints"
 
-    audit_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    action: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+        checkpoint_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+        tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        thread_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+        state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-Index("ix_mercy_dc_chunks_tenant_source", DCRagChunkRecord.tenant_id, DCRagChunkRecord.source_id)
+    class AuditLogRecord(Base):
+        __tablename__ = "mercy_audit_logs"
+
+        audit_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+        tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        action: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+        category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+        matter_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+    Index("ix_mercy_dc_chunks_tenant_source", DCRagChunkRecord.tenant_id, DCRagChunkRecord.source_id)
+else:
+
+    class Base:
+        metadata: Any = None
+
+
+    class MatterRecord:
+        pass
+
+
+    class DCRagSourceRecord:
+        pass
+
+
+    class DCRagChunkRecord:
+        pass
+
+
+    class LangGraphCheckpointRecord:
+        pass
+
+
+    class AuditLogRecord:
+        pass
 
 
 def get_engine() -> Engine:

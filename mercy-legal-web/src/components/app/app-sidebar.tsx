@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
   BookOpenText,
   Bot,
@@ -16,8 +18,10 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
+import { useMercySession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -31,14 +35,22 @@ const navItems = [
 ] as const;
 
 const settingsItems = [
-  { label: "Account", icon: UserRound },
-  { label: "Billing", icon: Receipt },
-  { label: "Help", icon: HelpCircle },
-  { label: "Sign Out", icon: LogOut },
-];
+  { href: "/settings", label: "Account & Profile", icon: UserRound },
+  { href: "/billing", label: "Billing & Usage", icon: Receipt },
+  { href: "/settings#preferences", label: "Settings", icon: SlidersHorizontal },
+  { href: "/settings#support", label: "Help & Support", icon: HelpCircle },
+] as const;
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { session, signOut } = useMercySession();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const initials = session.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-slate-200 bg-white/95 px-4 py-5 shadow-sm lg:flex lg:flex-col">
@@ -90,29 +102,52 @@ export function AppSidebar() {
       </nav>
 
       <div className="mt-auto rounded-xl border border-slate-200 bg-white p-3">
-        <button className="flex w-full items-center justify-between gap-3 text-left">
+        <button
+          type="button"
+          onClick={() => setUserMenuOpen((open) => !open)}
+          aria-expanded={userMenuOpen}
+          className="flex w-full items-center justify-between gap-3 rounded-lg text-left"
+        >
           <span className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
-              MW
+              <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+              {initials || "MA"}
             </span>
             <span>
-              <span className="block text-sm font-semibold text-slate-950">Mercy Attorney</span>
-              <span className="block text-xs text-slate-500">local-dev-tenant</span>
+              <span className="block text-sm font-semibold text-slate-950">{session.name}</span>
+              <span className="block max-w-36 truncate text-xs text-slate-500">{session.tenantId}</span>
             </span>
           </span>
-          <ChevronDown className="size-4 text-slate-400" />
+          <ChevronDown className={cn("size-4 text-slate-400 transition", userMenuOpen ? "rotate-180" : "")} />
         </button>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {settingsItems.map((item) => (
+        {userMenuOpen ? (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {settingsItems.map((item) => {
+              const active = pathname === item.href || (item.href !== "/settings" && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href as Route}
+                  onClick={() => setUserMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium transition",
+                    active ? "bg-[#EEF2FF] text-[#4338CA]" : "text-slate-600 hover:bg-white hover:text-slate-950",
+                  )}
+                >
+                  <item.icon className="size-3.5" />
+                  {item.label}
+                </Link>
+              );
+            })}
             <button
-              key={item.label}
-              className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-600 hover:border-[#C7D2FE] hover:bg-[#EEF2FF] hover:text-[#4338CA]"
+              type="button"
+              onClick={signOut}
+              className="mt-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-rose-700"
             >
-              <item.icon className="size-3.5" />
-              {item.label}
+              <LogOut className="size-3.5" />
+              Sign Out
             </button>
-          ))}
-        </div>
+          </div>
+        ) : null}
         <Link
           href="/admin"
           className="mt-3 flex items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"

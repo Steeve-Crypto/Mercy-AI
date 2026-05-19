@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import Header, HTTPException, Request
 
+from mercy_config import get_config
 from observability import trace_event
 
 
@@ -33,7 +34,8 @@ class TenantUser:
 
 
 def local_dev_auth_bypass_enabled() -> bool:
-    return os.getenv("MERCY_ENV") == "local" and os.getenv("MERCY_AUTH_MODE") == "dev"
+    config = get_config()
+    return config.mercy_env == "local" and config.mercy_auth_mode == "dev"
 
 
 def _parse_roles(raw: str | None) -> tuple[str, ...]:
@@ -48,7 +50,7 @@ def _validate_bearer_token(authorization: str | None) -> None:
     token = authorization.split(" ", 1)[1].strip()
     if not token:
         raise HTTPException(status_code=401, detail="Empty bearer authorization for Mercy legal endpoint.")
-    expected = os.getenv("MERCY_API_TOKEN")
+    expected = get_config().effective_api_token
     if expected and token != expected:
         raise HTTPException(status_code=401, detail="Invalid bearer authorization for Mercy legal endpoint.")
 

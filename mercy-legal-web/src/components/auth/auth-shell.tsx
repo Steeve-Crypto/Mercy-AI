@@ -1,7 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import type { Route } from "next";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import { ArrowLeft, CheckCircle2, Scale, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type AuthShellProps = {
   mode: "sign-in" | "sign-up";
@@ -9,6 +16,53 @@ type AuthShellProps = {
 
 export function AuthShell({ mode }: AuthShellProps) {
   const isSignUp = mode === "sign-up";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firmName, setFirmName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const next = searchParams.get("next") || "/dashboard";
+
+    if (!isSupabaseConfigured()) {
+      router.push(next as Route);
+      return;
+    }
+
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) {
+      setError("Supabase Auth is not configured for this environment.");
+      return;
+    }
+
+    setBusy(true);
+    const response = isSignUp
+      ? await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              firm_name: firmName,
+              tenant_id: firmName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || undefined,
+              roles: ["attorney"],
+            },
+          },
+        })
+      : await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+
+    if (response.error) {
+      setError(response.error.message);
+      return;
+    }
+    router.push(next as Route);
+    router.refresh();
+  }
 
   return (
     <main className="grid min-h-screen bg-[#f7f8fb] lg:grid-cols-[0.9fr_1.1fr]">
@@ -64,11 +118,13 @@ export function AuthShell({ mode }: AuthShellProps) {
               </div>
             </div>
 
-            <form className="mt-8 space-y-4">
+            <form onSubmit={submit} className="mt-8 space-y-4">
               {isSignUp ? (
                 <label className="block text-sm font-medium text-mercy-navy">
                   Firm name
                   <Input
+                    value={firmName}
+                    onChange={(event) => setFirmName(event.target.value)}
                     className="mt-2 h-11"
                     placeholder="Capitol Hill Legal"
                   />
@@ -77,21 +133,28 @@ export function AuthShell({ mode }: AuthShellProps) {
               <label className="block text-sm font-medium text-mercy-navy">
                 Work email
                 <Input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   className="mt-2 h-11"
                   placeholder="attorney@firm.com"
                   type="email"
+                  required
                 />
               </label>
               <label className="block text-sm font-medium text-mercy-navy">
                 Password
                 <Input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="mt-2 h-11"
                   placeholder="Enter password"
                   type="password"
+                  required
                 />
               </label>
-              <Button asChild variant="gold" className="w-full">
-                <Link href="/dashboard">{isSignUp ? "Create account" : "Sign in"}</Link>
+              {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+              <Button type="submit" variant="gold" className="w-full" disabled={busy}>
+                {busy ? "Working..." : isSignUp ? "Create account" : "Sign in"}
               </Button>
             </form>
 

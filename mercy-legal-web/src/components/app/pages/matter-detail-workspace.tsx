@@ -6,23 +6,33 @@ import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   Activity,
+  AlertTriangle,
   Bot,
+  CheckCircle2,
   CreditCard,
+  Eye,
   FileText,
   FolderOpen,
   Loader2,
   MessageSquareText,
   Paperclip,
+  Plus,
+  RefreshCw,
   Search,
+  Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import {
+  deleteMatterDocument,
+  listMatterDocuments,
+  previewMatterDocument,
   retrieveRag,
   uploadDiscoveryDocument,
   type CoreDiscoveryEnvelope,
   type CoreMatter,
+  type CoreMatterDocument,
   type CoreRagEnvelope,
 } from "@/lib/core-client";
 
@@ -41,6 +51,10 @@ type MatterDocument = {
   size: string;
   type: string;
   status: DocumentStatus;
+  progress?: number;
+  factsExtracted?: number;
+  citationCount?: number;
+  previewAvailable: boolean;
   source: "matter" | "local_upload";
 };
 
@@ -89,7 +103,16 @@ function normalizeMatterDocuments(documents: Array<Record<string, unknown>>): Ma
     uploadDate: asText(document.uploaded_at ?? document.created_at ?? document.date, "Upload date pending"),
     size: typeof document.size === "number" ? formatBytes(document.size) : asText(document.size, "Size pending"),
     type: asText(document.type ?? document.document_type ?? document.mime_type, "PDF / legal document"),
-    status: asText(document.status ?? document.extraction_status, "Ready") === "Failed" ? "Failed" : "Ready",
+    status:
+      asText(document.status ?? document.extraction_status, "Ready") === "Failed"
+        ? "Failed"
+        : asText(document.status ?? document.extraction_status, "Ready") === "Processing..."
+          ? "Processing..."
+          : "Ready",
+    progress: typeof document.extraction_progress === "number" ? document.extraction_progress : undefined,
+    factsExtracted: typeof document.facts_extracted === "number" ? document.facts_extracted : undefined,
+    citationCount: typeof document.citation_count === "number" ? document.citation_count : undefined,
+    previewAvailable: Boolean(document.storage_path || document.preview_url || document.document_id),
     source: "matter",
   }));
 }
@@ -145,6 +168,10 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<CoreDiscoveryEnvelope | null>(null);
   const [documents, setDocuments] = useState<MatterDocument[]>(() => normalizeMatterDocuments(matter.documents ?? []));
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const deadlines = matter.deadlines ?? [];
@@ -159,6 +186,20 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
       setToasts((current) => current.filter((item) => item.id !== toast.id));
     }, 4500);
   }
+
+  const refreshDocuments = useCallback(async () => {
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    const response = await listMatterDocuments(matter.matter_id);
+    setDocumentsLoading(false);
+    if (!response.ok || !response.data) {
+      setDocumentsError(response.error ?? "Could not refresh document metadata.");
+      return null;
+    }
+    const nextDocuments = normalizeMatterDocuments(response.data.documents as CoreMatterDocument[]);
+    setDocuments(nextDocuments);
+    return nextDocuments;
+  }, [matter.matter_id]);
 
   const uploadFiles = useCallback(
     async (acceptedFiles: File[]) => {
@@ -177,6 +218,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
           size: formatBytes(uploadFile.size),
           type: uploadFile.type || "application/pdf",
           status: "Processing...",
+          previewAvailable: false,
           source: "local_upload",
         };
 
@@ -194,15 +236,18 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         }
 
         setDiscoveryResult(response.data);
-        setDocuments((current) =>
-          current.map((document) => (document.id === localId ? { ...document, status: "Ready" } : document)),
-        );
+        const refreshed = await refreshDocuments();
+        if (!refreshed) {
+          setDocuments((current) =>
+            current.map((document) => (document.id === localId ? { ...document, status: "Ready" } : document)),
+          );
+        }
         addToast("success", `${uploadFile.name} uploaded and sent for extraction.`);
       }
 
       setUploadBusy(false);
     },
-    [matter.matter_id],
+    [matter.matter_id, refreshDocuments],
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -213,6 +258,38 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
     noClick: true,
     onDrop: uploadFiles,
   });
+
+  function openDocumentUpload() {
+    setActiveTab("documents");
+    window.setTimeout(() => open(), 0);
+  }
+
+  async function previewDocument(document: MatterDocument) {
+    setPreviewingId(document.id);
+    const response = await previewMatterDocument(matter.matter_id, document.id);
+    setPreviewingId(null);
+    if (!response.ok || !response.data) {
+      addToast("error", response.error ?? `Could not preview ${document.filename}.`);
+      return;
+    }
+    window.open(response.data, "_blank", "noopener,noreferrer");
+    addToast("success", `Opened preview for ${document.filename}.`);
+  }
+
+  async function deleteDocument(document: MatterDocument) {
+    const confirmed = window.confirm(`Delete "${document.filename}" from this matter? This removes the stored upload metadata and file.`);
+    if (!confirmed) return;
+    setDeletingId(document.id);
+    const response = await deleteMatterDocument(matter.matter_id, document.id);
+    setDeletingId(null);
+    if (!response.ok || !response.data) {
+      addToast("error", response.error ?? `Could not delete ${document.filename}.`);
+      return;
+    }
+    setDocuments(normalizeMatterDocuments(response.data.documents));
+    addToast("success", `${document.filename} was removed from this matter.`);
+    await refreshDocuments();
+  }
 
   async function runResearch() {
     if (!query.trim()) {
@@ -249,7 +326,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
       <PageHeader
         eyebrow="Matter workspace"
         title={matter.name}
-        description={`${matter.jurisdiction ?? "District of Columbia"} matter workspace for documents, research, drafting, activity, and usage.`}
+        description={`${matter.client_name ?? "Client"} · ${matter.matter_type ?? "General matter"} · ${matter.jurisdiction ?? "District of Columbia"}`}
       >
         <div className="flex flex-wrap gap-2">
           <Link href={chatHref} className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
@@ -302,6 +379,9 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                 >
                   <tab.icon className="size-4" />
                   {tab.label}
+                  {tab.id === "documents" && documents.length ? (
+                    <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold">{documents.length}</span>
+                  ) : null}
                 </button>
               );
             })}
@@ -342,9 +422,9 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                     <Search className="size-4 text-[#4F46E5]" />
                     Run matter research
                   </button>
-                  <button onClick={() => setActiveTab("documents")} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  <button onClick={openDocumentUpload} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     <UploadCloud className="size-4 text-[#4F46E5]" />
-                    Upload document
+                    New Document
                   </button>
                 </div>
               </div>
@@ -364,116 +444,168 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         ) : null}
 
         {activeTab === "documents" ? (
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">Documents</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Upload PDFs for backend extraction and attach ready documents to Ask Agent X.
-                </p>
+          <section className="space-y-5">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Documents</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Upload PDFs for backend extraction. Metadata, facts, and citations are read from the persisted matter record.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={refreshDocuments}
+                    disabled={documentsLoading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {documentsLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={open}
+                    disabled={uploadBusy}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+                  >
+                    <Plus className="size-3.5" />
+                    New Document
+                  </button>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                    {documents.length} document{documents.length === 1 ? "" : "s"}
+                  </span>
+                </div>
               </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                {documents.length} document{documents.length === 1 ? "" : "s"}
-              </span>
-            </div>
 
-            <div
-              {...getRootProps()}
-              className={`mt-5 rounded-xl border-2 border-dashed p-8 text-center transition ${
-                isDragActive ? "border-[#4F46E5] bg-[#EEF2FF]" : "border-slate-300 bg-slate-50 hover:border-[#A5B4FC]"
-              }`}
-            >
-              <input {...getInputProps()} />
-              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white text-[#4F46E5] shadow-sm">
-                <UploadCloud className="size-6" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-slate-950">
-                {isDragActive ? "Drop PDFs to upload" : "No documents yet — drag & drop or upload"}
-              </h3>
-              <p className="mt-2 text-sm text-slate-500">
-                PDF files are sent to the Mercy core. Extraction and indexing are handled by the backend.
-              </p>
-              <button
-                type="button"
-                onClick={open}
-                disabled={uploadBusy}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+              <div
+                {...getRootProps()}
+                className={`mt-5 rounded-xl border-2 border-dashed p-6 text-center transition ${
+                  isDragActive
+                    ? "border-[#4F46E5] bg-[#EEF2FF] shadow-inner"
+                    : uploadBusy
+                      ? "border-[#A5B4FC] bg-[#F8FAFC]"
+                      : "border-slate-300 bg-slate-50 hover:border-[#A5B4FC] hover:bg-[#F8FAFC]"
+                }`}
               >
-                {uploadBusy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
-                Choose PDF files
-              </button>
+                <input {...getInputProps()} />
+                <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white text-[#4F46E5] shadow-sm">
+                  {uploadBusy ? <Loader2 className="size-6 animate-spin" /> : <UploadCloud className="size-6" />}
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-slate-950">
+                  {isDragActive ? "Drop PDFs to upload" : uploadBusy ? "Uploading and extracting" : "Drag PDFs here or choose files"}
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  PDF files are stored by the Mercy core. Extraction and indexing stay on the backend.
+                </p>
+                <button
+                  type="button"
+                  onClick={open}
+                  disabled={uploadBusy}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+                >
+                  {uploadBusy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
+                  Choose PDF files
+                </button>
+              </div>
+
+              {uploadError ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{uploadError}</div> : null}
+              {documentsError ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{documentsError}</div> : null}
+              {discoveryResult ? (
+                <div className="mt-4 flex items-start gap-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                  <span>Document uploaded to {discoveryResult.engine}. Extraction status is ready for attorney review.</span>
+                </div>
+              ) : null}
             </div>
 
-            {uploadError ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{uploadError}</div> : null}
-            {discoveryResult ? (
-              <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-                Document uploaded to {discoveryResult.engine}. Extraction status is ready for attorney review.
+            {documentsLoading && !documents.length ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="h-52 animate-pulse rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="h-4 w-2/3 rounded bg-slate-200" />
+                    <div className="mt-4 h-3 w-1/2 rounded bg-slate-100" />
+                    <div className="mt-8 h-16 rounded bg-slate-100" />
+                  </div>
+                ))}
               </div>
-            ) : null}
-
-            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-              <div className="grid grid-cols-[minmax(0,1.4fr)_0.75fr_0.65fr_0.65fr_0.7fr_auto] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <span>Filename</span>
-                <span>Upload date</span>
-                <span>Size</span>
-                <span>Type</span>
-                <span>Status</span>
-                <span className="text-right">Action</span>
-              </div>
-              {documents.length ? (
-                <div className="divide-y divide-slate-200 bg-white">
-                  {documents.map((document) => (
-                    <div
-                      key={document.id}
-                      className="grid grid-cols-1 gap-3 px-4 py-4 text-sm md:grid-cols-[minmax(0,1.4fr)_0.75fr_0.65fr_0.65fr_0.7fr_auto] md:items-center"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#EEF2FF] text-[#4F46E5]">
-                          <FileText className="size-4" />
+            ) : documents.length ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {documents.map((document) => (
+                  <article key={document.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#EEF2FF] text-[#4F46E5]">
+                          <FileText className="size-5" />
                         </div>
-                        <span className="truncate font-semibold text-slate-950">{document.filename}</span>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-semibold text-slate-950">{document.filename}</h3>
+                          <p className="mt-1 text-xs text-slate-500">{document.type}</p>
+                        </div>
                       </div>
-                      <span className="text-slate-500">{document.uploadDate}</span>
-                      <span className="text-slate-500">{document.size}</span>
-                      <span className="text-slate-500">{document.type}</span>
-                      <span
-                        className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${
-                          document.status === "Ready"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : document.status === "Failed"
-                              ? "bg-rose-50 text-rose-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}
+                      <StatusBadge status={document.status} progress={document.progress} />
+                    </div>
+
+                    <dl className="mt-5 grid grid-cols-2 gap-3 text-xs">
+                      <DocumentMetric label="Uploaded" value={document.uploadDate} />
+                      <DocumentMetric label="Size" value={document.size} />
+                      <DocumentMetric label="Facts" value={document.factsExtracted ?? 0} />
+                      <DocumentMetric label="Citations" value={document.citationCount ?? 0} />
+                    </dl>
+
+                    <div className="mt-5 grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => previewDocument(document)}
+                        disabled={!document.previewAvailable || previewingId === document.id}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-[#C7D2FE] hover:bg-[#EEF2FF] hover:text-[#4338CA] disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {document.status}
-                      </span>
+                        {previewingId === document.id ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
+                        Preview
+                      </button>
                       {document.status === "Ready" ? (
                         <Link
-                          href={`/chat?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}` as Route}
-                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
+                          href={`/chat?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}&attached=1` as Route}
+                          onClick={() => addToast("success", `${document.filename} attached to Ask Agent X.`)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
                         >
                           <Paperclip className="size-3.5" />
-                          Attach to Chat
+                          Attach
                         </Link>
                       ) : (
                         <button
                           type="button"
                           disabled
-                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-400"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-400"
                         >
                           <Paperclip className="size-3.5" />
-                          Attach to Chat
+                          Attach
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => deleteDocument(document)}
+                        disabled={deletingId === document.id || document.source === "local_upload"}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingId === document.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                        Delete
+                      </button>
                     </div>
-                  ))}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
+                  <FileText className="size-6" />
                 </div>
-              ) : (
-                <div className="bg-white p-6">
-                  <EmptyState text="No documents yet — drag & drop or upload approved PDF files to begin." />
-                </div>
-              )}
-            </div>
+                <h3 className="mt-4 text-base font-semibold text-slate-950">No documents yet</h3>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                  Drag and drop approved PDFs above. Ready documents can be previewed, attached to Agent X, or removed from the matter.
+                </p>
+              </div>
+            )}
           </section>
         ) : null}
 
@@ -564,6 +696,32 @@ function Info({ label, value }: { label: string; value: unknown }) {
     <div className="rounded-xl bg-slate-50 p-4">
       <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="mt-1 text-sm font-semibold text-slate-950">{asText(value)}</dd>
+    </div>
+  );
+}
+
+function StatusBadge({ status, progress }: { status: DocumentStatus; progress?: number }) {
+  const styles =
+    status === "Ready"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "Failed"
+        ? "bg-rose-50 text-rose-700"
+        : "bg-amber-50 text-amber-700";
+  const Icon = status === "Ready" ? CheckCircle2 : status === "Failed" ? AlertTriangle : Loader2;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${styles}`}>
+      <Icon className={`size-3.5 ${status === "Processing..." ? "animate-spin" : ""}`} />
+      {status}
+      {typeof progress === "number" && status !== "Ready" ? ` ${progress}%` : ""}
+    </span>
+  );
+}
+
+function DocumentMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+      <dt className="font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 truncate font-semibold text-slate-900">{value}</dd>
     </div>
   );
 }

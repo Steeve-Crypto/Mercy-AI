@@ -210,6 +210,24 @@ class InMemoryMatterStore:
             matter.billing_events.append(event)
             self._touch(matter, "billing_event_attached", {"task": event.get("task")})
 
+    def attach_document(self, matter_id: str, document: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
+        matter = self._matters.get(matter_id)
+        if matter:
+            self._assert_access(matter, tenant_context)
+            existing = [item for item in matter.documents if item.get("document_id") != document.get("document_id")]
+            matter.documents = [document, *existing]
+            self._touch(matter, "document_attached", {"document_id": document.get("document_id"), "filename": document.get("filename")})
+
+    def remove_document(self, matter_id: str, document_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        matter = self._matters.get(matter_id)
+        if not matter:
+            return None
+        self._assert_access(matter, tenant_context)
+        removed = next((item for item in matter.documents if item.get("document_id") == document_id), None)
+        matter.documents = [item for item in matter.documents if item.get("document_id") != document_id]
+        self._touch(matter, "document_removed", {"document_id": document_id})
+        return removed
+
     def attach_route(self, matter_id: str, route: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         matter = self._matters.get(matter_id)
         if matter:
@@ -464,6 +482,27 @@ class DatabaseMatterStore:
     def attach_billing_event(self, matter_id: str, event: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         self._mutate(matter_id, tenant_context, lambda record: self._append(record, "billing_events", event, "billing_event_attached", {"task": event.get("task")}))
 
+    def attach_document(self, matter_id: str, document: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
+        def mutate(record: MatterRecord) -> None:
+            existing = [item for item in list(record.documents or []) if item.get("document_id") != document.get("document_id")]
+            record.documents = [document, *existing]
+            self._touch(record, "document_attached", {"document_id": document.get("document_id"), "filename": document.get("filename")})
+
+        self._mutate(matter_id, tenant_context, mutate)
+
+    def remove_document(self, matter_id: str, document_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        removed: dict[str, Any] | None = None
+
+        def mutate(record: MatterRecord) -> None:
+            nonlocal removed
+            documents = list(record.documents or [])
+            removed = next((item for item in documents if item.get("document_id") == document_id), None)
+            record.documents = [item for item in documents if item.get("document_id") != document_id]
+            self._touch(record, "document_removed", {"document_id": document_id})
+
+        self._mutate(matter_id, tenant_context, mutate)
+        return removed
+
     def attach_route(self, matter_id: str, route: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> None:
         self._mutate(
             matter_id,
@@ -611,6 +650,12 @@ class UnavailableMatterStore:
     def attach_billing_event(self, *args: Any, **kwargs: Any) -> None:
         self._raise()
 
+    def attach_document(self, *args: Any, **kwargs: Any) -> None:
+        self._raise()
+
+    def remove_document(self, *args: Any, **kwargs: Any) -> dict[str, Any] | None:
+        self._raise()
+
     def attach_route(self, *args: Any, **kwargs: Any) -> None:
         self._raise()
 
@@ -664,6 +709,48 @@ def update_matter_context(intake: dict[str, Any], tenant_context: dict[str, Any]
         },
     )
     return updated
+
+
+def list_matter_documents(matter_id: str, tenant_context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    matter = get_matter_context(matter_id, tenant_context=tenant_context)
+    return list((matter or {}).get("documents") or [])
+
+
+def attach_matter_document(matter_id: str, document: dict[str, Any], tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    _ensure_matter_store().attach_document(matter_id, document, tenant_context=tenant_context)
+    trace_event(
+        name="matter_document_metadata_attached",
+        surface_context=str(document.get("surface_context") or "core_discovery_upload"),
+        category="matter_context",
+        matter_reference=matter_id,
+        metadata={
+            "matter_id": matter_id,
+            "document_id": document.get("document_id"),
+            "filename": document.get("filename"),
+            "tenant_id": _tenant_id(tenant_context),
+            "user_id": _user_id(tenant_context),
+            "extraction_status": document.get("extraction_status"),
+        },
+    )
+    return get_matter_context(matter_id, tenant_context=tenant_context) or {}
+
+
+def remove_matter_document(matter_id: str, document_id: str, tenant_context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    removed = _ensure_matter_store().remove_document(matter_id, document_id, tenant_context=tenant_context)
+    trace_event(
+        name="matter_document_metadata_removed",
+        surface_context="core_documents",
+        category="matter_context",
+        matter_reference=matter_id,
+        metadata={
+            "matter_id": matter_id,
+            "document_id": document_id,
+            "tenant_id": _tenant_id(tenant_context),
+            "user_id": _user_id(tenant_context),
+            "removed": bool(removed),
+        },
+    )
+    return removed
 
 
 def delete_all_tenant_data(tenant_context: dict[str, Any] | None = None) -> dict[str, Any]:
