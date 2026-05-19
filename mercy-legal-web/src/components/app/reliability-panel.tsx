@@ -36,7 +36,7 @@ export function ReliabilityPanel({ envelope, route, agent, rag, citations }: Rel
   );
 
   return (
-    <aside className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <aside data-testid="reliability-panel" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex size-9 items-center justify-center rounded-lg bg-[#EEF2FF] text-[#4F46E5]">
@@ -47,35 +47,35 @@ export function ReliabilityPanel({ envelope, route, agent, rag, citations }: Rel
             <p className="text-xs text-slate-500">Hermes-powered MoE route, sources, guardrails</p>
           </div>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${pill(guardrailStatus)}`}>
+        <span data-testid="guardrail-status" className={`rounded-full border px-2.5 py-1 text-xs font-medium ${pill(guardrailStatus)}`}>
           {guardrailStatus ?? "pending"}
         </span>
       </div>
 
       <dl className="mt-5 space-y-3 text-sm">
-        <div className="rounded-lg bg-slate-50 p-3">
+        <div data-testid="agent-route" className="rounded-lg bg-slate-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Agent X route / expert</dt>
           <dd className="mt-1 font-semibold text-slate-950">
             {activeRoute ? `${activeRoute.expert_label} / ${activeRoute.route_mode}` : "No route yet"}
           </dd>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-slate-50 p-3">
+          <div data-testid="agent-confidence" className="rounded-lg bg-slate-50 p-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Confidence</dt>
             <dd className="mt-1 font-semibold text-slate-950">{pct(confidence)}</dd>
           </div>
-          <div className="rounded-lg bg-slate-50 p-3">
+          <div data-testid="grounding-status" className="rounded-lg bg-slate-50 p-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Grounding</dt>
             <dd className="mt-1 font-semibold text-slate-950">{groundingStatus ?? "pending"}</dd>
           </div>
         </div>
-        <div className="rounded-lg bg-slate-50 p-3">
+        <div data-testid="dc-grounding" className="rounded-lg bg-slate-50 p-3">
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">D.C. grounding</dt>
           <dd className="mt-1 text-slate-700">
             {officialDcGrounding ? "Official D.C. source metadata returned" : "Source verification required before use"}
           </dd>
         </div>
-        <div className="rounded-lg bg-[#F5F3FF] p-3">
+        <div data-testid="attorney-review-flag" className="rounded-lg bg-[#F5F3FF] p-3">
           <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-[#5B21B6]">
             <Scale className="size-3.5" />
             Attorney review
@@ -93,7 +93,7 @@ export function ReliabilityPanel({ envelope, route, agent, rag, citations }: Rel
         </div>
       ) : null}
 
-      <div className="mt-5">
+      <div data-testid="citations-panel" className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Citations</h3>
         <div className="mt-2 space-y-2">
           {activeCitations.length ? (
@@ -113,17 +113,23 @@ export function ReliabilityPanel({ envelope, route, agent, rag, citations }: Rel
         </div>
       </div>
 
-      {traceUrl ? (
+      <div data-testid="trace-panel" className="mt-4">
+        {traceUrl ? (
         <a
           href={traceUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[#4F46E5] hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-[#4F46E5] hover:underline"
         >
           LangSmith trace
           <ExternalLink className="size-3" />
         </a>
-      ) : null}
+        ) : (
+          <span className="text-xs font-medium text-slate-500">
+            Trace {agent?.trace_id ? agent.trace_id.slice(0, 8) : "pending"}
+          </span>
+        )}
+      </div>
     </aside>
   );
 }
