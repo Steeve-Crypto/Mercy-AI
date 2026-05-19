@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, FileText, Loader2, Send, SlidersHorizontal, Sparkles } from "lucide-react";
+import { Bot, FileText, Loader2, Paperclip, Send, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
 import { executeAgent, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
@@ -19,6 +19,7 @@ type AgentXChatPageProps = {
   coreOnline: boolean;
   initialTemplateId?: string;
   initialMatterId?: string;
+  initialAttachedDocIds?: string[];
 };
 
 function agentOutput(result: CoreAgentEnvelope): string {
@@ -44,7 +45,24 @@ function promptFromTemplate(template?: CoreTemplateGalleryItem): string {
   ].join("\n");
 }
 
-export function AgentXChatPage({ initialMatters, templates, coreOnline, initialTemplateId, initialMatterId }: AgentXChatPageProps) {
+function documentId(document: Record<string, unknown>, index: number): string {
+  const raw = document.document_id ?? document.id ?? document.filename ?? document.title ?? `matter-document-${index + 1}`;
+  return String(raw).toLowerCase().replace(/[^a-z0-9-_]+/g, "-");
+}
+
+function documentName(document: Record<string, unknown>, index: number): string {
+  const raw = document.title ?? document.name ?? document.filename ?? document.document_id ?? `Document ${index + 1}`;
+  return String(raw);
+}
+
+export function AgentXChatPage({
+  initialMatters,
+  templates,
+  coreOnline,
+  initialTemplateId,
+  initialMatterId,
+  initialAttachedDocIds = [],
+}: AgentXChatPageProps) {
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.template_id === initialTemplateId),
     [initialTemplateId, templates],
@@ -55,12 +73,24 @@ export function AgentXChatPage({ initialMatters, templates, coreOnline, initialT
   const [useMatterContext, setUseMatterContext] = useState(true);
   const [includeVaultDocuments, setIncludeVaultDocuments] = useState(true);
   const [strictDcJurisdiction, setStrictDcJurisdiction] = useState(true);
+  const [attachedDocIds, setAttachedDocIds] = useState(initialAttachedDocIds);
   const [prompt, setPrompt] = useState(() => promptFromTemplate(selectedTemplate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
+  const attachedDocuments = useMemo(() => {
+    const matterDocuments = activeMatter?.documents ?? [];
+    return attachedDocIds.map((id) => {
+      const found = matterDocuments.find((document, index) => documentId(document, index) === id);
+      return {
+        id,
+        name: found ? documentName(found, matterDocuments.indexOf(found)) : id,
+        metadata: found ?? { document_id: id },
+      };
+    });
+  }, [activeMatter?.documents, attachedDocIds]);
   const lastResult = [...messages].reverse().find((message) => message.result)?.result ?? null;
 
   async function send() {
@@ -84,6 +114,8 @@ export function AgentXChatPage({ initialMatters, templates, coreOnline, initialT
             requested_relief: activeMatter?.requested_relief,
             key_facts: activeMatter?.key_facts,
             documents: activeMatter?.documents,
+            attached_document_ids: attachedDocIds,
+            attached_documents: attachedDocuments.map((document) => document.metadata),
             source_policy: useDcSources ? "official_dc_sources_first" : "matter_context_only",
           }
         : { jurisdiction: "District of Columbia" },
@@ -93,7 +125,8 @@ export function AgentXChatPage({ initialMatters, templates, coreOnline, initialT
         prompt_template_id: selectedTemplate?.prompt_template_id,
         source_query: selectedTemplate?.source_query,
         jurisdiction: strictDcJurisdiction ? "District of Columbia" : undefined,
-        include_vault_documents: includeVaultDocuments,
+        include_vault_documents: includeVaultDocuments || attachedDocIds.length > 0,
+        attached_document_ids: attachedDocIds,
         top_k: useDcSources ? 5 : 0,
         format: "docx",
       },
@@ -143,6 +176,32 @@ export function AgentXChatPage({ initialMatters, templates, coreOnline, initialT
                     <p className="text-sm font-semibold text-slate-950">{selectedTemplate.title}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-600">{selectedTemplate.description}</p>
                   </div>
+                </div>
+              </div>
+            ) : null}
+
+            {attachedDocuments.length ? (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <Paperclip className="size-3.5 text-[#4F46E5]" />
+                  Attached vault documents
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {attachedDocuments.map((document) => (
+                    <span
+                      key={document.id}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]"
+                    >
+                      {document.name}
+                      <button
+                        type="button"
+                        onClick={() => setAttachedDocIds((current) => current.filter((id) => id !== document.id))}
+                        aria-label={`Remove ${document.name}`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -291,7 +350,8 @@ export function AgentXChatPage({ initialMatters, templates, coreOnline, initialT
               Source toggles
             </div>
             <p className="mt-2 text-xs">
-              D.C. sources, matter context, vault documents, and jurisdiction controls are sent with every Agent X request.
+              D.C. sources, matter context, {attachedDocIds.length} attached vault document
+              {attachedDocIds.length === 1 ? "" : "s"}, and jurisdiction controls are sent with every Agent X request.
             </p>
           </div>
         </div>

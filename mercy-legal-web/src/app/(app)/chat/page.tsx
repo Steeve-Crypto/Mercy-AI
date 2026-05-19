@@ -5,6 +5,7 @@ type ChatPageProps = {
   searchParams?: Promise<{
     templateId?: string;
     matterId?: string;
+    attachedDocs?: string;
   }>;
 };
 
@@ -18,6 +19,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
       coreOnline={snapshot.online}
       initialTemplateId={params?.templateId}
       initialMatterId={params?.matterId}
+      initialAttachedDocIds={params?.attachedDocs?.split(",").filter(Boolean) ?? []}
     />
   );
 }

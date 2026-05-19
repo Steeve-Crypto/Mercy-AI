@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
 import {
   Activity,
   Bot,
@@ -11,8 +12,10 @@ import {
   FolderOpen,
   Loader2,
   MessageSquareText,
+  Paperclip,
   Search,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import {
@@ -29,6 +32,23 @@ type MatterDetailWorkspaceProps = {
 };
 
 type MatterTab = "overview" | "documents" | "research" | "drafting" | "activity" | "billing";
+type DocumentStatus = "Processing..." | "Ready" | "Failed";
+
+type MatterDocument = {
+  id: string;
+  filename: string;
+  uploadDate: string;
+  size: string;
+  type: string;
+  status: DocumentStatus;
+  source: "matter" | "local_upload";
+};
+
+type Toast = {
+  id: string;
+  tone: "success" | "error" | "info";
+  message: string;
+};
 
 const tabs: Array<{ id: MatterTab; label: string; icon: typeof FolderOpen }> = [
   { id: "overview", label: "Overview", icon: FolderOpen },
@@ -47,6 +67,31 @@ function asText(value: unknown, fallback = "Pending"): string {
 
 function documentTitle(document: Record<string, unknown>, index: number): string {
   return asText(document.title ?? document.name ?? document.filename ?? document.document_id, `Document ${index + 1}`);
+}
+
+function documentId(document: Record<string, unknown>, index: number): string {
+  return asText(document.document_id ?? document.id ?? document.filename ?? document.title, `matter-document-${index + 1}`)
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, "-");
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "Size pending";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeMatterDocuments(documents: Array<Record<string, unknown>>): MatterDocument[] {
+  return documents.map((document, index) => ({
+    id: documentId(document, index),
+    filename: documentTitle(document, index),
+    uploadDate: asText(document.uploaded_at ?? document.created_at ?? document.date, "Upload date pending"),
+    size: typeof document.size === "number" ? formatBytes(document.size) : asText(document.size, "Size pending"),
+    type: asText(document.type ?? document.document_type ?? document.mime_type, "PDF / legal document"),
+    status: asText(document.status ?? document.extraction_status, "Ready") === "Failed" ? "Failed" : "Ready",
+    source: "matter",
+  }));
 }
 
 function timeline(matter: CoreMatter, research: CoreRagEnvelope | null, discovery: CoreDiscoveryEnvelope | null) {
@@ -96,16 +141,78 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
   const [researchResult, setResearchResult] = useState<CoreRagEnvelope | null>(null);
-  const [file, setFile] = useState<File | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<CoreDiscoveryEnvelope | null>(null);
+  const [documents, setDocuments] = useState<MatterDocument[]>(() => normalizeMatterDocuments(matter.documents ?? []));
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const documents = matter.documents ?? [];
   const deadlines = matter.deadlines ?? [];
   const activities = useMemo(() => timeline(matter, researchResult, discoveryResult), [discoveryResult, matter, researchResult]);
   const chatHref = `/chat?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
   const intakeHref = `/intake?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
+
+  function addToast(tone: Toast["tone"], message: string) {
+    const toast = { id: crypto.randomUUID(), tone, message };
+    setToasts((current) => [toast, ...current].slice(0, 4));
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== toast.id));
+    }, 4500);
+  }
+
+  const uploadFiles = useCallback(
+    async (acceptedFiles: File[]) => {
+      if (!acceptedFiles.length) return;
+      setUploadBusy(true);
+      setUploadError(null);
+
+      for (const uploadFile of acceptedFiles) {
+        const localId = `${uploadFile.name}-${uploadFile.size}-${Date.now()}`
+          .toLowerCase()
+          .replace(/[^a-z0-9-_]+/g, "-");
+        const pendingDocument: MatterDocument = {
+          id: localId,
+          filename: uploadFile.name,
+          uploadDate: new Date().toLocaleString(),
+          size: formatBytes(uploadFile.size),
+          type: uploadFile.type || "application/pdf",
+          status: "Processing...",
+          source: "local_upload",
+        };
+
+        setDocuments((current) => [pendingDocument, ...current]);
+        addToast("info", `Uploading ${uploadFile.name}. Backend extraction will run after upload.`);
+
+        const response = await uploadDiscoveryDocument({ file: uploadFile, matter_id: matter.matter_id });
+        if (!response.ok || !response.data) {
+          setUploadError(response.error ?? `Document upload failed for ${uploadFile.name}.`);
+          setDocuments((current) =>
+            current.map((document) => (document.id === localId ? { ...document, status: "Failed" } : document)),
+          );
+          addToast("error", response.error ?? `${uploadFile.name} failed to upload.`);
+          continue;
+        }
+
+        setDiscoveryResult(response.data);
+        setDocuments((current) =>
+          current.map((document) => (document.id === localId ? { ...document, status: "Ready" } : document)),
+        );
+        addToast("success", `${uploadFile.name} uploaded and sent for extraction.`);
+      }
+
+      setUploadBusy(false);
+    },
+    [matter.matter_id],
+  );
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    accept: {
+      "application/pdf": [".pdf"],
+    },
+    multiple: true,
+    noClick: true,
+    onDrop: uploadFiles,
+  });
 
   async function runResearch() {
     if (!query.trim()) {
@@ -137,19 +244,6 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
     setResearchResult(response.data);
   }
 
-  async function uploadDocument() {
-    if (!file) return;
-    setUploadBusy(true);
-    setUploadError(null);
-    const response = await uploadDiscoveryDocument({ file, matter_id: matter.matter_id });
-    setUploadBusy(false);
-    if (!response.ok || !response.data) {
-      setUploadError(response.error ?? "Document upload failed.");
-      return;
-    }
-    setDiscoveryResult(response.data);
-  }
-
   return (
     <>
       <PageHeader
@@ -168,6 +262,28 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
       </PageHeader>
 
       <div className="p-5 lg:p-8">
+        {toasts.length ? (
+          <div className="fixed right-5 top-5 z-50 w-80 space-y-2">
+            {toasts.map((toast) => (
+              <div
+                key={toast.id}
+                className={`flex items-start justify-between gap-3 rounded-xl border bg-white p-4 text-sm shadow-lg ${
+                  toast.tone === "success"
+                    ? "border-emerald-200 text-emerald-800"
+                    : toast.tone === "error"
+                      ? "border-rose-200 text-rose-800"
+                      : "border-[#C7D2FE] text-[#4338CA]"
+                }`}
+              >
+                <span>{toast.message}</span>
+                <button onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}>
+                  <X className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {initialError ? (
           <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{initialError}</div>
         ) : null}
@@ -252,26 +368,111 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Documents</h2>
-                <p className="mt-1 text-sm text-slate-500">Matter documents and upload workflow for discovery analysis.</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Upload PDFs for backend extraction and attach ready documents to Ask Agent X.
+                </p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-                <button onClick={uploadDocument} disabled={!file || uploadBusy} className="flex items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-                  {uploadBusy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
-                  Upload
-                </button>
-              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                {documents.length} document{documents.length === 1 ? "" : "s"}
+              </span>
             </div>
+
+            <div
+              {...getRootProps()}
+              className={`mt-5 rounded-xl border-2 border-dashed p-8 text-center transition ${
+                isDragActive ? "border-[#4F46E5] bg-[#EEF2FF]" : "border-slate-300 bg-slate-50 hover:border-[#A5B4FC]"
+              }`}
+            >
+              <input {...getInputProps()} />
+              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-white text-[#4F46E5] shadow-sm">
+                <UploadCloud className="size-6" />
+              </div>
+              <h3 className="mt-4 text-base font-semibold text-slate-950">
+                {isDragActive ? "Drop PDFs to upload" : "No documents yet — drag & drop or upload"}
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                PDF files are sent to the Mercy core. Extraction and indexing are handled by the backend.
+              </p>
+              <button
+                type="button"
+                onClick={open}
+                disabled={uploadBusy}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+              >
+                {uploadBusy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
+                Choose PDF files
+              </button>
+            </div>
+
             {uploadError ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{uploadError}</div> : null}
-            {discoveryResult ? <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Document analyzed by {discoveryResult.engine}. Review extracted facts in Activity.</div> : null}
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {documents.length ? documents.map((document, index) => (
-                <div key={`${documentTitle(document, index)}-${index}`} className="rounded-xl border border-slate-200 p-4">
-                  <p className="font-semibold text-slate-950">{documentTitle(document, index)}</p>
-                  <p className="mt-2 text-sm text-slate-500">{asText(document.source ?? document.document_type ?? document.type, "Matter document")}</p>
-                  <p className="mt-2 text-xs text-slate-400">{asText(document.created_at ?? document.date ?? document.uploaded_at, "Metadata pending")}</p>
+            {discoveryResult ? (
+              <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+                Document uploaded to {discoveryResult.engine}. Extraction status is ready for attorney review.
+              </div>
+            ) : null}
+
+            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+              <div className="grid grid-cols-[minmax(0,1.4fr)_0.75fr_0.65fr_0.65fr_0.7fr_auto] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span>Filename</span>
+                <span>Upload date</span>
+                <span>Size</span>
+                <span>Type</span>
+                <span>Status</span>
+                <span className="text-right">Action</span>
+              </div>
+              {documents.length ? (
+                <div className="divide-y divide-slate-200 bg-white">
+                  {documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="grid grid-cols-1 gap-3 px-4 py-4 text-sm md:grid-cols-[minmax(0,1.4fr)_0.75fr_0.65fr_0.65fr_0.7fr_auto] md:items-center"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#EEF2FF] text-[#4F46E5]">
+                          <FileText className="size-4" />
+                        </div>
+                        <span className="truncate font-semibold text-slate-950">{document.filename}</span>
+                      </div>
+                      <span className="text-slate-500">{document.uploadDate}</span>
+                      <span className="text-slate-500">{document.size}</span>
+                      <span className="text-slate-500">{document.type}</span>
+                      <span
+                        className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${
+                          document.status === "Ready"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : document.status === "Failed"
+                              ? "bg-rose-50 text-rose-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {document.status}
+                      </span>
+                      {document.status === "Ready" ? (
+                        <Link
+                          href={`/chat?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}` as Route}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
+                        >
+                          <Paperclip className="size-3.5" />
+                          Attach to Chat
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-400"
+                        >
+                          <Paperclip className="size-3.5" />
+                          Attach to Chat
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              )) : <EmptyState text="No uploaded documents are recorded on this matter yet." />}
+              ) : (
+                <div className="bg-white p-6">
+                  <EmptyState text="No documents yet — drag & drop or upload approved PDF files to begin." />
+                </div>
+              )}
             </div>
           </section>
         ) : null}
