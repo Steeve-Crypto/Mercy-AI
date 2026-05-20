@@ -30,7 +30,11 @@ function rolesFromUser(user: User): string[] {
 
 function tenantFromUser(user: User): string {
   return String(
-    user.app_metadata?.tenant_id ??
+    user.app_metadata?.firm_id ??
+      user.app_metadata?.firmId ??
+      user.user_metadata?.firm_id ??
+      user.user_metadata?.firmId ??
+      user.app_metadata?.tenant_id ??
       user.app_metadata?.tenantId ??
       user.user_metadata?.tenant_id ??
       user.user_metadata?.tenantId ??

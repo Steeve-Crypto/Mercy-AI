@@ -38,7 +38,7 @@ class MercyConfig(BaseSettings):
         default="local",
         validation_alias=AliasChoices("MERCY_ENV", "ENVIRONMENT"),
     )
-    mercy_auth_mode: Literal["dev", "token", "supabase", "clerk", "disabled", ""] = Field(
+    mercy_auth_mode: Literal["dev", "test", "token", "supabase", "clerk", "disabled", ""] = Field(
         default="dev",
         validation_alias=AliasChoices("MERCY_AUTH_MODE"),
     )
@@ -240,12 +240,16 @@ class MercyConfig(BaseSettings):
             issues.append("MERCY_DC_BAR_NUMBER is required for D.C. attorney-facing production.")
         if production_like and self.mercy_auth_mode == "dev":
             issues.append("MERCY_AUTH_MODE=dev is not production safe.")
+        if production_like and self.mercy_auth_mode == "test":
+            issues.append("MERCY_AUTH_MODE=test is only for CI/CD and verification environments.")
         if production_like and not self.mercy_require_https:
             issues.append("MERCY_REQUIRE_HTTPS=true is required for production.")
         if production_like and not self.database_url:
             issues.append("POSTGRES_URL or SUPABASE_DB_URL is required for persistent PostgreSQL + pgvector storage.")
-        if production_like and not self.effective_api_token and self.mercy_auth_mode in {"token", ""}:
-            issues.append("MERCY_API_TOKEN or MERCY_CORE_API_TOKEN is required for token auth.")
+        if production_like and self.mercy_auth_mode in {"token", ""}:
+            issues.append("Production auth must use MERCY_AUTH_MODE=supabase.")
+        if not production_like and not self.effective_api_token and self.mercy_auth_mode in {"test", "token"}:
+            issues.append("MERCY_API_TOKEN or MERCY_CORE_API_TOKEN is required for test/token auth.")
         if production_like and self.mercy_auth_mode == "supabase":
             if not self.supabase_url or not self.supabase_anon_key or not self.supabase_jwt_secret:
                 issues.append("SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_JWT_SECRET are required for Supabase auth.")

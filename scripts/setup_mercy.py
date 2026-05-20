@@ -40,7 +40,7 @@ GROUPS: list[tuple[str, list[EnvSpec]]] = [
         "Environment / Auth",
         [
             EnvSpec("MERCY_ENV", "Environment", "local", required_prod=True, choices=("local", "development", "staging", "prod", "production")),
-            EnvSpec("MERCY_AUTH_MODE", "Auth mode", "dev", required_prod=True, choices=("dev", "token", "supabase", "clerk")),
+            EnvSpec("MERCY_AUTH_MODE", "Auth mode", "dev", required_prod=True, choices=("dev", "test", "supabase", "clerk")),
             EnvSpec("MERCY_REQUIRE_HTTPS", "Require HTTPS", "false", required_prod=True, choices=("true", "false")),
             EnvSpec("MERCY_API_TOKEN", "Backend bearer token", secret=True),
             EnvSpec("MERCY_CORE_API_TOKEN", "Core API token", secret=True),

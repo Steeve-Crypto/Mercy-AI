@@ -37,6 +37,7 @@ def _jwt_headers(token: str, tenant_id: str = "client-supplied-tenant") -> dict[
     return {
         "Authorization": f"Bearer {token}",
         "X-Mercy-Tenant-Id": tenant_id,
+        "X-Mercy-Firm-Id": "client-supplied-firm",
         "X-Mercy-User-Id": "client-supplied-user",
         "X-Mercy-Roles": "client_supplied_role",
     }
@@ -55,6 +56,7 @@ def _supabase_jwt(
     secret: str = "unit-supabase-secret",
     user_id: str = "jwt-user-a",
     tenant_id: str = "jwt-tenant-a",
+    firm_id: str | None = None,
     expires_in: int = 3600,
     roles: list[str] | None = None,
     issuer: str | None = None,
@@ -69,6 +71,10 @@ def _supabase_jwt(
         "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
         "user_metadata": {"name": "JWT User"},
     }
+    if firm_id:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["firm_id"] = firm_id
     if issuer:
         payload["iss"] = issuer
     signing_input = f"{_b64url(header)}.{_b64url(payload)}"
@@ -91,7 +97,7 @@ def _patched_env(*args, **kwargs):
 class AuthTenantGuardTests(unittest.TestCase):
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_legal_endpoint_rejects_unauthenticated_non_local_request(self) -> None:
-        with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "token", "MERCY_API_TOKEN": "test-token"}):
+        with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"}):
             client = TestClient(app)  # type: ignore[arg-type]
             response = client.get("/v1/matters")
 
@@ -111,6 +117,23 @@ class AuthTenantGuardTests(unittest.TestCase):
         payload = created.json()
         self.assertEqual(payload["tenant_id"], "jwt-tenant-a")
         self.assertEqual(payload["created_by_user_id"], "jwt-user-a")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_firm_id_takes_precedence_and_tenant_id_supports_solo_accounts(self) -> None:
+        firm_token = _supabase_jwt(user_id="firm-user", tenant_id="solo-tenant-shadow", firm_id="firm-tenant-a")
+        solo_token = _supabase_jwt(user_id="solo-user", tenant_id="solo-tenant-a")
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            client = TestClient(app)  # type: ignore[arg-type]
+            firm_created = client.post("/v1/matters", headers=_jwt_headers(firm_token), json={"name": "Firm matter"})
+            solo_created = client.post("/v1/matters", headers=_jwt_headers(solo_token), json={"name": "Solo matter"})
+
+        self.assertEqual(firm_created.status_code, 200)
+        self.assertEqual(solo_created.status_code, 200)
+        self.assertEqual(firm_created.json()["tenant_id"], "firm-tenant-a")
+        self.assertEqual(solo_created.json()["tenant_id"], "solo-tenant-a")
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_missing_invalid_and_expired_supabase_jwt_are_rejected(self) -> None:
@@ -136,6 +159,27 @@ class AuthTenantGuardTests(unittest.TestCase):
         with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": ""}):
             client = TestClient(app)  # type: ignore[arg-type]
             response = client.get("/v1/matters", headers={"Authorization": f"Bearer {token}"})
+
+        self.assertEqual(response.status_code, 500)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_test_auth_only_works_in_explicit_test_environments(self) -> None:
+        test_headers = _headers("ci-tenant", user_id="ci-user")
+        with _patched_env(os.environ, {"MERCY_ENV": "test", "MERCY_AUTH_MODE": "test", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            accepted = client.get("/v1/matters", headers=test_headers)
+        with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "test", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            rejected = client.get("/v1/matters", headers=test_headers)
+
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(rejected.status_code, 500)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_legacy_token_auth_is_not_a_production_mode(self) -> None:
+        with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "token", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            response = client.get("/v1/matters", headers=_headers("tenant-token"))
 
         self.assertEqual(response.status_code, 500)
 
@@ -292,6 +336,7 @@ class AuthTenantGuardTests(unittest.TestCase):
                         "task": "Use the selected matter only.",
                         "matter_id": matter_b,
                         "matter_context": {
+                            "auth_context": {"tenant_id": "tenant-b", "user_id": "attacker"},
                             "documents": [{"document_id": "matter-a-secret-doc", "filename": "matter-a-secret.pdf"}],
                             "attached_documents": [{"document_id": "matter-a-secret-doc"}],
                         },
@@ -300,6 +345,7 @@ class AuthTenantGuardTests(unittest.TestCase):
                 context = execute_agent_task.call_args.kwargs["matter_context"]
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(context["auth_context"]["tenant_id"], "tenant-a")
         document_ids = {document.get("document_id") for document in context.get("documents", [])}
         self.assertEqual(document_ids, {"matter-b-doc"})
         self.assertNotIn("matter-a-secret-doc", str(context))

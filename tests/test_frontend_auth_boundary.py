@@ -30,6 +30,12 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
         self.assertIn("persistMercyContext(nextSession, false)", source)
         self.assertIn("persistMercyContext(LOCAL_DEV_SESSION, true)", source)
 
+    def test_web_session_prefers_firm_id_before_solo_tenant_id(self) -> None:
+        source = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "session.ts").read_text(encoding="utf-8")
+
+        self.assertLess(source.find("user.app_metadata?.firm_id"), source.find("user.app_metadata?.tenant_id"))
+        self.assertLess(source.find("user.user_metadata?.firm_id"), source.find("user.user_metadata?.tenant_id"))
+
 
 if __name__ == "__main__":
     unittest.main()

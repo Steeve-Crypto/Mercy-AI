@@ -161,18 +161,18 @@ def _tenant_from_claims(payload: dict[str, Any]) -> str | None:
     app_metadata = _claim_metadata(payload, "app_metadata")
     user_metadata = _claim_metadata(payload, "user_metadata")
     return _claim_string(
-        app_metadata.get("tenant_id"),
-        app_metadata.get("tenantId"),
         app_metadata.get("firm_id"),
         app_metadata.get("firmId"),
-        user_metadata.get("tenant_id"),
-        user_metadata.get("tenantId"),
         user_metadata.get("firm_id"),
         user_metadata.get("firmId"),
-        payload.get("tenant_id"),
-        payload.get("tenantId"),
         payload.get("firm_id"),
         payload.get("firmId"),
+        app_metadata.get("tenant_id"),
+        app_metadata.get("tenantId"),
+        user_metadata.get("tenant_id"),
+        user_metadata.get("tenantId"),
+        payload.get("tenant_id"),
+        payload.get("tenantId"),
     )
 
 
@@ -209,10 +209,23 @@ async def get_current_tenant_user(
             roles=_parse_roles(roles),
         )
     else:
-        auth_mode = get_config().mercy_auth_mode
+        config = get_config()
+        auth_mode = config.mercy_auth_mode
         if auth_mode == "supabase":
             tenant_user = _tenant_user_from_supabase_jwt(authorization)
-        elif auth_mode == "token":
+        elif auth_mode == "test":
+            if config.mercy_env not in {"test", "verify"}:
+                raise HTTPException(status_code=500, detail="Mercy test auth is not enabled for this environment.")
+            _validate_bearer_token(authorization)
+            if not tenant_id or not user_id:
+                raise HTTPException(status_code=401, detail="Missing tenant or user context for Mercy legal endpoint.")
+            tenant_user = TenantUser(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                auth_mode="test",
+                roles=_parse_roles(roles),
+            )
+        elif auth_mode == "token" and config.is_local:
             _validate_bearer_token(authorization)
             if not tenant_id or not user_id:
                 raise HTTPException(status_code=401, detail="Missing tenant or user context for Mercy legal endpoint.")
