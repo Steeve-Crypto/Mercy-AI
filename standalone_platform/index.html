@@ -7,21 +7,19 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #040302;
-        --panel: rgba(15, 12, 9, 0.88);
-        --panel-solid: #0e0b08;
-        --line: rgba(255, 149, 59, 0.18);
-        --line-strong: rgba(255, 173, 72, 0.58);
-        --text: #fff2df;
-        --muted: #b8aa99;
-        --cyan: #7dd3fc;
-        --blue: #6b8fb7;
-        --green: #7ddc9f;
-        --amber: #ffb23e;
-        --orange: #ff7a1a;
-        --gold: #ffd36f;
-        --red: #ff4d1f;
-        --graphite: #1a1713;
+        --bg: #000000;
+        --panel: rgba(8, 9, 8, 0.9);
+        --panel-solid: #070807;
+        --line: rgba(128, 136, 130, 0.24);
+        --line-strong: rgba(0, 255, 102, 0.58);
+        --text: #eef8f0;
+        --muted: #8d958f;
+        --green: #00ff66;
+        --amber: #ffbf00;
+        --red: #ff2a1f;
+        --grey: #808882;
+        --steel: #6f8da0;
+        --graphite: #111411;
       }
 
       * {
@@ -37,10 +35,11 @@
         margin: 0;
         overflow: hidden;
         background:
-          radial-gradient(circle at 48% 42%, rgba(255, 122, 26, 0.18), transparent 34%),
-          radial-gradient(circle at 18% 18%, rgba(255, 178, 62, 0.12), transparent 30%),
-          radial-gradient(circle at 88% 20%, rgba(125, 211, 252, 0.08), transparent 28%),
-          linear-gradient(135deg, #030201 0%, #0c0906 46%, #030303 100%);
+          linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+          radial-gradient(circle at 50% 48%, rgba(0, 255, 102, 0.06), transparent 34%),
+          #000000;
+        background-size: 22px 22px, 22px 22px, auto, auto;
         color: var(--text);
         font-family:
           Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -68,7 +67,7 @@
         align-items: center;
         padding: 18px 20px 12px;
         border-bottom: 1px solid var(--line);
-        background: rgba(7, 5, 3, 0.78);
+        background: rgba(2, 3, 2, 0.86);
         backdrop-filter: blur(18px);
       }
 
@@ -82,12 +81,12 @@
       .brand-mark {
         width: 44px;
         height: 44px;
-        border: 1px solid rgba(255, 154, 53, 0.52);
+        border: 1px solid rgba(0, 255, 102, 0.52);
         border-radius: 8px;
         background:
-          linear-gradient(135deg, rgba(255, 122, 26, 0.28), rgba(125, 211, 252, 0.08)),
-          #120a05;
-        box-shadow: 0 0 34px rgba(255, 122, 26, 0.38);
+          linear-gradient(135deg, rgba(0, 255, 102, 0.18), rgba(111, 141, 160, 0.1)),
+          #050805;
+        box-shadow: 0 0 34px rgba(0, 255, 102, 0.26);
         display: grid;
         place-items: center;
         font-weight: 800;
@@ -119,18 +118,18 @@
 
       .search-wrap input {
         width: 100%;
-        border: 1px solid rgba(255, 178, 62, 0.24);
+        border: 1px solid rgba(128, 136, 130, 0.36);
         border-radius: 8px;
         outline: none;
         padding: 12px 14px;
-        background: rgba(12, 9, 7, 0.84);
+        background: rgba(6, 8, 6, 0.84);
         color: var(--text);
-        box-shadow: inset 0 0 20px rgba(34, 211, 238, 0.05);
+        box-shadow: inset 0 0 20px rgba(0, 255, 102, 0.04);
       }
 
       .search-wrap input:focus {
-        border-color: rgba(255, 178, 62, 0.68);
-        box-shadow: 0 0 0 3px rgba(255, 122, 26, 0.12);
+        border-color: rgba(0, 255, 102, 0.68);
+        box-shadow: 0 0 0 3px rgba(0, 255, 102, 0.12);
       }
 
       .op-controls {
@@ -144,21 +143,21 @@
       .control-button,
       .control-select,
       .mode-button {
-        border: 1px solid rgba(255, 178, 62, 0.24);
+        border: 1px solid rgba(128, 136, 130, 0.35);
         border-radius: 8px;
-        background: rgba(14, 10, 7, 0.82);
+        background: rgba(7, 9, 7, 0.82);
         color: var(--text);
         min-height: 36px;
         padding: 8px 10px;
-        box-shadow: inset 0 0 18px rgba(255, 122, 26, 0.04);
+        box-shadow: inset 0 0 18px rgba(0, 255, 102, 0.04);
       }
 
       .mode-toggle {
         display: inline-flex;
-        border: 1px solid rgba(255, 178, 62, 0.2);
+        border: 1px solid rgba(128, 136, 130, 0.3);
         border-radius: 8px;
         overflow: hidden;
-        background: rgba(8, 6, 4, 0.8);
+        background: rgba(4, 5, 4, 0.8);
       }
 
       .mode-button {
@@ -168,9 +167,9 @@
       }
 
       .mode-button.active {
-        color: #1b0d03;
-        background: linear-gradient(135deg, var(--gold), var(--orange));
-        box-shadow: 0 0 22px rgba(255, 122, 26, 0.34);
+        color: #001407;
+        background: var(--green);
+        box-shadow: 0 0 22px rgba(0, 255, 102, 0.34);
       }
 
       .health-summary {
@@ -226,7 +225,7 @@
         align-items: center;
         justify-content: space-between;
         margin-bottom: 10px;
-        color: var(--gold);
+        color: var(--green);
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -259,8 +258,8 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: var(--orange);
-        box-shadow: 0 0 16px rgba(255, 122, 26, 0.8);
+        background: var(--green);
+        box-shadow: 0 0 16px rgba(0, 255, 102, 0.8);
       }
 
       .signals {
@@ -298,10 +297,10 @@
       }
 
       .tool-button {
-        border: 1px solid rgba(255, 178, 62, 0.28);
+        border: 1px solid rgba(128, 136, 130, 0.34);
         border-radius: 8px;
         padding: 8px 10px;
-        background: rgba(14, 10, 7, 0.86);
+        background: rgba(7, 9, 7, 0.86);
         color: var(--text);
       }
 
@@ -327,25 +326,25 @@
       }
 
       .group-box {
-        fill: rgba(18, 14, 10, 0.32);
-        stroke: rgba(255, 178, 62, 0.18);
+        fill: rgba(12, 15, 12, 0.34);
+        stroke: rgba(128, 136, 130, 0.2);
         stroke-width: 0.2;
       }
 
       .group-label {
-        fill: var(--gold);
+        fill: var(--green);
         font-size: 1.55px;
         font-weight: 700;
       }
 
       .group-desc {
-        fill: rgba(203, 213, 225, 0.62);
+        fill: rgba(141, 149, 143, 0.76);
         font-size: 1px;
       }
 
       .edge {
         fill: none;
-        stroke: rgba(255, 149, 59, 0.2);
+        stroke: rgba(128, 136, 130, 0.38);
         stroke-width: 0.36;
         cursor: pointer;
         stroke-dasharray: 1.8 1.4;
@@ -353,28 +352,42 @@
       }
 
       .edge.observed {
-        stroke: rgba(255, 173, 72, 0.82);
+        stroke: var(--green);
         stroke-dasharray: none;
-        filter: drop-shadow(0 0 4px rgba(255, 122, 26, 0.62));
+        filter: drop-shadow(0 0 5px rgba(0, 255, 102, 0.7));
       }
 
       .edge.missing_observation,
       .edge.warning {
-        stroke: rgba(255, 178, 62, 0.52);
+        stroke: var(--amber);
         animation: amberPulse 1.8s ease-in-out infinite;
       }
 
       .edge.unknown_observed_dependency,
       .edge.failing {
-        stroke: rgba(255, 77, 31, 0.78);
+        stroke: var(--red);
         animation: alertPulse 1.1s ease-in-out infinite;
       }
 
       .edge.active,
       .edge.connected {
-        stroke: rgba(255, 211, 111, 0.95);
+        stroke: var(--green);
         stroke-width: 0.86;
-        filter: drop-shadow(0 0 7px rgba(255, 122, 26, 0.88));
+        filter: drop-shadow(0 0 8px rgba(0, 255, 102, 0.9));
+      }
+
+      .edge.missing_observation.active,
+      .edge.missing_observation.connected {
+        stroke: var(--amber);
+        filter: drop-shadow(0 0 8px rgba(255, 191, 0, 0.86));
+      }
+
+      .edge.unknown_observed_dependency.active,
+      .edge.unknown_observed_dependency.connected,
+      .edge.failing.active,
+      .edge.failing.connected {
+        stroke: var(--red);
+        filter: drop-shadow(0 0 8px rgba(255, 42, 31, 0.9));
       }
 
       .edge-wrap.dim,
@@ -395,27 +408,27 @@
       }
 
       .node-shell {
-        fill: rgba(13, 10, 8, 0.96);
-        stroke: rgba(255, 154, 53, 0.48);
+        fill: rgba(7, 9, 7, 0.97);
+        stroke: rgba(128, 136, 130, 0.5);
         stroke-width: 0.32;
-        filter: drop-shadow(0 0 6px rgba(255, 122, 26, 0.26));
+        filter: drop-shadow(0 0 5px rgba(0, 255, 102, 0.12));
       }
 
       .node.selected .node-shell,
       .node.connected .node-shell {
-        stroke: rgba(255, 211, 111, 0.98);
+        stroke: var(--green);
         stroke-width: 0.58;
-        filter: drop-shadow(0 0 14px rgba(255, 122, 26, 0.78));
+        filter: drop-shadow(0 0 14px rgba(0, 255, 102, 0.72));
       }
 
       .node.warning .node-shell {
-        stroke: rgba(251, 191, 36, 0.72);
-        filter: drop-shadow(0 0 7px rgba(251, 191, 36, 0.28));
+        stroke: var(--amber);
+        filter: drop-shadow(0 0 7px rgba(255, 191, 0, 0.32));
       }
 
       .node.failing .node-shell {
-        stroke: rgba(251, 113, 133, 0.78);
-        filter: drop-shadow(0 0 7px rgba(251, 113, 133, 0.3));
+        stroke: var(--red);
+        filter: drop-shadow(0 0 7px rgba(255, 42, 31, 0.34));
       }
 
       .node.unknown .node-shell {
@@ -440,15 +453,15 @@
       }
 
       .node-type {
-        fill: rgba(203, 213, 225, 0.68);
+        fill: rgba(141, 149, 143, 0.78);
         font-size: 0.82px;
         text-transform: uppercase;
         pointer-events: none;
       }
 
       .tracer {
-        fill: var(--gold);
-        filter: drop-shadow(0 0 5px rgba(255, 122, 26, 0.95));
+        fill: var(--green);
+        filter: drop-shadow(0 0 6px rgba(0, 255, 102, 0.95));
         opacity: 0;
       }
 
@@ -460,7 +473,18 @@
 
       .edge-wrap.connected .tracer,
       .edge-wrap.active .tracer {
-        fill: #fff0c2;
+        fill: var(--green);
+      }
+
+      .edge-wrap.missing_observation .tracer {
+        fill: var(--amber);
+        filter: drop-shadow(0 0 6px rgba(255, 191, 0, 0.92));
+      }
+
+      .edge-wrap.unknown_observed_dependency .tracer,
+      .edge-wrap.failing .tracer {
+        fill: var(--red);
+        filter: drop-shadow(0 0 6px rgba(255, 42, 31, 0.95));
       }
 
       .metric-badge {
@@ -475,41 +499,23 @@
       }
 
       .metric-badge rect {
-        fill: rgba(8, 6, 4, 0.94);
-        stroke: rgba(255, 178, 62, 0.46);
+        fill: rgba(4, 6, 4, 0.94);
+        stroke: rgba(0, 255, 102, 0.46);
         stroke-width: 0.12;
       }
 
       .metric-badge text {
-        fill: var(--gold);
+        fill: var(--green);
         font-size: 0.82px;
         font-weight: 700;
       }
 
-      .radar-ring {
-        fill: none;
-        stroke: rgba(255, 178, 62, 0.1);
-        stroke-width: 0.14;
-      }
-
-      .radar-sweep {
-        fill: rgba(255, 122, 26, 0.035);
-        stroke: rgba(255, 178, 62, 0.12);
-        stroke-width: 0.12;
-        transform-origin: 42px 48px;
-        animation: radarSweep 8s linear infinite;
-      }
-
-      @keyframes radarSweep {
-        to { transform: rotate(360deg); }
-      }
-
       @keyframes amberPulse {
-        50% { stroke-opacity: 0.38; filter: drop-shadow(0 0 6px rgba(255, 178, 62, 0.5)); }
+        50% { stroke-opacity: 0.44; filter: drop-shadow(0 0 7px rgba(255, 191, 0, 0.58)); }
       }
 
       @keyframes alertPulse {
-        50% { stroke-opacity: 0.48; filter: drop-shadow(0 0 8px rgba(255, 77, 31, 0.78)); }
+        50% { stroke-opacity: 0.5; filter: drop-shadow(0 0 9px rgba(255, 42, 31, 0.82)); }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -521,8 +527,7 @@
           scroll-behavior: auto !important;
         }
 
-        .tracer,
-        .radar-sweep {
+        .tracer {
           display: none;
         }
       }
@@ -543,7 +548,7 @@
       }
 
       .observed .status-dot {
-        fill: var(--cyan);
+        fill: var(--green);
       }
 
       .failing .status-dot,
@@ -567,7 +572,7 @@
       }
 
       .eyebrow {
-        color: var(--cyan);
+        color: var(--green);
         font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
@@ -592,7 +597,7 @@
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 9px;
-        background: rgba(15, 23, 42, 0.62);
+        background: rgba(8, 10, 8, 0.72);
       }
 
       .meta span,
@@ -618,7 +623,7 @@
         border: 1px solid var(--line);
         border-radius: 999px;
         padding: 5px 8px;
-        background: rgba(15, 23, 42, 0.72);
+        background: rgba(8, 10, 8, 0.72);
         color: var(--muted);
         font-size: 12px;
       }
@@ -651,7 +656,7 @@
 
       .description {
         margin-top: 12px;
-        color: #cbd5e1;
+        color: #c9d2cc;
         font-size: 13px;
         line-height: 1.5;
       }
@@ -687,10 +692,10 @@
 
       .load-error div {
         max-width: 560px;
-        border: 1px solid rgba(251, 113, 133, 0.35);
+        border: 1px solid rgba(255, 42, 31, 0.38);
         border-radius: 8px;
         padding: 24px;
-        background: rgba(15, 23, 42, 0.84);
+        background: rgba(8, 10, 8, 0.9);
       }
 
       @media (max-width: 1080px) {
@@ -768,7 +773,7 @@
           <svg id="devops-graph" data-testid="devops-graph" role="img" aria-label="Interactive Mercy architecture graph">
             <defs>
               <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
-                <path d="M 0 0 L 8 4 L 0 8 z" fill="rgba(125, 211, 252, 0.72)"></path>
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="rgba(0, 255, 102, 0.72)"></path>
               </marker>
               <pattern id="grid" width="4" height="4" patternUnits="userSpaceOnUse">
                 <path d="M 4 0 L 0 0 0 4" fill="none" stroke="rgba(148, 163, 184, 0.11)" stroke-width="0.12"></path>
@@ -776,12 +781,6 @@
             </defs>
             <rect x="-20" y="-20" width="140" height="140" fill="url(#grid)"></rect>
             <g id="viewport">
-              <g id="radarLayer">
-                <circle class="radar-ring" cx="42" cy="48" r="13"></circle>
-                <circle class="radar-ring" cx="42" cy="48" r="25"></circle>
-                <circle class="radar-ring" cx="42" cy="48" r="39"></circle>
-                <path class="radar-sweep" d="M 42 48 L 80 12 A 52 52 0 0 1 94 48 Z"></path>
-              </g>
               <g id="groupLayer"></g>
               <g id="edgeLayer"></g>
               <g id="nodeLayer">
@@ -1083,7 +1082,8 @@
         edgeLayer.innerHTML = state.map.edges.map((edge) => {
           const from = nodeById(edge.from);
           const to = nodeById(edge.to);
-          const hidden = !visibleNodes.has(edge.from) || !visibleNodes.has(edge.to) || !state.visibleLayers.has(edge.layer);
+          const edgeLayerId = edge.layer || from?.layer || to?.layer;
+          const hidden = !visibleNodes.has(edge.from) || !visibleNodes.has(edge.to) || (edgeLayerId && !state.visibleLayers.has(edgeLayerId));
           const active = state.selectedKind === "edge" && state.selectedId === edge.id;
           const connected = neighborhood.edges.has(edge.id);
           const dim = neighborhood.nodes.size && !connected && !active;
@@ -1093,7 +1093,7 @@
           const badgeX = (fromPoint.x + toPoint.x) / 2 - 4.7;
           const badgeY = (fromPoint.y + toPoint.y) / 2 - 2.4;
           const metrics = `${edge.callCount ?? 0} calls · ${edge.avgLatencyMs == null ? "n/a" : `${edge.avgLatencyMs}ms`} · err ${edge.errorRate ?? "n/a"} · ${edge.lastSeen || "not seen"}`;
-          const showTracer = edge.status === "observed" || active || connected;
+          const showTracer = edge.observed && edge.status === "observed";
           return `
             <g class="edge-wrap ${statusClass(edge.status)} ${hidden ? "hidden" : ""} ${active ? "active" : ""} ${connected ? "connected" : ""} ${dim ? "dim" : ""}" data-edge="${esc(edge.id)}">
               <path class="edge ${statusClass(edge.status)} ${active ? "active" : ""} ${connected ? "connected" : ""}" d="${path}" marker-end="url(#arrow)"></path>

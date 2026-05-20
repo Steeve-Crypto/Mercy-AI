@@ -51,7 +51,7 @@ from mercy_context import (
 from mercy_config import get_config
 from monitoring import cost_breakdown, monitoring_dashboard, monitoring_metrics
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
-from otel_observability import configure_fastapi_otel
+from otel_observability import configure_fastapi_otel, observed_system_map, otel_enabled
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
 from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
@@ -150,31 +150,8 @@ def _read_json_file(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _empty_observed_system_map() -> dict[str, Any]:
-    return {
-        "metadata": {
-            "name": "Mercy Observed System Map",
-            "version": "0.1.0",
-            "kind": "observed-system-map",
-            "otelEnabled": OTEL_CONFIG.get("enabled", False),
-            "storage": "not-configured",
-            "dataPolicy": "Safe route and component telemetry only.",
-        },
-        "nodes": [],
-        "edges": [],
-        "health": {
-            "overall": "declared_only",
-            "summary": {
-                "declared_only": 0,
-                "observed": 0,
-                "missing_observation": 0,
-                "unknown_observed_dependency": 0,
-                "healthy": 0,
-                "warning": 0,
-                "failing": 0,
-            },
-        },
-    }
+def _declared_edge_ids(declared: dict[str, Any]) -> set[str]:
+    return {edge.get("id") for edge in declared.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
 
 
 def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +167,13 @@ def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> di
         observed_node = observed_nodes.get(node.get("id"))
         merged = {**node, "declared": True, "observed": bool(observed_node)}
         if observed_node:
-            merged.update({"status": observed_node.get("status") or "observed", "safeMetadata": {**node.get("safeMetadata", {}), **observed_node.get("safeMetadata", {})}})
+            merged.update(
+                {
+                    "status": observed_node.get("status") or "observed",
+                    "safeMetadata": {**node.get("safeMetadata", {}), **observed_node.get("safeMetadata", {})},
+                    "lastSeen": observed_node.get("lastSeen"),
+                }
+            )
         elif node.get("status") == "healthy":
             merged["status"] = "healthy"
         else:
@@ -227,7 +210,7 @@ def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> di
                 }
             )
         else:
-            merged["status"] = "missing_observation" if OTEL_CONFIG.get("enabled") else "declared_only"
+            merged["status"] = "missing_observation" if otel_enabled() else "declared_only"
         merged_edges.append(merged)
 
     for edge_id, edge in observed_edges.items():
@@ -259,7 +242,7 @@ def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> di
             **declared.get("metadata", {}),
             "kind": "merged-system-map",
             "observedSource": observed.get("metadata", {}).get("storage", "not-configured"),
-            "otelEnabled": OTEL_CONFIG.get("enabled", False),
+            "otelEnabled": otel_enabled(),
         },
         "nodes": merged_nodes,
         "edges": merged_edges,
@@ -958,14 +941,15 @@ async def devops_mercy_system_map(request: Request) -> JSONResponse:
 @app.get("/devops/observed-system-map.json")
 async def devops_observed_system_map(request: Request) -> JSONResponse:
     _require_devops_console(request)
-    return JSONResponse(_empty_observed_system_map())
+    declared = _read_json_file(DEVOPS_SYSTEM_MAP_PATH)
+    return JSONResponse(observed_system_map(_declared_edge_ids(declared)))
 
 
 @app.get("/devops/system-map-merged.json")
 async def devops_system_map_merged(request: Request) -> JSONResponse:
     _require_devops_console(request)
     declared = _read_json_file(DEVOPS_SYSTEM_MAP_PATH)
-    observed = _empty_observed_system_map()
+    observed = observed_system_map(_declared_edge_ids(declared))
     return JSONResponse(_merge_system_maps(declared, observed))
 
 

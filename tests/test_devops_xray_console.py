@@ -13,11 +13,13 @@ try:
     from fastapi.testclient import TestClient
 
     from main import app
+    from otel_observability import record_dependency_observation
 
     FASTAPI_AVAILABLE = True
 except ModuleNotFoundError:
     TestClient = None
     app = None
+    record_dependency_observation = None
     FASTAPI_AVAILABLE = False
 
 
@@ -76,6 +78,17 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertIn("metric-badge", html)
         self.assertIn("selectedNeighborhood", html)
         self.assertNotIn("Trace Replay", html)
+        self.assertNotIn("radar", html.lower())
+        self.assertIn("--bg: #000000", html)
+        self.assertIn("--green: #00ff66", html)
+        self.assertIn("--amber: #ffbf00", html)
+        self.assertIn("--red: #ff2a1f", html)
+        self.assertIn(".edge.observed", html)
+        self.assertIn("stroke: var(--green)", html)
+        self.assertIn(".edge.missing_observation", html)
+        self.assertIn("stroke: var(--amber)", html)
+        self.assertIn(".edge.unknown_observed_dependency", html)
+        self.assertIn("stroke: var(--red)", html)
         self.assert_no_known_secret_like_values(html)
 
     def test_console_routes_load_when_dev_tools_enabled(self) -> None:
@@ -154,7 +167,14 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertEqual(observed.status_code, 200)
         self.assertGreater(len(merged.json()["nodes"]), 0)
         self.assertGreater(len(merged.json()["edges"]), 0)
-        self.assertEqual(observed.json()["metadata"]["storage"], "not-configured")
+        self.assertIn("nodes", observed.json())
+        self.assertIn("edges", observed.json())
+        self.assertIn("statusSummary", observed.json())
+        self.assertIn(observed.json()["metadata"]["storage"], {"disabled", "in-process-otel-buffer"})
+        for edge in merged.json()["edges"]:
+            self.assertIn("declared", edge)
+            self.assertIn("observed", edge)
+            self.assertIn("status", edge)
         self.assert_no_known_secret_like_values(json.dumps(merged.json()))
 
     def test_devops_map_contains_required_lanes(self) -> None:
@@ -194,6 +214,31 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(merged.status_code, 200)
         self.assertFalse(merged.json()["metadata"]["otelEnabled"])
+
+    def test_observed_map_uses_safe_otel_dependency_capture(self) -> None:
+        with patch.dict(os.environ, {"MERCY_DEV_TOOLS": "true", "MERCY_OTEL_ENABLED": "true"}):
+            record_dependency_observation(  # type: ignore[misc]
+                path="/health",
+                method="GET",
+                status_code=200,
+                latency_ms=12.5,
+                source_node="web_dashboard",
+                route_family="/health",
+                trace_id="0123456789abcdef0123456789abcdef",
+            )
+            observed = self._client().get("/devops/observed-system-map.json").json()
+            merged = self._client().get("/devops/system-map-merged.json").json()
+
+        observed_edges = {edge["id"]: edge for edge in observed["edges"]}
+        self.assertIn("edge_web_core", observed_edges)
+        self.assertIn("edge_core_health", observed_edges)
+        self.assertTrue(observed_edges["edge_core_health"]["observed"])
+        self.assertGreaterEqual(observed_edges["edge_core_health"]["callCount"], 1)
+        self.assertFalse(observed_edges["edge_core_health"]["allowsRawLegalText"])
+        merged_edges = {edge["id"]: edge for edge in merged["edges"]}
+        self.assertTrue(merged_edges["edge_core_health"]["observed"])
+        self.assertEqual(merged_edges["edge_core_health"]["status"], "observed")
+        self.assert_no_known_secret_like_values(json.dumps(observed))
 
 
 if __name__ == "__main__":
