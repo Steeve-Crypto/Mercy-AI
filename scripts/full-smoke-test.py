@@ -147,7 +147,7 @@ def main() -> int:
 
         web_ok = run_command(
             "Web Playwright E2E",
-            [resolve_command("npm"), "run", "test:e2e", "--", "--workers=4"],
+            [resolve_command("npm"), "run", "test:e2e", "--", "--workers=1"],
             ROOT / "mercy-legal-web",
             env,
         )
