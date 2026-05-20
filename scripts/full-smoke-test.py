@@ -106,12 +106,12 @@ def print_office_checklist() -> None:
     print_header("Office Add-in Manual Checklist")
     print("Word:")
     print("1. npm run dev in mercy-legal-plugin, then sideload manifest.xml.")
-    print("2. Confirm task pane loads with Mercy branding, matter selector, auth fallback or handoff, and composer.")
+    print("2. Confirm task pane loads with Mercy branding, matter selector, Supabase PKCE sign-in fallback, and composer.")
     print("3. Run Analyze, Draft, Cite, and Ethics; confirm Reliability Panel fields on every response.")
     print("Outlook:")
     print("1. npm run dev in mercy-legal-plugin, then sideload manifest.outlook.xml.")
     print("2. Select email text and run Analyze; confirm selected text is used or body fallback works.")
-    print("3. Test matter selector, auth handoff, Draft, Cite, Ethics, and Reliability Panel visibility.")
+    print("3. Test matter selector, Supabase PKCE sign-in fallback, Draft, Cite, Ethics, and Reliability Panel visibility.")
 
 
 def build_env() -> dict[str, str]:

@@ -97,6 +97,7 @@ GROUPS: list[tuple[str, list[EnvSpec]]] = [
             EnvSpec("SUPABASE_ANON_KEY", "Supabase anon key", secret=True),
             EnvSpec("SUPABASE_SERVICE_ROLE_KEY", "Supabase service role key", secret=True),
             EnvSpec("SUPABASE_JWT_SECRET", "Supabase JWT secret", secret=True),
+            EnvSpec("MERCY_OFFICE_PKCE_PROVIDER", "Supabase OAuth provider for Office popup fallback", "azure"),
         ],
     ),
     (
@@ -159,7 +160,9 @@ GROUPS: list[tuple[str, list[EnvSpec]]] = [
             EnvSpec("NEXT_PUBLIC_MERCY_API_TOKEN", "Browser local API token", secret=True),
             EnvSpec("NEXT_PUBLIC_SUPABASE_URL", "Browser Supabase URL"),
             EnvSpec("NEXT_PUBLIC_SUPABASE_ANON_KEY", "Browser Supabase anon key", secret=True),
+            EnvSpec("NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER", "Browser Office PKCE provider", "azure"),
             EnvSpec("VITE_MERCY_CORE_API_URL", "Office add-in core API URL", "http://127.0.0.1:8000"),
+            EnvSpec("VITE_MERCY_WEB_AUTH_URL", "Office add-in web auth URL", "https://127.0.0.1:3000"),
             EnvSpec("VITE_MERCY_API_TOKEN", "Office add-in local API token", secret=True),
             EnvSpec("VITE_MERCY_TENANT_ID", "Office add-in tenant", "local-dev-tenant"),
             EnvSpec("VITE_MERCY_USER_ID", "Office add-in user", "office-addin-user"),

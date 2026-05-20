@@ -11,6 +11,10 @@ const args = new Set(process.argv.slice(2));
 
 const manifests = ["manifest.xml", "manifest.outlook.xml"];
 const requiredFiles = ["taskpane.html", "src/main.tsx", "src/App.tsx", "src/services/api.ts", "src/services/word.ts"];
+const authRouteFiles = [
+  "../mercy-legal-web/src/app/api/auth/office/start/route.ts",
+  "../mercy-legal-web/src/app/api/auth/office/callback/route.ts",
+];
 const taskpaneUrl = process.env.MERCY_ADDIN_TASKPANE_URL || "https://127.0.0.1:3000/taskpane.html";
 
 function section(title) {
@@ -78,7 +82,7 @@ function printChecklist() {
   section("Manual Word Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.xml in Word.");
   console.log("2. Open the Mercy task pane and confirm the native grey sidebar, purple accents, and Mercy branding.");
-  console.log("3. Confirm auth handoff: session token from URL/localStorage/roaming settings is used, or local dev fallback appears.");
+  console.log("3. Confirm auth handoff: Sign in opens the Supabase PKCE Office dialog, then the task pane stores the returned session token.");
   console.log("4. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
   console.log("5. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
 
@@ -93,6 +97,13 @@ function printChecklist() {
 section("Office Add-in Static Smoke");
 for (const file of [...manifests, ...requiredFiles]) {
   exists(file);
+}
+for (const file of authRouteFiles) {
+  if (fs.existsSync(path.resolve(root, file))) {
+    console.log(`PASS Found ${file}`);
+  } else {
+    fail(`Missing ${file}`);
+  }
 }
 for (const manifest of manifests) {
   validateManifest(manifest);

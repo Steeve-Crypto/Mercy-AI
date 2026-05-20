@@ -147,6 +147,17 @@ button {
   font-size: 12px;
 }
 
+.signinRequired {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #d8cff0;
+  border-radius: 6px;
+  background: #f7f3ff;
+  color: #33245c;
+  padding: 10px;
+}
+
 .matterPicker select:focus,
 .mercyComposer textarea:focus {
   border-color: #6041a6;

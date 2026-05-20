@@ -26,6 +26,7 @@ const viteEnv = (import.meta as ImportMeta & {
   env?: {
     VITE_MERCY_API_TOKEN?: string;
     VITE_MERCY_CORE_API_URL?: string;
+    VITE_MERCY_WEB_AUTH_URL?: string;
     VITE_MERCY_ENV?: string;
     VITE_MERCY_AUTH_MODE?: string;
     VITE_MERCY_TENANT_ID?: string;
@@ -33,6 +34,7 @@ const viteEnv = (import.meta as ImportMeta & {
   };
 }).env;
 const CORE_API_URL = (viteEnv?.VITE_MERCY_CORE_API_URL || DEFAULT_CORE_URL).replace(/\/+$/, "");
+const WEB_AUTH_URL = (viteEnv?.VITE_MERCY_WEB_AUTH_URL || "https://127.0.0.1:3000").replace(/\/+$/, "");
 const MATTER_ID = "word-addin-session-matter";
 let ACTIVE_MATTER_ID = MATTER_ID;
 let ACTIVE_MATTER: CoreMatterListItem | null = null;
@@ -46,7 +48,7 @@ export type MercyAuthStatus = {
   userId: string;
   roles: string;
   hasToken: boolean;
-  source: "web-session" | "office-settings" | "url-handoff" | "env" | "local-dev";
+  source: "office-pkce" | "office-settings" | "url-handoff" | "env" | "local-dev" | "sign-in-required";
 };
 
 type CoreIntakeResponse = {
@@ -151,12 +153,13 @@ const STORAGE_SAFE_AGENT_RESULT = {
 function authContext(): { token?: string; tenantId: string; userId: string; roles: string } {
   initializeAuthHandoff();
   const store = storage();
-  const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
+  const localDev = localDevAuthDefaultsEnabled();
+  const token = store?.getItem("mercy.auth.token") || (localDev ? viteEnv?.VITE_MERCY_API_TOKEN : undefined);
   return {
     token: token || undefined,
-    tenantId: store?.getItem("mercy.auth.tenantId") || viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant",
-    userId: store?.getItem("mercy.auth.userId") || viteEnv?.VITE_MERCY_USER_ID || "word-addin-user",
-    roles: store?.getItem("mercy.auth.roles") || "attorney"
+    tenantId: localDev ? viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant" : "verified-by-core",
+    userId: localDev ? viteEnv?.VITE_MERCY_USER_ID || "word-addin-user" : "verified-by-core",
+    roles: localDev ? store?.getItem("mercy.auth.roles") || "attorney" : "verified-by-core"
   };
 }
 
@@ -664,25 +667,30 @@ function persistAuthValue(key: string, value: string, source: MercyAuthStatus["s
   roaming?.saveAsync?.();
 }
 
+function persistOfficeSessionToken(token: string, source: MercyAuthStatus["source"] = "office-pkce"): void {
+  const store = storage();
+  store?.setItem("mercy.auth.token", token);
+  store?.setItem("mercy.auth.source", source);
+  store?.removeItem("mercy.auth.tenantId");
+  store?.removeItem("mercy.auth.userId");
+  store?.removeItem("mercy.auth.roles");
+  const roaming = officeRoamingSettings();
+  roaming?.set?.("mercy.auth.token", token);
+  roaming?.set?.("mercy.auth.source", source);
+  roaming?.saveAsync?.();
+}
+
 function hydrateAuthFromUrl(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
   const params = new URLSearchParams(`${window.location.search.replace(/^\?/, "")}&${window.location.hash.replace(/^#/, "")}`);
-  const values = {
-    "mercy.auth.token": params.get("mercy_token") || params.get("access_token"),
-    "mercy.auth.tenantId": params.get("mercy_tenant") || params.get("tenant_id"),
-    "mercy.auth.userId": params.get("mercy_user") || params.get("user_id"),
-    "mercy.auth.roles": params.get("mercy_roles") || params.get("roles")
-  };
-  let hydrated = false;
-  Object.entries(values).forEach(([key, value]) => {
-    if (value) {
-      persistAuthValue(key, value, "url-handoff");
-      hydrated = true;
-    }
-  });
-  return hydrated;
+  const token = params.get("mercy_token") || params.get("access_token");
+  if (!token) {
+    return false;
+  }
+  persistAuthValue("mercy.auth.token", token, "url-handoff");
+  return true;
 }
 
 function hydrateAuthFromOffice(): boolean {
@@ -692,7 +700,7 @@ function hydrateAuthFromOffice(): boolean {
     return false;
   }
   let hydrated = false;
-  ["mercy.auth.token", "mercy.auth.tenantId", "mercy.auth.userId", "mercy.auth.roles"].forEach((key) => {
+  ["mercy.auth.token"].forEach((key) => {
     const existing = store.getItem(key);
     const value = roaming.get?.(key);
     if (!existing && typeof value === "string" && value.trim()) {
@@ -706,52 +714,88 @@ function hydrateAuthFromOffice(): boolean {
   return hydrated;
 }
 
-function promoteWebSessionToOffice(): boolean {
-  const store = storage();
-  const roaming = officeRoamingSettings();
-  const token = store?.getItem("mercy.auth.token");
-  const tenantId = store?.getItem("mercy.auth.tenantId");
-  const userId = store?.getItem("mercy.auth.userId");
-  if (!store || !roaming || !token || !tenantId || !userId) {
-    return false;
-  }
-
-  ["mercy.auth.token", "mercy.auth.tenantId", "mercy.auth.userId", "mercy.auth.roles"].forEach((key) => {
-    const value = store.getItem(key);
-    if (value) {
-      roaming.set?.(key, value);
-    }
-  });
-  store.setItem("mercy.auth.source", "web-session");
-  roaming.set?.("mercy.auth.source", "web-session");
-  roaming.saveAsync?.();
-  return true;
-}
-
 export function initializeAuthHandoff(): MercyAuthStatus {
   const store = storage();
   const fromUrl = hydrateAuthFromUrl();
   const fromOffice = hydrateAuthFromOffice();
-  const fromWebSession = promoteWebSessionToOffice();
-  const token = store?.getItem("mercy.auth.token") || viteEnv?.VITE_MERCY_API_TOKEN;
-  const tenantId = store?.getItem("mercy.auth.tenantId") || viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant";
-  const userId = store?.getItem("mercy.auth.userId") || viteEnv?.VITE_MERCY_USER_ID || "office-addin-user";
-  const roles = store?.getItem("mercy.auth.roles") || "attorney";
+  const localDev = localDevAuthDefaultsEnabled();
+  const token = store?.getItem("mercy.auth.token") || (localDev ? viteEnv?.VITE_MERCY_API_TOKEN : undefined);
+  const tenantId = localDev ? viteEnv?.VITE_MERCY_TENANT_ID || "local-dev-tenant" : "verified by Mercy core";
+  const userId = localDev ? viteEnv?.VITE_MERCY_USER_ID || "office-addin-user" : "verified by Mercy core";
+  const roles = localDev ? store?.getItem("mercy.auth.roles") || "attorney" : "verified by Mercy core";
   const storedSource = store?.getItem("mercy.auth.source") as MercyAuthStatus["source"] | null;
   const source: MercyAuthStatus["source"] = fromUrl
     ? "url-handoff"
     : fromOffice
       ? "office-settings"
-      : fromWebSession
-        ? "web-session"
       : token && storedSource
         ? storedSource
         : token
           ? viteEnv?.VITE_MERCY_API_TOKEN
             ? "env"
-            : "web-session"
-          : "local-dev";
+            : "office-pkce"
+          : localDev
+            ? "local-dev"
+            : "sign-in-required";
   return { tenantId, userId, roles, hasToken: Boolean(token), source };
+}
+
+type OfficeAuthDialogMessage = {
+  type?: string;
+  ok?: boolean;
+  access_token?: string;
+  error?: string;
+};
+
+export async function beginOfficePkceSignIn(surface: "Word" | "Outlook" | "Office" = "Office"): Promise<MercyAuthStatus> {
+  const startUrl = `${WEB_AUTH_URL}/api/auth/office/start?surface=${encodeURIComponent(surface.toLowerCase())}`;
+  if (typeof Office === "undefined" || !Office.context?.ui?.displayDialogAsync) {
+    throw new Error("Office dialog sign-in is unavailable in this host.");
+  }
+
+  return new Promise((resolve, reject) => {
+    Office.context.ui.displayDialogAsync(
+      startUrl,
+      { height: 65, width: 45, displayInIframe: false },
+      (result) => {
+        if (result.status !== Office.AsyncResultStatus.Succeeded || !result.value) {
+          reject(new Error(result.error?.message || "Mercy sign-in dialog could not be opened."));
+          return;
+        }
+        const dialog = result.value;
+        const closeDialog = () => {
+          try {
+            dialog.close();
+          } catch {
+            return;
+          }
+        };
+        dialog.addEventHandler(Office.EventType.DialogMessageReceived, (event) => {
+          try {
+            const rawMessage = "message" in event ? String(event.message) : "{}";
+            const message = JSON.parse(rawMessage) as OfficeAuthDialogMessage;
+            if (message.type !== "mercy-office-auth") {
+              return;
+            }
+            if (!message.ok || !message.access_token) {
+              closeDialog();
+              reject(new Error(message.error || "Mercy sign-in did not return a valid session token."));
+              return;
+            }
+            persistOfficeSessionToken(message.access_token);
+            closeDialog();
+            resolve(initializeAuthHandoff());
+          } catch {
+            closeDialog();
+            reject(new Error("Mercy sign-in response could not be read."));
+          }
+        });
+        dialog.addEventHandler(Office.EventType.DialogEventReceived, () => {
+          reject(new Error("Mercy sign-in dialog was closed before authentication completed."));
+        });
+      },
+    );
+  });
 }
 
 function scoreFromMetadata(metadata: CoreResponseMetadata): number {
@@ -870,8 +914,8 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
       params[key] = { word_addin_note: normalizedText };
     } else if (key === "format") {
       params[key] = "docx";
-    } else if (key === "matter_context" || key === "auth_context") {
-      params[key] = { matter_id: ACTIVE_MATTER_ID, jurisdiction: "District of Columbia", auth_context: authContext() };
+    } else if (key === "matter_context") {
+      params[key] = { matter_id: ACTIVE_MATTER_ID, jurisdiction: "District of Columbia" };
     }
   }
   if (!Object.keys(params).length) {
@@ -922,6 +966,7 @@ export const api = {
   getBetaStatus,
   listMatters,
   initializeAuthHandoff,
+  beginOfficePkceSignIn,
   setActiveMatter,
   syncOfflineAgentQueue,
   queuedAgentRequestCount,

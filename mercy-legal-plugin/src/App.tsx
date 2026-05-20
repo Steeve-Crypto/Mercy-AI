@@ -63,6 +63,12 @@ function officeSurface(): "Word" | "Outlook" | "Office" {
 }
 
 function authLabel(auth: MercyAuthStatus): string {
+  if (auth.source === "sign-in-required") {
+    return "sign in required";
+  }
+  if (auth.source === "office-pkce") {
+    return "Office sign-in";
+  }
   if (auth.source === "local-dev") {
     return "local dev session";
   }
@@ -71,9 +77,6 @@ function authLabel(auth: MercyAuthStatus): string {
   }
   if (auth.source === "office-settings") {
     return "Office session";
-  }
-  if (auth.source === "web-session") {
-    return "web session";
   }
   return "configured session";
 }
@@ -131,10 +134,18 @@ export function App() {
 
   const surface = useMemo(() => officeSurface(), []);
   const isBusy = processing !== "idle";
+  const signInRequired = auth.source === "sign-in-required" && !auth.hasToken;
 
   useEffect(() => {
     const load = async () => {
-      setAuth(initializeAuthHandoff());
+      const nextAuth = initializeAuthHandoff();
+      setAuth(nextAuth);
+      if (!nextAuth.hasToken && nextAuth.source === "sign-in-required") {
+        api.setActiveMatter(null);
+        setMatters([]);
+        setCoreStatus("offline");
+        return;
+      }
       setCoreStatus("checking");
       try {
         const loadedMatters = sortRecentFirst(await api.listMatters());
@@ -229,6 +240,29 @@ export function App() {
   const setResult = (result: AgentActionResult) => {
     setLastResponse(result);
     setErrorMessage(null);
+  };
+
+  const runSignIn = async () => {
+    setProcessing("authenticating");
+    setNotice(null);
+    setErrorMessage(null);
+    try {
+      const nextAuth = await api.beginOfficePkceSignIn(surface);
+      setAuth(nextAuth);
+      setNotice("Signed in to Mercy");
+      setCoreStatus("checking");
+      const loadedMatters = sortRecentFirst(await api.listMatters());
+      setMatters(loadedMatters);
+      const firstMatter = loadedMatters[0] ?? null;
+      activeMatterIdRef.current = firstMatter?.matter_id ?? "";
+      setActiveMatterId(firstMatter?.matter_id ?? "");
+      api.setActiveMatter(firstMatter);
+      setCoreStatus("online");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Mercy sign-in could not be completed.");
+    } finally {
+      setProcessing("idle");
+    }
   };
 
   const runAnalyze = async () => {
@@ -368,6 +402,15 @@ export function App() {
       </header>
 
       <section className="matterPanel" aria-label="Matter context">
+        {signInRequired ? (
+          <div className="signinRequired" role="status">
+            <Text weight="semibold">Sign in required</Text>
+            <Text>Use Mercy web sign-in to connect this {surface} task pane. Tenant access is verified by the Mercy core.</Text>
+            <Button appearance="primary" onClick={runSignIn} disabled={isBusy}>
+              {isBusy ? "Opening sign-in..." : "Sign in"}
+            </Button>
+          </div>
+        ) : null}
         <label className="matterPicker">
           <span>Client matter</span>
           <Input

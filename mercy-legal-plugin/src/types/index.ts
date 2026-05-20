@@ -2,7 +2,7 @@ export type RiskLevel = "high" | "medium" | "low";
 
 export type SidebarView = "risk" | "templates" | "clauses" | "chat" | "actions" | "report";
 
-export type ProcessingState = "idle" | "analyzing" | "explaining" | "inserting" | "drafting" | "syncing" | "skill";
+export type ProcessingState = "idle" | "authenticating" | "analyzing" | "explaining" | "inserting" | "drafting" | "syncing" | "skill";
 
 export interface RiskFinding {
   id: string;
