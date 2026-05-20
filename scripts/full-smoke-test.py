@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -15,6 +17,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_URL = os.environ.get("MERCY_CORE_API_URL", "http://127.0.0.1:8000")
 HEALTH_URL = f"{BACKEND_URL.rstrip('/')}/health"
+HTTP_TIMEOUT_SECONDS = float(os.environ.get("MERCY_FULL_SMOKE_HTTP_TIMEOUT_SECONDS", "5"))
+COMMAND_TIMEOUT_SECONDS = int(os.environ.get("MERCY_FULL_SMOKE_COMMAND_TIMEOUT_SECONDS", "300"))
+START_BACKEND_COMMAND = f'"{sys.executable}" -m uvicorn main:app --host 127.0.0.1 --port 8000'
+
+
+def resolve_command(command_name: str) -> str:
+    if os.name == "nt":
+        resolved_cmd = shutil.which(f"{command_name}.cmd")
+        if resolved_cmd:
+            return resolved_cmd
+    resolved = shutil.which(command_name)
+    if resolved:
+        return resolved
+    return command_name
 
 
 def print_header(title: str) -> None:
@@ -24,9 +40,9 @@ def print_header(title: str) -> None:
 
 def backend_is_running() -> bool:
     try:
-        with urllib.request.urlopen(HEALTH_URL, timeout=3) as response:
+        with urllib.request.urlopen(HEALTH_URL, timeout=HTTP_TIMEOUT_SECONDS) as response:
             return 200 <= response.status < 400
-    except (urllib.error.URLError, TimeoutError):
+    except (urllib.error.URLError, TimeoutError, socket.timeout):
         return False
 
 
@@ -62,7 +78,12 @@ def run_command(name: str, command: list[str], cwd: Path, env: dict[str, str]) -
     print_header(name)
     print(" ".join(command))
     started = time.perf_counter()
-    completed = subprocess.run(command, cwd=cwd, env=env)
+    try:
+        completed = subprocess.run(command, cwd=cwd, env=env, timeout=COMMAND_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        elapsed = time.perf_counter() - started
+        print(f"FAIL {name} timed out after {elapsed:.1f}s (limit {COMMAND_TIMEOUT_SECONDS}s)")
+        return False
     elapsed = time.perf_counter() - started
     status = "PASS" if completed.returncode == 0 else "FAIL"
     print(f"{status} {name} finished in {elapsed:.1f}s")
@@ -116,13 +137,17 @@ def main() -> int:
             ok = backend_is_running()
             print(f"{'PASS' if ok else 'FAIL'} Backend health at {HEALTH_URL}")
             results.append(("backend", ok))
+            if not ok:
+                print(f"Backend was not reachable within {HTTP_TIMEOUT_SECONDS:.1f}s.")
+                print(f"Start it first with: {START_BACKEND_COMMAND}")
+                return _summary(results, time.perf_counter() - started)
         else:
             backend_process = start_backend(env)
             results.append(("backend", True))
 
         web_ok = run_command(
             "Web Playwright E2E",
-            ["npx", "playwright", "test", "--workers=4"],
+            [resolve_command("npm"), "run", "test:e2e", "--", "--workers=4"],
             ROOT / "mercy-legal-web",
             env,
         )
@@ -131,7 +156,7 @@ def main() -> int:
         if not args.skip_office_static:
             office_ok = run_command(
                 "Office Add-in Static Smoke",
-                ["npm", "run", "smoke:office"],
+                [resolve_command("npm"), "run", "smoke:office"],
                 ROOT / "mercy-legal-plugin",
                 env,
             )
@@ -147,6 +172,10 @@ def main() -> int:
                 backend_process.kill()
 
     elapsed = time.perf_counter() - started
+    return _summary(results, elapsed)
+
+
+def _summary(results: list[tuple[str, bool]], elapsed: float) -> int:
     print_header("Summary")
     for name, ok in results:
         print(f"{'PASS' if ok else 'FAIL'} {name}")

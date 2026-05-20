@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e-local.mjs",
     "test:e2e:ci": "playwright test --project=chromium --workers=2",
     "test:e2e:local": "node scripts/run-e2e-local.mjs",
     "test:e2e:cleanup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-e2e-server.ps1"

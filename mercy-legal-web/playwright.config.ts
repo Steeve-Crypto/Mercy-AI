@@ -11,7 +11,6 @@ const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  globalTeardown: "./tests/e2e/support/global-teardown.ts",
   fullyParallel: true,
   workers,
   retries: isCI ? 2 : 0,
@@ -31,6 +30,8 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    stdout: "ignore",
+    stderr: "ignore",
     env: {
       MERCY_ENV: process.env.MERCY_ENV || "local",
       MERCY_AUTH_MODE: process.env.MERCY_AUTH_MODE || "dev",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,7 @@ from mercy_context import (
 from mercy_config import get_config
 from monitoring import cost_breakdown, monitoring_dashboard, monitoring_metrics
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
+from otel_observability import configure_fastapi_otel
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
 from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
@@ -61,6 +63,8 @@ ROOT_DIR = Path(__file__).resolve().parent
 CONFIG = get_config()
 UPLOAD_DIR = CONFIG.upload_dir
 DASHBOARD_DIR = ROOT_DIR / "standalone_platform"
+DEVOPS_SYSTEM_MAP_PATH = DASHBOARD_DIR / "devops" / "mercy-system-map.json"
+DEVOPS_MAP_PATH = DASHBOARD_DIR / "devops" / "mercy-map.json"
 WORD_PLUGIN_DIR = ROOT_DIR / "word_plugin"
 LANGSMITH_CONFIG = configure_langsmith_environment()
 
@@ -94,10 +98,182 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(DCGuardrailMiddleware)
+OTEL_CONFIG = configure_fastapi_otel(app)
+
+
+def _mercy_dev_tools_enabled() -> bool:
+    return os.getenv("MERCY_DEV_TOOLS", "").strip().lower() == "true"
+
+
+def _request_is_localhost(request: Request) -> bool:
+    local_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
+    client_host = request.client.host if request.client else ""
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(":")[0]
+    host_header = (request.headers.get("host") or "").split(":")[0]
+    url_host = request.url.hostname or ""
+    return any(host in local_hosts for host in {client_host, forwarded_host, host_header, url_host})
+
+
+def _require_devops_console(request: Request) -> None:
+    if not _mercy_dev_tools_enabled():
+        raise HTTPException(status_code=404, detail="Dev tools are not enabled.")
+    if not _request_is_localhost(request):
+        raise HTTPException(status_code=403, detail="Dev tools are restricted to localhost.")
+
+
+def _is_devops_console_path(path: str) -> bool:
+    return path in {"/", "/dashboard", "/devops", "/admin/devops", "/static/dashboard/index.html"} or path.startswith(
+        "/static/dashboard/devops/"
+    )
+
+
+def _devops_console_security_headers() -> dict[str, str]:
+    headers = security_headers()
+    headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "img-src 'self' data: https:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self' https: http://localhost:* http://127.0.0.1:*; "
+        "frame-ancestors 'none';"
+    )
+    return headers
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"{path.name} is not available.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=500, detail=f"{path.name} must contain a JSON object.")
+    return payload
+
+
+def _empty_observed_system_map() -> dict[str, Any]:
+    return {
+        "metadata": {
+            "name": "Mercy Observed System Map",
+            "version": "0.1.0",
+            "kind": "observed-system-map",
+            "otelEnabled": OTEL_CONFIG.get("enabled", False),
+            "storage": "not-configured",
+            "dataPolicy": "Safe route and component telemetry only.",
+        },
+        "nodes": [],
+        "edges": [],
+        "health": {
+            "overall": "declared_only",
+            "summary": {
+                "declared_only": 0,
+                "observed": 0,
+                "missing_observation": 0,
+                "unknown_observed_dependency": 0,
+                "healthy": 0,
+                "warning": 0,
+                "failing": 0,
+            },
+        },
+    }
+
+
+def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:
+    observed_nodes = {node.get("id"): node for node in observed.get("nodes", []) if isinstance(node, dict) and node.get("id")}
+    observed_edges = {edge.get("id"): edge for edge in observed.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
+    declared_node_ids = {node.get("id") for node in declared.get("nodes", []) if isinstance(node, dict)}
+    declared_edge_ids = {edge.get("id") for edge in declared.get("edges", []) if isinstance(edge, dict)}
+
+    merged_nodes: list[dict[str, Any]] = []
+    for node in declared.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        observed_node = observed_nodes.get(node.get("id"))
+        merged = {**node, "declared": True, "observed": bool(observed_node)}
+        if observed_node:
+            merged.update({"status": observed_node.get("status") or "observed", "safeMetadata": {**node.get("safeMetadata", {}), **observed_node.get("safeMetadata", {})}})
+        elif node.get("status") == "healthy":
+            merged["status"] = "healthy"
+        else:
+            merged["status"] = "declared_only"
+        merged_nodes.append(merged)
+
+    for node_id, node in observed_nodes.items():
+        if node_id in declared_node_ids:
+            continue
+        merged_nodes.append(
+            {
+                **node,
+                "declared": False,
+                "observed": True,
+                "status": "unknown_observed_dependency",
+                "riskNotes": [*node.get("riskNotes", []), "Observed dependency is not declared in mercy-system-map.json."],
+            }
+        )
+
+    merged_edges: list[dict[str, Any]] = []
+    for edge in declared.get("edges", []):
+        if not isinstance(edge, dict):
+            continue
+        observed_edge = observed_edges.get(edge.get("id"))
+        merged = {**edge, "declared": True, "observed": bool(observed_edge)}
+        if observed_edge:
+            merged.update(
+                {
+                    "status": observed_edge.get("status") or "observed",
+                    "callCount": observed_edge.get("callCount", edge.get("callCount", 0)),
+                    "avgLatencyMs": observed_edge.get("avgLatencyMs", edge.get("avgLatencyMs")),
+                    "errorRate": observed_edge.get("errorRate", edge.get("errorRate")),
+                    "lastSeen": observed_edge.get("lastSeen", edge.get("lastSeen")),
+                }
+            )
+        else:
+            merged["status"] = "missing_observation" if OTEL_CONFIG.get("enabled") else "declared_only"
+        merged_edges.append(merged)
+
+    for edge_id, edge in observed_edges.items():
+        if edge_id in declared_edge_ids:
+            continue
+        merged_edges.append(
+            {
+                **edge,
+                "declared": False,
+                "observed": True,
+                "status": "unknown_observed_dependency",
+                "notes": f"{edge.get('notes', '')} Observed dependency is not declared in mercy-system-map.json.".strip(),
+            }
+        )
+
+    summary = {
+        "declared_only": sum(1 for item in [*merged_nodes, *merged_edges] if item.get("declared") and not item.get("observed")),
+        "observed": sum(1 for item in [*merged_nodes, *merged_edges] if item.get("declared") and item.get("observed")),
+        "missing_observation": sum(1 for item in merged_edges if item.get("status") == "missing_observation"),
+        "unknown_observed_dependency": sum(1 for item in [*merged_nodes, *merged_edges] if item.get("status") == "unknown_observed_dependency"),
+        "healthy": sum(1 for item in merged_nodes if item.get("status") == "healthy"),
+        "warning": sum(1 for item in merged_nodes if item.get("status") == "warning"),
+        "failing": sum(1 for item in merged_nodes if item.get("status") == "failing"),
+    }
+
+    return {
+        **declared,
+        "metadata": {
+            **declared.get("metadata", {}),
+            "kind": "merged-system-map",
+            "observedSource": observed.get("metadata", {}).get("storage", "not-configured"),
+            "otelEnabled": OTEL_CONFIG.get("enabled", False),
+        },
+        "nodes": merged_nodes,
+        "edges": merged_edges,
+        "health": {"overall": "warning" if summary["unknown_observed_dependency"] or summary["missing_observation"] else "healthy", "summary": summary},
+    }
 
 
 @app.middleware("http")
 async def security_controls_middleware(request: Request, call_next: Any) -> Response:
+    if request.url.path == "/static/dashboard/index.html" or request.url.path.startswith("/static/dashboard/devops/"):
+        if not _mercy_dev_tools_enabled():
+            return JSONResponse({"detail": "Dev tools are not enabled."}, status_code=404)
+        if not _request_is_localhost(request):
+            return JSONResponse({"detail": "Dev tools are restricted to localhost."}, status_code=403)
     if request.url.path.startswith("/v1/"):
         if os.getenv("MERCY_REQUIRE_HTTPS", "").lower() == "true":
             proto = request.headers.get("x-forwarded-proto") or request.url.scheme
@@ -119,7 +295,8 @@ async def security_controls_middleware(request: Request, call_next: Any) -> Resp
                 headers={"Retry-After": str(retry_after), **security_headers()},
             )
     response = await call_next(request)
-    for header, value in security_headers().items():
+    headers = _devops_console_security_headers() if _is_devops_console_path(request.url.path) else security_headers()
+    for header, value in headers.items():
         response.headers.setdefault(header, value)
     return response
 
@@ -330,8 +507,8 @@ def _attach_route(
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "product": PRODUCT_NAME, "clerk_os_version": CLERK_OS_VERSION}
+async def health() -> dict[str, Any]:
+    return {"status": "ok", "service": "mercy-backend", "port": 8000, "product": PRODUCT_NAME}
 
 
 @app.get("/v1/product/capabilities")
@@ -748,13 +925,48 @@ async def matter_billing_report(
 
 
 @app.get("/")
-async def root() -> FileResponse:
+async def root(request: Request) -> FileResponse:
+    _require_devops_console(request)
     return FileResponse(DASHBOARD_DIR / "index.html")
 
 
 @app.get("/dashboard")
-async def dashboard() -> FileResponse:
+async def dashboard(request: Request) -> FileResponse:
+    _require_devops_console(request)
     return FileResponse(DASHBOARD_DIR / "index.html")
+
+
+@app.get("/admin/devops")
+@app.get("/devops")
+async def devops_console(request: Request) -> FileResponse:
+    _require_devops_console(request)
+    return FileResponse(DASHBOARD_DIR / "index.html")
+
+
+@app.get("/devops/mercy-map.json")
+async def devops_mercy_map(request: Request) -> JSONResponse:
+    _require_devops_console(request)
+    return JSONResponse(_read_json_file(DEVOPS_SYSTEM_MAP_PATH if DEVOPS_SYSTEM_MAP_PATH.exists() else DEVOPS_MAP_PATH))
+
+
+@app.get("/devops/mercy-system-map.json")
+async def devops_mercy_system_map(request: Request) -> JSONResponse:
+    _require_devops_console(request)
+    return JSONResponse(_read_json_file(DEVOPS_SYSTEM_MAP_PATH))
+
+
+@app.get("/devops/observed-system-map.json")
+async def devops_observed_system_map(request: Request) -> JSONResponse:
+    _require_devops_console(request)
+    return JSONResponse(_empty_observed_system_map())
+
+
+@app.get("/devops/system-map-merged.json")
+async def devops_system_map_merged(request: Request) -> JSONResponse:
+    _require_devops_console(request)
+    declared = _read_json_file(DEVOPS_SYSTEM_MAP_PATH)
+    observed = _empty_observed_system_map()
+    return JSONResponse(_merge_system_maps(declared, observed))
 
 
 @app.get("/v1/workspace/clerk-os")

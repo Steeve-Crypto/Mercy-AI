@@ -167,7 +167,13 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
     }
 
     setCreated(response.data);
-    router.push(`/matters/${encodeURIComponent(response.data.matter_id)}`);
+    const matterPath = `/matters/${encodeURIComponent(response.data.matter_id)}` as Route;
+    router.push(matterPath);
+    window.setTimeout(() => {
+      if (window.location.pathname !== matterPath) {
+        window.location.assign(matterPath);
+      }
+    }, 250);
   }
 
   return (

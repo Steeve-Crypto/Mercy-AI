@@ -3,166 +3,1090 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mercy AI Workspace</title>
-    <link rel="stylesheet" href="/static/dashboard/styles.css" />
+    <title>Mercy Backend X-Ray System Map</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05070d;
+        --panel: rgba(11, 18, 32, 0.86);
+        --panel-solid: #0b1220;
+        --line: rgba(148, 163, 184, 0.22);
+        --line-strong: rgba(125, 211, 252, 0.54);
+        --text: #e5eefc;
+        --muted: #91a1b9;
+        --cyan: #22d3ee;
+        --blue: #60a5fa;
+        --green: #34d399;
+        --amber: #fbbf24;
+        --red: #fb7185;
+        --violet: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 22%, rgba(34, 211, 238, 0.16), transparent 28%),
+          radial-gradient(circle at 80% 12%, rgba(96, 165, 250, 0.12), transparent 30%),
+          linear-gradient(135deg, #03050a 0%, #07111d 47%, #05070d 100%);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .xray-root {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(280px, 1fr) minmax(240px, 420px) auto;
+        gap: 16px;
+        align-items: center;
+        padding: 18px 20px 12px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(3, 7, 18, 0.72);
+        backdrop-filter: blur(18px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        width: 44px;
+        height: 44px;
+        border: 1px solid rgba(34, 211, 238, 0.42);
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(96, 165, 250, 0.06)),
+          #06111d;
+        box-shadow: 0 0 28px rgba(34, 211, 238, 0.26);
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 18px;
+        line-height: 1.1;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .search-wrap {
+        position: relative;
+      }
+
+      .search-wrap input {
+        width: 100%;
+        border: 1px solid rgba(125, 211, 252, 0.26);
+        border-radius: 8px;
+        outline: none;
+        padding: 12px 14px;
+        background: rgba(8, 13, 24, 0.78);
+        color: var(--text);
+        box-shadow: inset 0 0 20px rgba(34, 211, 238, 0.05);
+      }
+
+      .search-wrap input:focus {
+        border-color: rgba(34, 211, 238, 0.62);
+        box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+      }
+
+      .health-summary {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .status-pill {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 7px 9px;
+        background: rgba(15, 23, 42, 0.75);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status-pill strong {
+        color: var(--text);
+      }
+
+      .main {
+        display: grid;
+        grid-template-columns: 286px minmax(0, 1fr) 360px;
+        min-height: 0;
+      }
+
+      .left-rail,
+      .inspector {
+        overflow: auto;
+        border-color: var(--line);
+        background: rgba(3, 7, 18, 0.58);
+        backdrop-filter: blur(18px);
+      }
+
+      .left-rail {
+        border-right: 1px solid var(--line);
+        padding: 16px;
+      }
+
+      .inspector {
+        border-left: 1px solid var(--line);
+        padding: 16px;
+      }
+
+      .rail-section + .rail-section {
+        margin-top: 18px;
+      }
+
+      .rail-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        color: #c7d2fe;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .layer-grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      .layer-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(15, 23, 42, 0.7);
+        color: var(--text);
+      }
+
+      .layer-toggle[aria-pressed="false"] {
+        color: var(--muted);
+        opacity: 0.62;
+      }
+
+      .switch-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 16px rgba(34, 211, 238, 0.8);
+      }
+
+      .trace-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .trace-card {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 11px;
+        background: rgba(15, 23, 42, 0.72);
+        color: var(--text);
+      }
+
+      .trace-card.active {
+        border-color: rgba(34, 211, 238, 0.72);
+        box-shadow: 0 0 24px rgba(34, 211, 238, 0.16);
+      }
+
+      .trace-card strong,
+      .trace-card span {
+        display: block;
+      }
+
+      .trace-card span {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .signals {
+        display: grid;
+        gap: 8px;
+      }
+
+      .signal {
+        display: grid;
+        grid-template-columns: 10px 1fr auto;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 9px;
+        background: rgba(15, 23, 42, 0.56);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .graph-stage {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .graph-toolbar {
+        position: absolute;
+        z-index: 3;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .tool-button {
+        border: 1px solid rgba(125, 211, 252, 0.28);
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: rgba(11, 18, 32, 0.84);
+        color: var(--text);
+      }
+
+      .map-caption {
+        position: absolute;
+        z-index: 3;
+        right: 18px;
+        bottom: 16px;
+        max-width: 370px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(3, 7, 18, 0.72);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .group-box {
+        fill: rgba(15, 23, 42, 0.34);
+        stroke: rgba(148, 163, 184, 0.24);
+        stroke-width: 0.2;
+      }
+
+      .group-label {
+        fill: #c7d2fe;
+        font-size: 1.55px;
+        font-weight: 700;
+      }
+
+      .group-desc {
+        fill: rgba(203, 213, 225, 0.62);
+        font-size: 1px;
+      }
+
+      .edge {
+        fill: none;
+        stroke: rgba(125, 211, 252, 0.28);
+        stroke-width: 0.36;
+        cursor: pointer;
+        transition: stroke 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
+      }
+
+      .edge.warning {
+        stroke: rgba(251, 191, 36, 0.34);
+      }
+
+      .edge.unknown {
+        stroke: rgba(148, 163, 184, 0.24);
+        stroke-dasharray: 1.2 1.2;
+      }
+
+      .edge.active,
+      .edge.trace {
+        stroke: rgba(34, 211, 238, 0.9);
+        stroke-width: 0.72;
+        filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.7));
+      }
+
+      .edge.dim,
+      .node.dim,
+      .group.dim {
+        opacity: 0.14;
+      }
+
+      .edge.hidden,
+      .node.hidden {
+        display: none;
+      }
+
+      .node {
+        cursor: pointer;
+      }
+
+      .node-shell {
+        fill: rgba(8, 13, 24, 0.92);
+        stroke: rgba(125, 211, 252, 0.48);
+        stroke-width: 0.32;
+        filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.28));
+      }
+
+      .node.selected .node-shell,
+      .node.trace .node-shell {
+        stroke: rgba(34, 211, 238, 0.98);
+        stroke-width: 0.58;
+        filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.76));
+      }
+
+      .node.warning .node-shell {
+        stroke: rgba(251, 191, 36, 0.72);
+        filter: drop-shadow(0 0 7px rgba(251, 191, 36, 0.28));
+      }
+
+      .node.failing .node-shell {
+        stroke: rgba(251, 113, 133, 0.78);
+        filter: drop-shadow(0 0 7px rgba(251, 113, 133, 0.3));
+      }
+
+      .node.unknown .node-shell {
+        stroke: rgba(148, 163, 184, 0.44);
+      }
+
+      .node-label {
+        fill: var(--text);
+        font-size: 1.12px;
+        font-weight: 800;
+        pointer-events: none;
+      }
+
+      .node-type {
+        fill: rgba(203, 213, 225, 0.68);
+        font-size: 0.82px;
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+
+      .status-dot {
+        stroke: rgba(3, 7, 18, 0.92);
+        stroke-width: 0.22;
+      }
+
+      .healthy .status-dot {
+        fill: var(--green);
+      }
+
+      .warning .status-dot,
+      .declared_only .status-dot,
+      .missing_observation .status-dot {
+        fill: var(--amber);
+      }
+
+      .observed .status-dot {
+        fill: var(--cyan);
+      }
+
+      .failing .status-dot,
+      .unknown_observed_dependency .status-dot {
+        fill: var(--red);
+      }
+
+      .unknown .status-dot {
+        fill: #94a3b8;
+      }
+
+      .inspector-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        background: var(--panel);
+      }
+
+      .inspector-card + .inspector-card {
+        margin-top: 12px;
+      }
+
+      .eyebrow {
+        color: var(--cyan);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .inspector h2 {
+        margin-top: 6px;
+        font-size: 20px;
+        line-height: 1.15;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .meta {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 9px;
+        background: rgba(15, 23, 42, 0.62);
+      }
+
+      .meta span,
+      .list-block span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .meta strong,
+      .list-block strong {
+        display: block;
+        margin-top: 4px;
+        overflow-wrap: anywhere;
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 8px;
+        background: rgba(15, 23, 42, 0.72);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .badge::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+      }
+
+      .badge.healthy::before,
+      .badge.pass::before,
+      .badge.required::before,
+      .badge.observed::before {
+        background: var(--green);
+      }
+
+      .badge.warning::before,
+      .badge.declared_only::before,
+      .badge.missing_observation::before {
+        background: var(--amber);
+      }
+
+      .badge.failing::before,
+      .badge.unknown_observed_dependency::before {
+        background: var(--red);
+      }
+
+      .description {
+        margin-top: 12px;
+        color: #cbd5e1;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .list-block {
+        display: grid;
+        gap: 8px;
+      }
+
+      .list-row {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+        padding-bottom: 8px;
+      }
+
+      .list-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .load-error {
+        display: grid;
+        place-items: center;
+        height: 100vh;
+        padding: 24px;
+        text-align: center;
+      }
+
+      .load-error div {
+        max-width: 560px;
+        border: 1px solid rgba(251, 113, 133, 0.35);
+        border-radius: 8px;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.84);
+      }
+
+      @media (max-width: 1080px) {
+        body {
+          overflow: auto;
+        }
+
+        .topbar,
+        .main {
+          grid-template-columns: 1fr;
+        }
+
+        .left-rail,
+        .inspector {
+          border: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .graph-stage {
+          min-height: 640px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div class="appShell">
-      <aside class="sideRail" aria-label="Mercy navigation">
-        <div class="brandBlock">
-          <img src="/word_plugin/assets/icon.svg" alt="" class="brandMark" />
+    <div class="xray-root" id="devops-xray-root" data-testid="devops-xray-root">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">M</div>
           <div>
-            <strong>Mercy AI</strong>
-            <span>Shared Intelligence Core</span>
+            <h1>Mercy Backend X-Ray System Map</h1>
+            <p class="subtitle">Declared system topology on port 8000, prepared for safe OpenTelemetry observations.</p>
           </div>
         </div>
-        <nav>
-          <a href="#matterForm" class="navItem active">Command</a>
-          <a href="#discoveryForm" class="navItem">Record</a>
-          <a href="#draftForm" class="navItem">Draft</a>
-          <a href="#guardrailOutput" class="navItem">Audit</a>
-        </nav>
-        <div class="trustPanel">
-          <span class="eyebrow">D.C. native</span>
-          <p>Rule 28, Rule 32, record anchoring, and Ethics Opinion 388 supervision are built into the response layer.</p>
+        <div class="search-wrap">
+          <input id="searchInput" type="search" placeholder="Search nodes, routes, agents, status" aria-label="Search graph" />
         </div>
-      </aside>
+        <div class="health-summary" id="devops-health-summary" data-testid="devops-health-summary">
+          <span class="status-pill">Loading map</span>
+        </div>
+      </header>
 
-      <main class="mainDeck">
-        <header class="topbar">
-          <div>
-            <span class="eyebrow">AI-native legal workspace</span>
-            <h1>Mercy turns records into supervised D.C. appellate drafting.</h1>
+      <main class="main">
+        <aside class="left-rail" aria-label="X-ray controls">
+          <section class="rail-section">
+            <div class="rail-title"><span>Layers</span><span>Live</span></div>
+            <div class="layer-grid" id="layerToggles"></div>
+          </section>
+
+          <section class="rail-section">
+            <div class="rail-title"><span>Map Status</span><span>Safe</span></div>
+            <div class="signals" id="reliabilitySignals"></div>
+          </section>
+        </aside>
+
+        <section class="graph-stage" aria-label="Mercy backend architecture graph">
+          <div class="graph-toolbar" aria-label="Graph controls">
+            <button class="tool-button" id="zoomIn" type="button" title="Zoom in">+</button>
+            <button class="tool-button" id="zoomOut" type="button" title="Zoom out">-</button>
+            <button class="tool-button" id="resetView" type="button" title="Reset view">Reset</button>
           </div>
-          <div class="status" id="healthStatus">Checking core</div>
-        </header>
-
-        <section class="briefingStrip" aria-label="Workspace briefing">
-          <article>
-            <span>Mode</span>
-            <strong>One brain, two windows</strong>
-          </article>
-          <article>
-            <span>Security</span>
-            <strong>Zero-retention local context</strong>
-          </article>
-          <article>
-            <span>Premium hook</span>
-            <strong>Client billing report</strong>
-          </article>
-          <article>
-            <span>Verification</span>
-            <strong id="guardrailStatus">Awaiting output</strong>
-          </article>
+          <svg id="devops-graph" data-testid="devops-graph" role="img" aria-label="Interactive Mercy architecture graph">
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="rgba(125, 211, 252, 0.72)"></path>
+              </marker>
+              <pattern id="grid" width="4" height="4" patternUnits="userSpaceOnUse">
+                <path d="M 4 0 L 0 0 0 4" fill="none" stroke="rgba(148, 163, 184, 0.11)" stroke-width="0.12"></path>
+              </pattern>
+            </defs>
+            <rect x="-20" y="-20" width="140" height="140" fill="url(#grid)"></rect>
+              <g id="viewport">
+              <g id="groupLayer"></g>
+              <g id="edgeLayer"></g>
+              <g id="nodeLayer">
+                <g class="node healthy" data-node="bootstrap-backend" transform="translate(35.6, 21.9)">
+                  <rect class="node-shell" width="10.8" height="6.2" rx="1.15"></rect>
+                  <circle class="status-dot" cx="9.1" cy="1.35" r="0.7"></circle>
+                  <text class="node-label" x="1" y="2.6">Loading backend map</text>
+                  <text class="node-type" x="1" y="4.5">bootstrap</text>
+                </g>
+              </g>
+            </g>
+          </svg>
+          <p class="map-caption">Click nodes or edges for the inspector. Toggle lanes to isolate surfaces, backend routes, security, data, knowledge infrastructure, runtime services, and QA. Observed service mapping can be layered in later through safe OpenTelemetry metadata.</p>
         </section>
 
-        <section class="matterBand">
-          <form id="matterForm" class="matterForm">
-            <div>
-              <span class="eyebrow">Matter command</span>
-              <h2>Start a case workspace</h2>
-            </div>
-            <label>
-              Matter
-              <input id="matterName" placeholder="EPA v. Smith administrative record" />
-            </label>
-            <label>
-              Tier
-              <select id="matterTier">
-                <option value="free">Free</option>
-                <option value="premium">Premium</option>
-              </select>
-            </label>
-            <button type="submit">Create matter</button>
-          </form>
-          <div class="matterMeta">
-            <span class="eyebrow">Active matter</span>
-            <strong id="activeMatter">No matter selected</strong>
-            <code id="activeMatterId">Create a matter to sync Word.</code>
-            <button class="secondaryButton" id="billingReport" type="button">Generate billing report</button>
+        <aside class="inspector" id="devops-node-inspector" data-testid="devops-node-inspector" aria-live="polite">
+          <div class="inspector-card">
+            <span class="eyebrow">Inspector</span>
+            <h2>Select a node or edge</h2>
+            <p class="description">Mercy displays safe system metadata only: component names, route families, declared/observed status, call counts, latency, error rate, timestamps, and topology notes.</p>
           </div>
-        </section>
-
-        <section class="workbench">
-          <form class="panel intakePanel" id="discoveryForm">
-            <div class="panelHead">
-              <div>
-                <span class="eyebrow">Heavy lifter</span>
-                <h2>Record intake</h2>
-              </div>
-              <span>Legal Discovery AI crew</span>
-            </div>
-            <label>
-              PDF path
-              <input
-                id="documentPath"
-                name="documentPath"
-                placeholder="C:\Users\12404\Downloads\Mercy AI\legal_discovery_ai\data\uploads\Opinion_2025-0910.pdf"
-              />
-            </label>
-            <label>
-              Or upload PDF
-              <input id="documentFile" name="documentFile" type="file" accept="application/pdf" />
-            </label>
-            <label>
-              Supplemental instructions
-              <textarea id="documentText" rows="6" placeholder="Jurisdiction focus, issue priorities, procedural posture, agency context, or record gaps"></textarea>
-            </label>
-            <button type="submit">Run discovery</button>
-          </form>
-
-          <form class="panel draftPanel" id="draftForm">
-            <div class="panelHead">
-              <div>
-                <span class="eyebrow">Draft sidekick</span>
-                <h2>D.C. Clerk OS</h2>
-              </div>
-              <span>Word-ready output</span>
-            </div>
-            <label>
-              Draft type
-              <select id="draftType">
-                <option value="statement_of_case">Statement of case</option>
-                <option value="summary_of_argument">Summary of argument</option>
-                <option value="argument_section">Argument section</option>
-                <option value="full_appellate_brief">Full appellate brief scaffold</option>
-              </select>
-            </label>
-            <label>
-              Requested relief
-              <input id="requestedRelief" placeholder="vacate the order and remand" />
-            </label>
-            <label>
-              Facts JSON
-              <textarea id="factsJson" rows="10" placeholder='{"case_summary":"...","key_issues":["..."]}'></textarea>
-            </label>
-            <button type="submit">Draft and verify</button>
-          </form>
-        </section>
-
-        <section class="outputGrid">
-          <article class="outputPanel">
-            <div class="panelHead">
-              <div>
-                <span class="eyebrow">Attorney work product</span>
-                <h2>Word-ready draft</h2>
-              </div>
-              <button class="iconButton" id="copyDraft" type="button" title="Copy draft">Copy</button>
-            </div>
-            <pre id="draftOutput">Create a matter, run discovery, or paste facts to start drafting.</pre>
-          </article>
-          <article class="outputPanel">
-            <div class="panelHead">
-              <div>
-                <span class="eyebrow">Compliance shield</span>
-                <h2>Guardrails and billing</h2>
-              </div>
-            </div>
-            <pre id="guardrailOutput">Guardrail results and billing reports appear here.</pre>
-          </article>
-        </section>
+        </aside>
       </main>
     </div>
-    <script src="/static/dashboard/app.js"></script>
+
+    <script>
+      const state = {
+        map: null,
+        visibleLayers: new Set(),
+        selectedId: null,
+        selectedKind: null,
+        tracePath: [],
+        search: "",
+        viewBox: { x: 0, y: 0, width: 100, height: 100 },
+        dragging: false,
+        dragStart: null,
+      };
+
+      const graph = document.querySelector("#devops-graph");
+      const viewport = document.querySelector("#viewport");
+      const groupLayer = document.querySelector("#groupLayer");
+      const edgeLayer = document.querySelector("#edgeLayer");
+      const nodeLayer = document.querySelector("#nodeLayer");
+      const inspector = document.querySelector("#devops-node-inspector");
+      const layerToggles = document.querySelector("#layerToggles");
+      const healthSummary = document.querySelector("#devops-health-summary");
+      const reliabilitySignals = document.querySelector("#reliabilitySignals");
+      const searchInput = document.querySelector("#searchInput");
+      const primaryMapUrl = "/devops/system-map-merged.json";
+      const fallbackMapUrl = "/devops/mercy-system-map.json";
+      let activeMapUrl = primaryMapUrl;
+
+      function esc(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#039;",
+        })[char]);
+      }
+
+      function statusClass(status) {
+        return String(status || "unknown").toLowerCase();
+      }
+
+      function setViewBox() {
+        graph.setAttribute("viewBox", `${state.viewBox.x} ${state.viewBox.y} ${state.viewBox.width} ${state.viewBox.height}`);
+      }
+
+      function nodeById(id) {
+        return state.map.nodes.find((node) => node.id === id);
+      }
+
+      function edgeBetween(from, to) {
+        return state.map.edges.find((edge) => edge.from === from && edge.to === to);
+      }
+
+      function nodeLabel(node) {
+        return node?.label || node?.name || node?.id || "Unknown";
+      }
+
+      function connectedNodes(nodeId) {
+        return state.map.edges
+          .filter((edge) => edge.from === nodeId || edge.to === nodeId)
+          .map((edge) => edge.from === nodeId ? edge.to : edge.from)
+          .map(nodeById)
+          .filter(Boolean);
+      }
+
+      function matchesSearch(node) {
+        if (!state.search) return true;
+        const haystack = [
+          node.name,
+          node.label,
+          node.type,
+          node.status,
+          node.lane,
+          node.description,
+          ...(node.inputs || []),
+          ...(node.outputs || []),
+        ].join(" ").toLowerCase();
+        return haystack.includes(state.search);
+      }
+
+      function edgePath(from, to) {
+        const midX = (from.x + to.x) / 2;
+        const bend = Math.abs(from.y - to.y) > 18 ? 6 : 2.8;
+        return `M ${from.x} ${from.y} C ${midX} ${from.y - bend}, ${midX} ${to.y + bend}, ${to.x} ${to.y}`;
+      }
+
+      function renderHealth() {
+        const summary = state.map.health?.summary || {};
+        const overall = state.map.health?.overall || "unknown";
+        healthSummary.innerHTML = `
+          <span class="status-pill">Overall <strong>${esc(overall)}</strong></span>
+          <span class="status-pill">Healthy <strong>${esc(summary.healthy || 0)}</strong></span>
+          <span class="status-pill">Warning <strong>${esc(summary.warning || 0)}</strong></span>
+          <span class="status-pill">Failing <strong>${esc(summary.failing || 0)}</strong></span>
+        `;
+      }
+
+      function validateMap(payload) {
+        const requiredArrays = ["nodes", "edges", "groups", "layers"];
+        const missing = requiredArrays.filter((key) => !Array.isArray(payload?.[key]));
+        if (missing.length) {
+          throw new Error(`Mercy map is missing required arrays: ${missing.join(", ")}`);
+        }
+        if (!payload.nodes.length || !payload.edges.length) {
+          throw new Error("Mercy map must include at least one node and one edge.");
+        }
+        const nodeIds = new Set(payload.nodes.map((node) => node.id));
+        const invalidNodes = payload.nodes.filter((node) => !node.id || !node.label || !node.type || !node.group || !node.lane || !node.status || typeof node.declared !== "boolean" || typeof node.observed !== "boolean" || !node.safeMetadata || !Array.isArray(node.riskNotes));
+        if (invalidNodes.length) {
+          throw new Error(`Mercy map has ${invalidNodes.length} node(s) missing required system-map fields.`);
+        }
+        const invalidEdges = payload.edges.filter((edge) => !edge.id || !nodeIds.has(edge.from) || !nodeIds.has(edge.to) || !edge.label || !edge.dataClass || typeof edge.allowsRawLegalText !== "boolean" || typeof edge.declared !== "boolean" || typeof edge.observed !== "boolean");
+        if (invalidEdges.length) {
+          throw new Error(`Mercy map has ${invalidEdges.length} edge(s) with missing required fields or unknown endpoints.`);
+        }
+        payload.recentTraces = Array.isArray(payload.recentTraces) ? payload.recentTraces : [];
+        payload.reliabilitySignals = Array.isArray(payload.reliabilitySignals) ? payload.reliabilitySignals : [];
+        return payload;
+      }
+
+      function showMapError(message) {
+        healthSummary.innerHTML = `<span class="status-pill">Map <strong>failed</strong></span>`;
+        groupLayer.innerHTML = "";
+        edgeLayer.innerHTML = "";
+        nodeLayer.innerHTML = "";
+        inspector.innerHTML = `
+          <div class="inspector-card">
+            <span class="eyebrow">Map Error</span>
+            <h2>Mercy map did not load</h2>
+            <p class="description">${esc(message)}</p>
+            <div class="meta-grid">
+              <div class="meta"><span>URL</span><strong>${esc(activeMapUrl)}</strong></div>
+              <div class="meta"><span>Action</span><strong>Check MERCY_DEV_TOOLS and /devops/mercy-map.json</strong></div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderLayers() {
+        layerToggles.innerHTML = state.map.layers.map((layer) => `
+          <button
+            class="layer-toggle"
+            id="toggle-${esc(layer.id)}"
+            data-testid="devops-layer-toggle"
+            data-layer="${esc(layer.id)}"
+            aria-pressed="${state.visibleLayers.has(layer.id) ? "true" : "false"}"
+            type="button"
+          >
+            <span>${esc(layer.label)}</span>
+            <span class="switch-dot" aria-hidden="true"></span>
+          </button>
+        `).join("");
+
+        layerToggles.querySelectorAll("button").forEach((button) => {
+          button.addEventListener("click", () => {
+            const layer = button.dataset.layer;
+            if (state.visibleLayers.has(layer)) state.visibleLayers.delete(layer);
+            else state.visibleLayers.add(layer);
+            button.setAttribute("aria-pressed", String(state.visibleLayers.has(layer)));
+            renderGraph();
+          });
+        });
+      }
+
+      function renderSignals() {
+        const summary = state.map.health?.summary || {};
+        const signals = [
+          { name: "Declared only", status: "declared_only", value: summary.declared_only || 0 },
+          { name: "Observed", status: "observed", value: summary.observed || 0 },
+          { name: "Missing observation", status: "missing_observation", value: summary.missing_observation || 0 },
+          { name: "Unknown observed dependency", status: "unknown_observed_dependency", value: summary.unknown_observed_dependency || 0 },
+        ];
+        reliabilitySignals.innerHTML = signals.map((signal) => `
+          <div class="signal">
+            <span class="badge ${statusClass(signal.status)}" aria-hidden="true"></span>
+            <strong>${esc(signal.name)}</strong>
+            <span>${esc(signal.value)}</span>
+          </div>
+        `).join("");
+      }
+
+      function renderGraph() {
+        const visibleNodes = new Set(
+          state.map.nodes
+            .filter((node) => state.visibleLayers.has(node.layer))
+            .filter(matchesSearch)
+            .map((node) => node.id)
+        );
+        const traceNodes = new Set(state.tracePath);
+        const traceEdges = new Set();
+        for (let index = 0; index < state.tracePath.length - 1; index += 1) {
+          const edge = edgeBetween(state.tracePath[index], state.tracePath[index + 1]);
+          if (edge) traceEdges.add(edge.id);
+        }
+
+        groupLayer.innerHTML = state.map.groups.map((group) => `
+          <g class="group">
+            <rect class="group-box" x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="1.4"></rect>
+            <text class="group-label" x="${group.x + 1.5}" y="${group.y + 3.2}">${esc(group.label || group.name)}</text>
+            <text class="group-desc" x="${group.x + 1.5}" y="${group.y + 5.2}">${esc(group.lane || "").slice(0, 70)}</text>
+          </g>
+        `).join("");
+
+        edgeLayer.innerHTML = state.map.edges.map((edge) => {
+          const from = nodeById(edge.from);
+          const to = nodeById(edge.to);
+          const hidden = !visibleNodes.has(edge.from) || !visibleNodes.has(edge.to) || !state.visibleLayers.has(edge.layer);
+          const active = state.selectedKind === "edge" && state.selectedId === edge.id;
+          const traced = traceEdges.has(edge.id);
+          const dim = state.tracePath.length && !traced;
+          return `
+            <path
+              class="edge ${statusClass(edge.status)} ${hidden ? "hidden" : ""} ${active ? "active" : ""} ${traced ? "trace" : ""} ${dim ? "dim" : ""}"
+              d="${edgePath(from, to)}"
+              marker-end="url(#arrow)"
+              data-edge="${esc(edge.id)}"
+            ></path>
+          `;
+        }).join("");
+
+        nodeLayer.innerHTML = state.map.nodes.map((node) => {
+          const hidden = !visibleNodes.has(node.id);
+          const active = state.selectedKind === "node" && state.selectedId === node.id;
+          const traced = traceNodes.has(node.id);
+          const dim = state.tracePath.length && !traced;
+          return `
+            <g class="node ${statusClass(node.status)} ${hidden ? "hidden" : ""} ${active ? "selected" : ""} ${traced ? "trace" : ""} ${dim ? "dim" : ""}" data-node="${esc(node.id)}" transform="translate(${node.x - 5.4}, ${node.y - 3.1})">
+              <rect class="node-shell" width="10.8" height="6.2" rx="1.15"></rect>
+              <circle class="status-dot" cx="9.1" cy="1.35" r="0.7"></circle>
+              <text class="node-label" x="1" y="2.6">${esc(nodeLabel(node)).slice(0, 24)}</text>
+              <text class="node-type" x="1" y="4.5">${esc(node.type)} · ${node.observed ? "observed" : "declared"}</text>
+            </g>
+          `;
+        }).join("");
+
+        nodeLayer.querySelectorAll(".node").forEach((element) => {
+          element.addEventListener("click", () => {
+            const node = nodeById(element.dataset.node);
+            state.selectedId = node.id;
+            state.selectedKind = "node";
+            inspectNode(node);
+            renderGraph();
+          });
+        });
+
+        edgeLayer.querySelectorAll(".edge").forEach((element) => {
+          element.addEventListener("click", () => {
+            const edge = state.map.edges.find((item) => item.id === element.dataset.edge);
+            state.selectedId = edge.id;
+            state.selectedKind = "edge";
+            inspectEdge(edge);
+            renderGraph();
+          });
+        });
+      }
+
+      function metricRows(metrics = {}) {
+        const entries = Object.entries(metrics);
+        if (!entries.length) return `<p class="empty">No recent safe metrics are available.</p>`;
+        return entries.map(([key, value]) => `
+          <div class="meta"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>
+        `).join("");
+      }
+
+      function listRows(title, values = []) {
+        if (!values.length) return "";
+        return `
+          <div class="inspector-card list-block">
+            <span class="eyebrow">${esc(title)}</span>
+            ${values.map((value) => `<div class="list-row"><strong>${esc(value)}</strong></div>`).join("")}
+          </div>
+        `;
+      }
+
+      function inspectNode(node) {
+        const connections = connectedNodes(node.id).map((connected) => `${nodeLabel(connected)} (${connected.type})`);
+        inspector.innerHTML = `
+          <div class="inspector-card">
+            <span class="eyebrow">Node</span>
+            <h2>${esc(nodeLabel(node))}</h2>
+            <p class="description">${esc(node.description)}</p>
+            <div class="meta-grid">
+              <div class="meta"><span>Type</span><strong>${esc(node.type)}</strong></div>
+              <div class="meta"><span>Status</span><strong><span class="badge ${statusClass(node.status)}">${esc(node.status)}</span></strong></div>
+              <div class="meta"><span>Lane</span><strong>${esc(node.lane)}</strong></div>
+              <div class="meta"><span>Connected</span><strong>${esc(connections.length)}</strong></div>
+              <div class="meta"><span>Declared</span><strong>${node.declared ? "Yes" : "No"}</strong></div>
+              <div class="meta"><span>Observed</span><strong>${node.observed ? "Yes" : "No"}</strong></div>
+            </div>
+          </div>
+          ${listRows("Connected Nodes", connections)}
+          ${listRows("Risk Notes", node.riskNotes)}
+          <div class="inspector-card">
+            <span class="eyebrow">Safe Metadata</span>
+            <div class="meta-grid">${metricRows(node.safeMetadata)}</div>
+          </div>
+        `;
+      }
+
+      function inspectEdge(edge) {
+        const from = nodeById(edge.from);
+        const to = nodeById(edge.to);
+        inspector.innerHTML = `
+          <div class="inspector-card">
+            <span class="eyebrow">Edge</span>
+            <h2>${esc(nodeLabel(from))} → ${esc(nodeLabel(to))}</h2>
+            <p class="description">Data-flow classification for the selected connection.</p>
+            <div class="meta-grid">
+              <div class="meta"><span>Label</span><strong>${esc(edge.label)}</strong></div>
+              <div class="meta"><span>Data Class</span><strong>${esc(edge.dataClass)}</strong></div>
+              <div class="meta"><span>From</span><strong>${esc(nodeLabel(from))}</strong></div>
+              <div class="meta"><span>To</span><strong>${esc(nodeLabel(to))}</strong></div>
+              <div class="meta"><span>Status</span><strong><span class="badge ${statusClass(edge.status)}">${esc(edge.status)}</span></strong></div>
+              <div class="meta"><span>Text Payload</span><strong>${edge.allowsRawLegalText ? "Allowed" : "Blocked"}</strong></div>
+              <div class="meta"><span>Declared</span><strong>${edge.declared ? "Yes" : "No"}</strong></div>
+              <div class="meta"><span>Observed</span><strong>${edge.observed ? "Yes" : "No"}</strong></div>
+              <div class="meta"><span>Call Count</span><strong>${esc(edge.callCount ?? 0)}</strong></div>
+              <div class="meta"><span>Avg Latency</span><strong>${edge.avgLatencyMs == null ? "n/a" : `${esc(edge.avgLatencyMs)}ms`}</strong></div>
+              <div class="meta"><span>Error Rate</span><strong>${edge.errorRate == null ? "n/a" : esc(edge.errorRate)}</strong></div>
+              <div class="meta"><span>Last Seen</span><strong>${esc(edge.lastSeen || "not observed")}</strong></div>
+              <div class="meta"><span>Notes</span><strong>${esc(edge.notes || "")}</strong></div>
+            </div>
+          </div>
+        `;
+      }
+
+      function wireGraphControls() {
+        document.querySelector("#zoomIn").addEventListener("click", () => zoom(0.86));
+        document.querySelector("#zoomOut").addEventListener("click", () => zoom(1.16));
+        document.querySelector("#resetView").addEventListener("click", () => {
+          state.viewBox = { x: 0, y: 0, width: 100, height: 100 };
+          setViewBox();
+        });
+
+        graph.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          zoom(event.deltaY < 0 ? 0.9 : 1.1);
+        }, { passive: false });
+
+        graph.addEventListener("pointerdown", (event) => {
+          state.dragging = true;
+          state.dragStart = { x: event.clientX, y: event.clientY, viewBox: { ...state.viewBox } };
+          graph.setPointerCapture(event.pointerId);
+        });
+
+        graph.addEventListener("pointermove", (event) => {
+          if (!state.dragging || !state.dragStart) return;
+          const scaleX = state.viewBox.width / graph.clientWidth;
+          const scaleY = state.viewBox.height / graph.clientHeight;
+          state.viewBox.x = state.dragStart.viewBox.x - (event.clientX - state.dragStart.x) * scaleX;
+          state.viewBox.y = state.dragStart.viewBox.y - (event.clientY - state.dragStart.y) * scaleY;
+          setViewBox();
+        });
+
+        graph.addEventListener("pointerup", (event) => {
+          state.dragging = false;
+          state.dragStart = null;
+          graph.releasePointerCapture(event.pointerId);
+        });
+      }
+
+      function zoom(multiplier) {
+        const centerX = state.viewBox.x + state.viewBox.width / 2;
+        const centerY = state.viewBox.y + state.viewBox.height / 2;
+        state.viewBox.width = Math.max(45, Math.min(140, state.viewBox.width * multiplier));
+        state.viewBox.height = Math.max(45, Math.min(140, state.viewBox.height * multiplier));
+        state.viewBox.x = centerX - state.viewBox.width / 2;
+        state.viewBox.y = centerY - state.viewBox.height / 2;
+        setViewBox();
+      }
+
+      async function init() {
+        try {
+          let response = await fetch(primaryMapUrl, { headers: { "Accept": "application/json" } });
+          activeMapUrl = primaryMapUrl;
+          if (!response.ok) {
+            console.error("Mercy DevOps map request failed", { url: primaryMapUrl, status: response.status, statusText: response.statusText });
+            response = await fetch(fallbackMapUrl, { headers: { "Accept": "application/json" } });
+            activeMapUrl = fallbackMapUrl;
+          }
+          if (!response.ok) {
+            console.error("Mercy DevOps map request failed", { url: activeMapUrl, status: response.status, statusText: response.statusText });
+            throw new Error(`Map request failed for ${activeMapUrl} with status ${response.status}`);
+          }
+          state.map = validateMap(await response.json());
+          state.map.layers.forEach((layer) => {
+            if (layer.defaultVisible) state.visibleLayers.add(layer.id);
+          });
+          setViewBox();
+          renderHealth();
+          renderLayers();
+          renderSignals();
+          renderGraph();
+          wireGraphControls();
+          const first = state.map.nodes.find((node) => node.id === "fastapi_core") || state.map.nodes[0];
+          if (first) {
+            state.selectedId = first.id;
+            state.selectedKind = "node";
+            inspectNode(first);
+            renderGraph();
+          }
+        } catch (error) {
+          console.error("Mercy DevOps map render failed", { url: activeMapUrl, error });
+          showMapError(error.message || "Unknown map loading error.");
+        }
+      }
+
+      searchInput.addEventListener("input", (event) => {
+        state.search = event.target.value.trim().toLowerCase();
+        state.tracePath = [];
+        renderGraph();
+      });
+
+      init();
+    </script>
   </body>
 </html>
