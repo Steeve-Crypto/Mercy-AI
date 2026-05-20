@@ -22,6 +22,10 @@ type SessionContextValue = {
   signOut: () => Promise<void>;
 };
 
+function localDevAuthDefaultsEnabled() {
+  return process.env.NEXT_PUBLIC_MERCY_ENV === "local" && process.env.NEXT_PUBLIC_MERCY_AUTH_MODE === "dev";
+}
+
 const LOCAL_DEV_SESSION: MercySession = {
   userId: process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-user",
   email: null,
@@ -86,11 +90,14 @@ function persistMercyContext(session: MercySession) {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<MercySession>(LOCAL_DEV_SESSION);
-  const [loading, setLoading] = useState(configured);
+  const localDevDefaults = localDevAuthDefaultsEnabled();
+  const [loading, setLoading] = useState(configured && !localDevDefaults);
 
   useEffect(() => {
     if (!configured) {
-      persistMercyContext(LOCAL_DEV_SESSION);
+      if (localDevDefaults) {
+        persistMercyContext(LOCAL_DEV_SESSION);
+      }
       setLoading(false);
       return;
     }
@@ -123,7 +130,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, [configured]);
+  }, [configured, localDevDefaults]);
 
   const value = useMemo<SessionContextValue>(
     () => ({

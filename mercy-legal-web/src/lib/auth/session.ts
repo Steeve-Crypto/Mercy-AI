@@ -17,6 +17,10 @@ export function supabaseServerConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+function localDevAuthDefaultsEnabled() {
+  return process.env.MERCY_ENV === "local" && process.env.MERCY_AUTH_MODE === "dev";
+}
+
 function rolesFromUser(user: User): string[] {
   const rawRoles = user.app_metadata?.roles ?? user.user_metadata?.roles ?? user.app_metadata?.role ?? user.user_metadata?.role;
   if (Array.isArray(rawRoles)) return rawRoles.map(String).filter(Boolean);
@@ -53,6 +57,9 @@ export function mercyUserFromSupabaseUser(user: User): MercySessionUser {
 
 export async function getServerMercyAuthContext(): Promise<CoreAuthContext> {
   if (!supabaseServerConfigured()) {
+    if (!localDevAuthDefaultsEnabled()) {
+      return {};
+    }
     return {
       token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
       tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",

@@ -71,6 +71,33 @@ class ObservabilityTests(unittest.TestCase):
         self.assertTrue(dashboard["langsmith"]["project_name"])
         self.assertTrue(retrieval["results"])
 
+    def test_trace_metadata_redacts_raw_matter_document_and_prompt_text(self) -> None:
+        trace_event(
+            "raw_text_redaction_sample",
+            surface_context="unit_test",
+            category="telemetry",
+            metadata={
+                "matter_id": "matter-safe-id",
+                "document_id": "doc-safe-id",
+                "prompt": "raw client prompt should not be retained",
+                "document_text": "raw document text should not be retained",
+                "nested": {
+                    "client_facts": "private matter facts",
+                    "prompt_text": "nested prompt text",
+                    "count": 2,
+                },
+            },
+        )
+
+        payload = observability_dashboard(limit=10)
+        serialized = str(payload)
+        self.assertIn("matter-safe-id", serialized)
+        self.assertIn("doc-safe-id", serialized)
+        self.assertNotIn("raw client prompt", serialized)
+        self.assertNotIn("raw document text", serialized)
+        self.assertNotIn("private matter facts", serialized)
+        self.assertNotIn("nested prompt text", serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

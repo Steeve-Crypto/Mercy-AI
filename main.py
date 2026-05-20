@@ -464,7 +464,70 @@ def _matter_context(matter_id: str | None, tenant_user: TenantUser) -> dict[str,
     try:
         return get_matter_context(matter_id, tenant_context=_tenant_context(tenant_user)) or {}
     except MatterTenantAccessError as exc:
-        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        raise HTTPException(status_code=404, detail="Matter not found.") from exc
+
+
+_TENANT_IDENTITY_CONTEXT_KEYS = {"auth_context", "tenant_id", "user_id", "created_by_user_id", "roles", "auth_mode"}
+_STORED_MATTER_CONTEXT_KEYS = {
+    "matter_id",
+    "client_id",
+    "client_name",
+    "name",
+    "matter_name",
+    "matter_type",
+    "jurisdiction",
+    "client_role",
+    "opposing_parties",
+    "deadlines",
+    "requested_relief",
+    "key_facts",
+    "facts",
+    "documents",
+    "attached_documents",
+    "attached_document_ids",
+    "sensitivity_flags",
+    "missing_information",
+    "history",
+    "drafts",
+    "billing_events",
+    "route_history",
+    "created_at",
+    "last_updated",
+    "retention_status",
+}
+
+
+def _sanitize_client_matter_context(
+    client_context: dict[str, Any] | None,
+    *,
+    matter_id: str | None,
+) -> dict[str, Any]:
+    sanitized = sanitize_payload(client_context or {})
+    blocked = set(_TENANT_IDENTITY_CONTEXT_KEYS)
+    if matter_id:
+        blocked.update(_STORED_MATTER_CONTEXT_KEYS)
+    return {key: value for key, value in sanitized.items() if key not in blocked}
+
+
+def _scoped_matter_context(
+    tenant_user: TenantUser,
+    *,
+    matter_id: str | None = None,
+    client_context: dict[str, Any] | None = None,
+    surface_context: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    stored_context = _matter_context(matter_id, tenant_user)
+    context = {
+        **_sanitize_client_matter_context(client_context, matter_id=matter_id),
+        **stored_context,
+        **(extra or {}),
+        "surface_context": surface_context,
+        "auth_context": _tenant_context(tenant_user),
+    }
+    if matter_id:
+        context["matter_id"] = matter_id
+    return context
 
 
 def _route_payload(decision: Any) -> dict[str, Any]:
@@ -485,7 +548,7 @@ def _attach_route(
         try:
             MATTERS.attach_route(matter_id, route, tenant_context=_tenant_context(tenant_user))
         except MatterTenantAccessError as exc:
-            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+            raise HTTPException(status_code=404, detail="Matter not found.") from exc
     return wrapped
 
 
@@ -673,7 +736,7 @@ async def matter_intake(
         try:
             updated_context = update_matter_context(payload, tenant_context=_tenant_context(tenant_user))
         except MatterTenantAccessError as exc:
-            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+            raise HTTPException(status_code=404, detail="Matter not found.") from exc
         span["metadata"] = {"matter_id": updated_context.get("matter_id"), **_auth_metadata(tenant_user)}
         route = _route_payload(
             moe_route(
@@ -719,7 +782,7 @@ async def matter_intake_full(
         try:
             result = run_full_intake_flow(payload)
         except MatterTenantAccessError as exc:
-            raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+            raise HTTPException(status_code=404, detail="Matter not found.") from exc
         updated_context = result["matter_context"]
         span["metadata"] = {
             "matter_id": updated_context.get("matter_id"),
@@ -774,7 +837,7 @@ async def get_matter_documents(
     try:
         documents = list_matter_documents(matter_id, tenant_context=_tenant_context(tenant_user))
     except MatterTenantAccessError as exc:
-        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        raise HTTPException(status_code=404, detail="Matter not found.") from exc
     record_security_audit(
         "matter_documents_accessed",
         tenant_context=_tenant_context(tenant_user),
@@ -793,7 +856,7 @@ def _find_matter_document(matter_id: str, document_id: str, tenant_user: TenantU
     try:
         documents = list_matter_documents(matter_id, tenant_context=_tenant_context(tenant_user))
     except MatterTenantAccessError as exc:
-        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        raise HTTPException(status_code=404, detail="Document not found.") from exc
     document = next((item for item in documents if str(item.get("document_id")) == document_id), None)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found for this matter.")
@@ -873,7 +936,7 @@ async def get_matter(
     try:
         matter = MATTERS.get(matter_id, tenant_context=_tenant_context(tenant_user))
     except MatterTenantAccessError as exc:
-        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        raise HTTPException(status_code=404, detail="Matter not found.") from exc
     if not matter:
         raise HTTPException(status_code=404, detail="Matter not found.")
     record_security_audit(
@@ -894,7 +957,7 @@ async def matter_billing_report(
     try:
         matter = MATTERS.get(matter_id, tenant_context=_tenant_context(tenant_user))
     except MatterTenantAccessError as exc:
-        raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+        raise HTTPException(status_code=404, detail="Matter not found.") from exc
     if not matter:
         raise HTTPException(status_code=404, detail="Matter not found.")
     route = _route_payload(
@@ -982,12 +1045,12 @@ async def router_inspect(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        context = {
-            **_matter_context(request.matter_id, tenant_user),
-            **sanitize_payload(request.matter_context),
-            "surface_context": request.surface_context,
-            "auth_context": _tenant_context(tenant_user),
-        }
+        context = _scoped_matter_context(
+            tenant_user,
+            matter_id=request.matter_id,
+            client_context=request.matter_context,
+            surface_context=request.surface_context,
+        )
         if request.selected_text:
             context["selected_text"] = sanitize_text(request.selected_text)
         if request.document_text:
@@ -1006,7 +1069,7 @@ async def router_inspect(
             try:
                 MATTERS.attach_route(request.matter_id, route, tenant_context=_tenant_context(tenant_user))
             except MatterTenantAccessError as exc:
-                raise HTTPException(status_code=403, detail="Matter belongs to a different tenant.") from exc
+                raise HTTPException(status_code=404, detail="Matter not found.") from exc
         envelope = build_response_envelope(route, context, source="router")
         return {
             "response_envelope": envelope,
@@ -1035,12 +1098,12 @@ async def rag_retrieve(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        context = {
-            **_matter_context(request.matter_id, tenant_user),
-            **sanitize_payload(request.matter_context),
-            "surface_context": request.surface_context,
-            "auth_context": _tenant_context(tenant_user),
-        }
+        context = _scoped_matter_context(
+            tenant_user,
+            matter_id=request.matter_id,
+            client_context=request.matter_context,
+            surface_context=request.surface_context,
+        )
         if request.practice_area:
             context["practice_area"] = request.practice_area
         if request.date_from:
@@ -1093,12 +1156,11 @@ async def rag_ingest(
     request: RagIngestRequest,
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
-    context = {
-        **_matter_context(request.matter_id, tenant_user),
-        "matter_id": request.matter_id,
-        "surface_context": request.surface_context,
-        "auth_context": _tenant_context(tenant_user),
-    }
+    context = _scoped_matter_context(
+        tenant_user,
+        matter_id=request.matter_id,
+        surface_context=request.surface_context,
+    )
     route = _route_payload(
         moe_route(
             query="Validate and register official District of Columbia legal source records for RAG ingestion.",
@@ -1226,14 +1288,12 @@ async def agent_execute(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        context = {
-            **_matter_context(request.matter_id, tenant_user),
-            **sanitize_payload(request.matter_context),
-            "surface_context": request.surface_context,
-            "auth_context": _tenant_context(tenant_user),
-        }
-        if request.matter_id:
-            context["matter_id"] = request.matter_id
+        context = _scoped_matter_context(
+            tenant_user,
+            matter_id=request.matter_id,
+            client_context=request.matter_context,
+            surface_context=request.surface_context,
+        )
         safe_task = sanitize_text(request.task, max_length=8000)
         route = _route_payload(moe_route(safe_task, context, user_type=request.user_type))
         model_tier = "strong" if route.get("expert") in {"drafting", "research"} else "fast"
@@ -1316,14 +1376,15 @@ async def workspace_discovery(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        matter_context = {
-            **_matter_context(request.matter_id, tenant_user),
-            "matter_id": request.matter_id,
-            "document_path": sanitize_text(request.document_path, max_length=2000),
-            "document_text": sanitize_text(request.document_text, max_length=40_000) if request.document_text else None,
-            "surface_context": "core_discovery",
-            "auth_context": _tenant_context(tenant_user),
-        }
+        matter_context = _scoped_matter_context(
+            tenant_user,
+            matter_id=request.matter_id,
+            surface_context="core_discovery",
+            extra={
+                "document_path": sanitize_text(request.document_path, max_length=2000),
+                "document_text": sanitize_text(request.document_text, max_length=40_000) if request.document_text else None,
+            },
+        )
         route = _route_payload(
             moe_route(
                 query="Analyze this D.C. legal document for discovery review, risks, facts, and next actions.",
@@ -1370,6 +1431,8 @@ async def workspace_discovery_upload(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Upload a PDF document.")
 
+    stored_matter_context = _matter_context(matter_id, tenant_user)
+
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     content = await file.read()
     document_id = f"doc_{sha256(content or file.filename.encode()).hexdigest()[:24]}"
@@ -1377,13 +1440,14 @@ async def workspace_discovery_upload(
     destination = UPLOAD_DIR / f"{document_id}_{safe_name}"
     destination.write_bytes(content)
     matter_context = {
-        **_matter_context(matter_id, tenant_user),
-        "matter_id": matter_id,
+        **stored_matter_context,
         "document_path": str(destination),
         "document_text": document_text,
         "surface_context": "core_discovery_upload",
         "auth_context": _tenant_context(tenant_user),
     }
+    if matter_id:
+        matter_context["matter_id"] = matter_id
     route = _route_payload(
         moe_route(
             query="Analyze this uploaded D.C. legal document for discovery review, risks, facts, and next actions.",
@@ -1439,15 +1503,16 @@ async def workspace_draft(
         matter_reference=request.matter_id,
         metadata=_auth_metadata(tenant_user),
     ) as span:
-        matter_context = {
-            **_matter_context(request.matter_id, tenant_user),
-            "matter_id": request.matter_id,
-            "facts": sanitize_payload(request.facts),
-            "draft_type": request.draft_type,
-            "requested_relief": sanitize_text(request.requested_relief) if request.requested_relief else None,
-            "surface_context": request.surface_context,
-            "auth_context": _tenant_context(tenant_user),
-        }
+        matter_context = _scoped_matter_context(
+            tenant_user,
+            matter_id=request.matter_id,
+            surface_context=request.surface_context,
+            extra={
+                "facts": sanitize_payload(request.facts),
+                "draft_type": request.draft_type,
+                "requested_relief": sanitize_text(request.requested_relief) if request.requested_relief else None,
+            },
+        )
         route = _route_payload(
             moe_route(
                 query=sanitize_text(request.requested_relief or request.draft_type, max_length=8000),

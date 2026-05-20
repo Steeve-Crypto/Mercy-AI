@@ -376,8 +376,38 @@ def _guardrail_from_route(route: dict[str, Any] | None) -> str | None:
 
 
 def _redact_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    blocked = {"document_text", "selected_text", "facts", "key_facts", "draft", "content"}
-    return {key: value for key, value in metadata.items() if key not in blocked}
+    blocked_exact = {
+        "document_text",
+        "selected_text",
+        "facts",
+        "key_facts",
+        "draft",
+        "content",
+        "prompt",
+        "query",
+        "answer",
+        "generated_answer",
+        "matter_text",
+        "document_content",
+    }
+    blocked_fragments = ("prompt", "document_text", "selected_text", "matter_text", "raw_text", "client_fact")
+
+    def scrub(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: scrub(nested)
+                for key, nested in value.items()
+                if key.lower() not in blocked_exact and not any(fragment in key.lower() for fragment in blocked_fragments)
+            }
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        return value
+
+    return {
+        key: scrub(value)
+        for key, value in metadata.items()
+        if key.lower() not in blocked_exact and not any(fragment in key.lower() for fragment in blocked_fragments)
+    }
 
 
 def _submit_langsmith_trace(record: TraceRecord) -> None:

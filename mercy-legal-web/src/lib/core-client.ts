@@ -560,31 +560,41 @@ export type CoreFirmSeatsEnvelope = {
   invite_endpoint?: string;
 };
 
+function localDevAuthDefaultsEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.NEXT_PUBLIC_MERCY_ENV === "local" ||
+    process.env.NEXT_PUBLIC_MERCY_AUTH_MODE === "dev" ||
+    process.env.MERCY_ENV === "local" ||
+    process.env.MERCY_AUTH_MODE === "dev"
+  );
+}
+
 function browserAuthContext(): CoreAuthContext {
   if (typeof window === "undefined") {
     return {};
   }
 
+  const localDevDefaults = localDevAuthDefaultsEnabled();
   return {
-    token: window.localStorage.getItem("mercy.auth.token") || process.env.NEXT_PUBLIC_MERCY_API_TOKEN,
+    token: window.localStorage.getItem("mercy.auth.token") || (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_API_TOKEN : undefined),
     tenantId:
       window.localStorage.getItem("mercy.auth.tenantId") ||
-      process.env.NEXT_PUBLIC_MERCY_TENANT_ID ||
-      "local-dev-tenant",
+      (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant" : undefined),
     userId:
       window.localStorage.getItem("mercy.auth.userId") ||
-      process.env.NEXT_PUBLIC_MERCY_USER_ID ||
-      "local-web-user",
-    roles: window.localStorage.getItem("mercy.auth.roles") || "attorney",
+      (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-user" : undefined),
+    roles: window.localStorage.getItem("mercy.auth.roles") || (localDevDefaults ? "attorney" : undefined),
   };
 }
 
 function serverAuthContext(): CoreAuthContext {
+  const localDevDefaults = localDevAuthDefaultsEnabled();
   return {
     token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
-    tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
-    userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
-    roles: process.env.MERCY_ROLES || "attorney",
+    tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || (localDevDefaults ? "local-dev-tenant" : undefined),
+    userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || (localDevDefaults ? "local-web-server" : undefined),
+    roles: process.env.MERCY_ROLES || (localDevDefaults ? "attorney" : undefined),
   };
 }
 

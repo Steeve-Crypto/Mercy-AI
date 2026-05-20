@@ -410,3 +410,4 @@ def reset_storage_for_tests() -> None:
     _ENGINE = None
     _SESSION_FACTORY = None
     _INITIALIZED = False
+    get_config.cache_clear()

@@ -8,6 +8,10 @@ function supabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+function localDevAuthBypassConfigured() {
+  return process.env.MERCY_ENV === "local" && process.env.MERCY_AUTH_MODE === "dev";
+}
+
 function rolesFromMetadata(metadata: Record<string, unknown> | undefined): string[] {
   const rawRoles = metadata?.roles ?? metadata?.role;
   if (Array.isArray(rawRoles)) return rawRoles.map(String).filter(Boolean);
@@ -18,8 +22,18 @@ function rolesFromMetadata(metadata: Record<string, unknown> | undefined): strin
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const protectedRoute = PROTECTED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
-  if (!protectedRoute || !supabaseConfigured()) {
+  if (!protectedRoute) {
     return NextResponse.next();
+  }
+  if (!supabaseConfigured()) {
+    if (localDevAuthBypassConfigured()) {
+      return NextResponse.next();
+    }
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/sign-in";
+    redirectUrl.searchParams.set("next", `${path}${request.nextUrl.search}`);
+    redirectUrl.searchParams.set("auth", "provider-required");
+    return NextResponse.redirect(redirectUrl);
   }
 
   let response = NextResponse.next({ request });

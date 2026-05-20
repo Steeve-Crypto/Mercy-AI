@@ -54,6 +54,21 @@ def main() -> int:
         if not skills.get("skills"):
             raise AssertionError("agent skills response did not include discoverable MCP skills")
 
+        invite = _assert_status(
+            client.post("/v1/beta/invites", json={"email": "verify@example.com"}, headers=_headers()),
+            200,
+            "create beta invite for smoke tenant",
+        )
+        _assert_status(
+            client.post(
+                "/v1/beta/invites/accept",
+                json={"email": "verify@example.com", "invite_code": invite.get("invite_code")},
+                headers=_headers(),
+            ),
+            200,
+            "accept beta invite for smoke tenant",
+        )
+
         agent_payload = {
             "task": "Check D.C. ethics and citation reliability for an AI-assisted draft.",
             "params": {
@@ -86,7 +101,7 @@ def main() -> int:
 
         _assert_status(
             client.get(f"/v1/matters/{matter_id}", headers=_headers("verify-tenant-b", "verify-user-b")),
-            403,
+            404,
             "cross-tenant matter read blocked",
         )
 
