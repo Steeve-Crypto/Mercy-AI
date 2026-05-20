@@ -92,7 +92,7 @@ class MonitoringTests(unittest.TestCase):
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_monitoring_endpoints_require_admin_outside_local_dev(self) -> None:
-        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "", "MERCY_API_TOKEN": "test-token"}):
+        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "token", "MERCY_API_TOKEN": "test-token"}):
             client = TestClient(app)  # type: ignore[arg-type]
             forbidden = client.get("/v1/monitoring/metrics", headers=_headers(roles="user"))
             allowed = client.get("/v1/monitoring/metrics", headers=_headers(roles="admin"))

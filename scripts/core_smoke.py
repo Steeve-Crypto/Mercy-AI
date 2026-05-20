@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +18,31 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+JWT_SECRET = "verify-supabase-jwt-secret"
+
+
+def _b64url(payload: dict[str, object]) -> str:
+    return base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")).rstrip(b"=").decode("ascii")
+
+
+def _jwt(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a") -> str:
+    now = int(time.time())
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "aud": "authenticated",
+        "sub": user_id,
+        "iat": now,
+        "exp": now + 3600,
+        "app_metadata": {"tenant_id": tenant_id, "roles": ["attorney"]},
+    }
+    signing_input = f"{_b64url(header)}.{_b64url(payload)}"
+    signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256).digest()
+    return f"{signing_input}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode('ascii')}"
+
+
 def _headers(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a") -> dict[str, str]:
     return {
-        "Authorization": "Bearer verify-token",
-        "X-Mercy-Tenant-Id": tenant_id,
-        "X-Mercy-User-Id": user_id,
+        "Authorization": f"Bearer {_jwt(tenant_id, user_id)}",
     }
 
 
@@ -32,8 +57,8 @@ def _assert_status(response: Any, expected: int, label: str) -> dict[str, Any]:
 
 def main() -> int:
     os.environ["MERCY_ENV"] = "verify"
-    os.environ.pop("MERCY_AUTH_MODE", None)
-    os.environ["MERCY_API_TOKEN"] = "verify-token"
+    os.environ["MERCY_AUTH_MODE"] = "supabase"
+    os.environ["SUPABASE_JWT_SECRET"] = JWT_SECRET
     temp_dir = tempfile.TemporaryDirectory()
     os.environ["POSTGRES_URL"] = f"sqlite+pysqlite:///{Path(temp_dir.name) / 'mercy-core-smoke.db'}"
 

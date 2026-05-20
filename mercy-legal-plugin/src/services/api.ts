@@ -26,6 +26,8 @@ const viteEnv = (import.meta as ImportMeta & {
   env?: {
     VITE_MERCY_API_TOKEN?: string;
     VITE_MERCY_CORE_API_URL?: string;
+    VITE_MERCY_ENV?: string;
+    VITE_MERCY_AUTH_MODE?: string;
     VITE_MERCY_TENANT_ID?: string;
     VITE_MERCY_USER_ID?: string;
   };
@@ -158,8 +160,17 @@ function authContext(): { token?: string; tenantId: string; userId: string; role
   };
 }
 
+function localDevAuthDefaultsEnabled(): boolean {
+  return viteEnv?.VITE_MERCY_ENV === "local" && viteEnv?.VITE_MERCY_AUTH_MODE === "dev";
+}
+
 function authHeaders(): Record<string, string> {
   const auth = authContext();
+  if (!localDevAuthDefaultsEnabled()) {
+    return {
+      ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {})
+    };
+  }
   return {
     ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}),
     "X-Mercy-Tenant-Id": auth.tenantId,

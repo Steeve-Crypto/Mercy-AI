@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -60,13 +61,24 @@ def start_backend(env: dict[str, str]) -> subprocess.Popen[str] | None:
         stderr=subprocess.STDOUT,
         text=True,
     )
+    output_lines: list[str] = []
+
+    def drain_output() -> None:
+        if process.stdout is None:
+            return
+        for line in process.stdout:
+            output_lines.append(line)
+            if len(output_lines) > 200:
+                del output_lines[:100]
+
+    threading.Thread(target=drain_output, name="mercy-full-smoke-backend-output", daemon=True).start()
     deadline = time.time() + 60
     while time.time() < deadline:
         if backend_is_running():
             print("PASS Backend health check is ready")
             return process
         if process.poll() is not None:
-            output = process.stdout.read() if process.stdout else ""
+            output = "".join(output_lines)
             raise RuntimeError(f"Backend exited early.\n{output}")
         time.sleep(1)
 

@@ -576,6 +576,9 @@ function browserAuthContext(): CoreAuthContext {
   }
 
   const localDevDefaults = localDevAuthDefaultsEnabled();
+  if (!localDevDefaults) {
+    return {};
+  }
   return {
     token: window.localStorage.getItem("mercy.auth.token") || (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_API_TOKEN : undefined),
     tenantId:
@@ -586,6 +589,14 @@ function browserAuthContext(): CoreAuthContext {
       (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-user" : undefined),
     roles: window.localStorage.getItem("mercy.auth.roles") || (localDevDefaults ? "attorney" : undefined),
   };
+}
+
+function coreRequestUrl(path: string): string {
+  const browser = typeof window !== "undefined";
+  if (browser && !localDevAuthDefaultsEnabled()) {
+    return `/api/core${path}`;
+  }
+  return `${MERCY_CORE_API_URL}${path}`;
 }
 
 function serverAuthContext(): CoreAuthContext {
@@ -624,7 +635,7 @@ async function coreFetch<T>(path: string, init?: RequestInit, auth?: CoreAuthCon
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`${MERCY_CORE_API_URL}${path}`, {
+    const response = await fetch(coreRequestUrl(path), {
       ...init,
       cache: "no-store",
       headers: {
@@ -801,7 +812,8 @@ export async function listMatterDocuments(
 }
 
 export function matterDocumentPreviewUrl(matterId: string, documentId: string): string {
-  return `${MERCY_CORE_API_URL}/v1/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(documentId)}/preview`;
+  const path = `/v1/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(documentId)}/preview`;
+  return coreRequestUrl(path);
 }
 
 export async function previewMatterDocument(matterId: string, documentId: string, auth?: CoreAuthContext): Promise<CoreClientResult<string>> {

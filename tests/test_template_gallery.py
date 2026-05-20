@@ -67,7 +67,7 @@ class TemplateGalleryTests(unittest.TestCase):
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_template_gallery_endpoint_is_tenant_aware_and_filterable(self) -> None:
-        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "", "MERCY_API_TOKEN": "test-token"}):
+        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "token", "MERCY_API_TOKEN": "test-token"}):
             client = TestClient(app)  # type: ignore[arg-type]
             response = client.get(
                 "/v1/templates/gallery",

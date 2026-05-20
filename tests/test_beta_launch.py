@@ -109,7 +109,7 @@ class BetaLaunchTests(unittest.TestCase):
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_beta_endpoints(self) -> None:
-        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "", "MERCY_API_TOKEN": "test-token"}):
+        with patch.dict(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "token", "MERCY_API_TOKEN": "test-token"}):
             client = TestClient(app)  # type: ignore[arg-type]
             status = client.get("/v1/beta/status", headers=_headers())
             waitlist = client.post("/v1/beta/waitlist", headers=_headers(), json={"email": "beta@example.com"})

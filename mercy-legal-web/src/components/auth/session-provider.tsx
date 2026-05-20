@@ -76,11 +76,11 @@ function sessionFromSupabase(user: User, accessToken: string | null): MercySessi
   };
 }
 
-function persistMercyContext(session: MercySession) {
+function persistMercyContext(session: MercySession, persistToken: boolean) {
   window.localStorage.setItem("mercy.auth.tenantId", session.tenantId);
   window.localStorage.setItem("mercy.auth.userId", session.userId);
   window.localStorage.setItem("mercy.auth.roles", session.roles.join(","));
-  if (session.accessToken) {
+  if (persistToken && session.accessToken) {
     window.localStorage.setItem("mercy.auth.token", session.accessToken);
   } else {
     window.localStorage.removeItem("mercy.auth.token");
@@ -96,7 +96,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!configured) {
       if (localDevDefaults) {
-        persistMercyContext(LOCAL_DEV_SESSION);
+        persistMercyContext(LOCAL_DEV_SESSION, true);
       }
       setLoading(false);
       return;
@@ -114,7 +114,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (data.session?.user) {
         const nextSession = sessionFromSupabase(data.session.user, data.session.access_token);
         setSession(nextSession);
-        persistMercyContext(nextSession);
+        persistMercyContext(nextSession, false);
       }
       setLoading(false);
     });
@@ -123,7 +123,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!authSession?.user) return;
       const nextSession = sessionFromSupabase(authSession.user, authSession.access_token);
       setSession(nextSession);
-      persistMercyContext(nextSession);
+      persistMercyContext(nextSession, false);
     });
 
     return () => {
