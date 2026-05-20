@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mercy Backend X-Ray System Map</title>
+    <title>Mercy System Map</title>
     <style>
       :root {
         color-scheme: dark;
@@ -62,7 +62,7 @@
 
       .topbar {
         display: grid;
-        grid-template-columns: minmax(260px, 0.9fr) minmax(220px, 380px) minmax(360px, auto) auto;
+        grid-template-columns: minmax(210px, 0.72fr) minmax(220px, 420px) minmax(170px, auto) auto;
         gap: 16px;
         align-items: center;
         padding: 18px 20px 12px;
@@ -106,12 +106,6 @@
         letter-spacing: 0;
       }
 
-      .subtitle {
-        margin-top: 5px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-
       .search-wrap {
         position: relative;
       }
@@ -141,8 +135,7 @@
       }
 
       .control-button,
-      .control-select,
-      .mode-button {
+      .control-select {
         border: 1px solid rgba(128, 136, 130, 0.35);
         border-radius: 8px;
         background: rgba(7, 9, 7, 0.82);
@@ -152,24 +145,40 @@
         box-shadow: inset 0 0 18px rgba(0, 255, 102, 0.04);
       }
 
-      .mode-toggle {
-        display: inline-flex;
-        border: 1px solid rgba(128, 136, 130, 0.3);
-        border-radius: 8px;
-        overflow: hidden;
-        background: rgba(4, 5, 4, 0.8);
+      .reload-button {
+        width: 36px;
+        min-width: 36px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
       }
 
-      .mode-button {
+      .reload-button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .view-toggle {
+        display: inline-flex;
+        border: 1px solid rgba(128, 136, 130, 0.35);
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(4, 5, 4, 0.82);
+      }
+
+      .view-button {
+        min-height: 36px;
         border: 0;
         border-radius: 0;
+        padding: 8px 12px;
+        background: transparent;
         color: var(--muted);
       }
 
-      .mode-button.active {
-        color: #001407;
-        background: var(--green);
-        box-shadow: 0 0 22px rgba(0, 255, 102, 0.34);
+      .view-button.active {
+        background: rgba(0, 255, 102, 0.14);
+        color: var(--green);
+        box-shadow: inset 0 -1px 0 var(--green);
       }
 
       .health-summary {
@@ -371,8 +380,14 @@
 
       .edge.active,
       .edge.connected {
-        stroke: var(--green);
+        stroke: rgba(190, 198, 192, 0.78);
         stroke-width: 0.86;
+        filter: drop-shadow(0 0 7px rgba(190, 198, 192, 0.46));
+      }
+
+      .edge.observed.active,
+      .edge.observed.connected {
+        stroke: var(--green);
         filter: drop-shadow(0 0 8px rgba(0, 255, 102, 0.9));
       }
 
@@ -416,8 +431,16 @@
 
       .node.selected .node-shell,
       .node.connected .node-shell {
-        stroke: var(--green);
+        stroke: rgba(190, 198, 192, 0.78);
         stroke-width: 0.58;
+        filter: drop-shadow(0 0 10px rgba(190, 198, 192, 0.36));
+      }
+
+      .node.observed.selected .node-shell,
+      .node.observed.connected .node-shell,
+      .node.healthy.selected .node-shell,
+      .node.healthy.connected .node-shell {
+        stroke: var(--green);
         filter: drop-shadow(0 0 14px rgba(0, 255, 102, 0.72));
       }
 
@@ -726,25 +749,28 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">M</div>
           <div>
-            <h1>Mercy Backend X-Ray System Map</h1>
-            <p class="subtitle">Declared system topology on port 8000, prepared for safe OpenTelemetry observations.</p>
+            <h1>Mercy System Map</h1>
           </div>
         </div>
         <div class="search-wrap">
           <input id="searchInput" type="search" placeholder="Search nodes, routes, agents, status" aria-label="Search graph" />
         </div>
         <div class="op-controls" aria-label="Map operations">
-          <button class="control-button" id="reloadMap" type="button">Reload map</button>
-          <button class="control-button" id="liveToggle" type="button" aria-pressed="false">Live off</button>
+          <div class="view-toggle" aria-label="Visualization mode">
+            <button class="view-button active" id="mapMode" type="button" aria-pressed="true">Map</button>
+            <button class="view-button" id="lanesMode" type="button" aria-pressed="false">Lanes</button>
+          </div>
+          <button class="control-button reload-button" id="reloadMap" type="button" aria-label="Reload" title="Reload">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+              <path d="M20 4v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
           <select class="control-select" id="timeWindow" aria-label="Time window">
             <option value="5m">Last 5m</option>
             <option value="1h" selected>Last 1h</option>
             <option value="24h">Last 24h</option>
           </select>
-          <div class="mode-toggle" aria-label="View mode">
-            <button class="mode-button active" id="xrayMode" type="button" aria-pressed="true">X-Ray View</button>
-            <button class="mode-button" id="laneMode" type="button" aria-pressed="false">Lane View</button>
-          </div>
         </div>
         <div class="health-summary" id="devops-health-summary" data-testid="devops-health-summary">
           <span class="status-pill">Loading map</span>
@@ -752,9 +778,9 @@
       </header>
 
       <main class="main">
-        <aside class="left-rail" aria-label="X-ray controls">
+        <aside class="left-rail" aria-label="Map controls">
           <section class="rail-section">
-            <div class="rail-title"><span>Layers</span><span>Live</span></div>
+            <div class="rail-title"><span>Layers</span><span>Map</span></div>
             <div class="layer-grid" id="layerToggles"></div>
           </section>
 
@@ -764,13 +790,13 @@
           </section>
         </aside>
 
-        <section class="graph-stage" aria-label="Mercy backend architecture graph">
+        <section class="graph-stage" aria-label="Mercy system graph">
           <div class="graph-toolbar" aria-label="Graph controls">
             <button class="tool-button" id="zoomIn" type="button" title="Zoom in">+</button>
             <button class="tool-button" id="zoomOut" type="button" title="Zoom out">-</button>
             <button class="tool-button" id="resetView" type="button" title="Reset view">Reset</button>
           </div>
-          <svg id="devops-graph" data-testid="devops-graph" role="img" aria-label="Interactive Mercy architecture graph">
+          <svg id="devops-graph" data-testid="devops-graph" role="img" aria-label="Interactive Mercy system graph">
             <defs>
               <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
                 <path d="M 0 0 L 8 4 L 0 8 z" fill="rgba(0, 255, 102, 0.72)"></path>
@@ -793,7 +819,6 @@
               </g>
             </g>
           </svg>
-          <p class="map-caption">Click nodes or edges for the inspector. Toggle lanes to isolate surfaces, backend routes, security, data, knowledge infrastructure, runtime services, and QA. Observed service mapping can be layered in later through safe OpenTelemetry metadata.</p>
         </section>
 
         <aside class="inspector" id="devops-node-inspector" data-testid="devops-node-inspector" aria-live="polite">
@@ -813,10 +838,8 @@
         selectedId: null,
         selectedKind: null,
         search: "",
-        viewMode: "xray",
-        live: false,
+        viewMode: "map",
         timeWindow: "1h",
-        liveTimer: null,
         viewBox: { x: 0, y: 0, width: 100, height: 100 },
         dragging: false,
         dragStart: null,
@@ -832,11 +855,10 @@
       const healthSummary = document.querySelector("#devops-health-summary");
       const reliabilitySignals = document.querySelector("#reliabilitySignals");
       const searchInput = document.querySelector("#searchInput");
+      const mapMode = document.querySelector("#mapMode");
+      const lanesMode = document.querySelector("#lanesMode");
       const reloadMap = document.querySelector("#reloadMap");
-      const liveToggle = document.querySelector("#liveToggle");
       const timeWindow = document.querySelector("#timeWindow");
-      const xrayMode = document.querySelector("#xrayMode");
-      const laneMode = document.querySelector("#laneMode");
       const primaryMapUrl = "/devops/system-map-merged.json";
       const fallbackMapUrl = "/devops/mercy-system-map.json";
       let activeMapUrl = primaryMapUrl;
@@ -867,7 +889,7 @@
         return state.map.edges.find((edge) => edge.from === from && edge.to === to);
       }
 
-      const xrayPositions = {
+      const systemPositions = {
         web_dashboard: [12, 29],
         word_addin: [12, 45],
         outlook_addin: [12, 61],
@@ -909,8 +931,8 @@
       ]);
 
       function nodePoint(node) {
-        if (state.viewMode === "xray" && xrayPositions[node.id]) {
-          const [x, y] = xrayPositions[node.id];
+        if (state.viewMode === "map" && systemPositions[node.id]) {
+          const [x, y] = systemPositions[node.id];
           return { x, y };
         }
         return { x: node.x, y: node.y };
@@ -1062,6 +1084,15 @@
         `).join("");
       }
 
+      function setViewMode(mode) {
+        state.viewMode = mode;
+        mapMode.classList.toggle("active", mode === "map");
+        lanesMode.classList.toggle("active", mode === "lanes");
+        mapMode.setAttribute("aria-pressed", String(mode === "map"));
+        lanesMode.setAttribute("aria-pressed", String(mode === "lanes"));
+        renderGraph();
+      }
+
       function renderGraph() {
         const visibleNodes = new Set(
           state.map.nodes
@@ -1071,8 +1102,8 @@
         );
         const neighborhood = selectedNeighborhood();
 
-        groupLayer.innerHTML = state.viewMode === "lane" ? state.map.groups.map((group) => `
-          <g class="group">
+        groupLayer.innerHTML = state.viewMode === "lanes" ? state.map.groups.map((group) => `
+          <g class="group" data-lane-group="${esc(group.id)}">
             <rect class="group-box" x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="1.4"></rect>
             <text class="group-label" x="${group.x + 1.5}" y="${group.y + 3.2}">${esc(group.label || group.name)}</text>
             <text class="group-desc" x="${group.x + 1.5}" y="${group.y + 5.2}">${esc(group.lane || "").slice(0, 70)}</text>
@@ -1178,9 +1209,11 @@
               <div class="meta"><span>Type</span><strong>${esc(node.type)}</strong></div>
               <div class="meta"><span>Status</span><strong><span class="badge ${statusClass(node.status)}">${esc(node.status)}</span></strong></div>
               <div class="meta"><span>Lane</span><strong>${esc(node.lane)}</strong></div>
+              <div class="meta"><span>Group</span><strong>${esc(node.group)}</strong></div>
               <div class="meta"><span>Connected</span><strong>${esc(connections.length)}</strong></div>
               <div class="meta"><span>Declared</span><strong>${node.declared ? "Yes" : "No"}</strong></div>
               <div class="meta"><span>Observed</span><strong>${node.observed ? "Yes" : "No"}</strong></div>
+              <div class="meta"><span>Last Seen</span><strong>${esc(node.lastSeen || "not observed")}</strong></div>
             </div>
           </div>
           ${listRows("Connected Nodes", connections)}
@@ -1254,28 +1287,6 @@
         });
       }
 
-      function setViewMode(mode) {
-        state.viewMode = mode;
-        xrayMode.classList.toggle("active", mode === "xray");
-        laneMode.classList.toggle("active", mode === "lane");
-        xrayMode.setAttribute("aria-pressed", String(mode === "xray"));
-        laneMode.setAttribute("aria-pressed", String(mode === "lane"));
-        renderGraph();
-      }
-
-      function setLive(enabled) {
-        state.live = enabled;
-        liveToggle.textContent = enabled ? "Live on" : "Live off";
-        liveToggle.setAttribute("aria-pressed", String(enabled));
-        if (state.liveTimer) {
-          window.clearInterval(state.liveTimer);
-          state.liveTimer = null;
-        }
-        if (enabled) {
-          state.liveTimer = window.setInterval(loadMap, 30000);
-        }
-      }
-
       async function loadMap() {
         const response = await fetch(`${primaryMapUrl}?window=${encodeURIComponent(state.timeWindow)}`, { headers: { "Accept": "application/json" } });
         activeMapUrl = primaryMapUrl;
@@ -1345,12 +1356,12 @@
         }
       });
 
-      liveToggle.addEventListener("click", () => setLive(!state.live));
       timeWindow.addEventListener("change", (event) => {
         state.timeWindow = event.target.value;
       });
-      xrayMode.addEventListener("click", () => setViewMode("xray"));
-      laneMode.addEventListener("click", () => setViewMode("lane"));
+
+      mapMode.addEventListener("click", () => setViewMode("map"));
+      lanesMode.addEventListener("click", () => setViewMode("lanes"));
 
       init();
     </script>

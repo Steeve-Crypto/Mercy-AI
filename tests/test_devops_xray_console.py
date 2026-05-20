@@ -13,12 +13,13 @@ try:
     from fastapi.testclient import TestClient
 
     from main import app
-    from otel_observability import record_dependency_observation
+    from otel_observability import classify_request_source, record_dependency_observation
 
     FASTAPI_AVAILABLE = True
 except ModuleNotFoundError:
     TestClient = None
     app = None
+    classify_request_source = None
     record_dependency_observation = None
     FASTAPI_AVAILABLE = False
 
@@ -66,10 +67,20 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertIn("/devops/system-map-merged.json", html)
         self.assertIn("/devops/mercy-system-map.json", html)
         self.assertIn("renderGraph();", html)
-        self.assertIn("X-Ray View", html)
-        self.assertIn("Lane View", html)
-        self.assertIn("Reload map", html)
-        self.assertIn("Live off", html)
+        self.assertIn(">Mercy System Map<", html)
+        self.assertIn(">Map</button>", html)
+        self.assertIn(">Lanes</button>", html)
+        self.assertIn('viewMode: "map"', html)
+        self.assertIn("setViewMode", html)
+        self.assertIn('data-lane-group="${esc(group.id)}"', html)
+        self.assertIn('state.viewMode === "lanes"', html)
+        self.assertIn('state.viewMode === "map"', html)
+        self.assertNotIn("X-Ray View", html)
+        self.assertNotIn("Lane View", html)
+        self.assertNotIn("Live off", html)
+        self.assertNotIn("Live on", html)
+        self.assertNotIn(">Reload map<", html)
+        self.assertIn('class="control-button reload-button"', html)
         self.assertIn("Last 5m", html)
         self.assertIn("tracer-particle", html)
         self.assertIn("animateMotion", html)
@@ -79,6 +90,9 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertIn("selectedNeighborhood", html)
         self.assertNotIn("Trace Replay", html)
         self.assertNotIn("radar", html.lower())
+        self.assertNotIn("Backend X-Ray", html)
+        self.assertNotIn("X-Ray Console", html)
+        self.assertIn('const showTracer = edge.observed && edge.status === "observed";', html)
         self.assertIn("--bg: #000000", html)
         self.assertIn("--green: #00ff66", html)
         self.assertIn("--amber: #ffbf00", html)
@@ -89,6 +103,8 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertIn("stroke: var(--amber)", html)
         self.assertIn(".edge.unknown_observed_dependency", html)
         self.assertIn("stroke: var(--red)", html)
+        self.assertIn(".edge.active", html)
+        self.assertIn("rgba(190, 198, 192, 0.78)", html)
         self.assert_no_known_secret_like_values(html)
 
     def test_console_routes_load_when_dev_tools_enabled(self) -> None:
@@ -101,9 +117,13 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertEqual(root.status_code, 200)
         self.assertEqual(devops.status_code, 200)
         self.assertEqual(admin_devops.status_code, 200)
-        self.assertIn("Mercy Backend X-Ray System Map", root.text)
-        self.assertIn("Mercy Backend X-Ray System Map", devops.text)
-        self.assertIn("Mercy Backend X-Ray System Map", admin_devops.text)
+        self.assertIn("Mercy System Map", root.text)
+        self.assertIn("Mercy System Map", devops.text)
+        self.assertIn("Mercy System Map", admin_devops.text)
+        self.assertIn(">Map</button>", root.text)
+        self.assertIn(">Lanes</button>", root.text)
+        self.assertNotIn("X-Ray View", root.text)
+        self.assertNotIn("Lane View", root.text)
 
     def test_health_route_is_always_simple_json(self) -> None:
         with patch.dict(os.environ, {"MERCY_DEV_TOOLS": "false"}):
@@ -218,12 +238,12 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
     def test_observed_map_uses_safe_otel_dependency_capture(self) -> None:
         with patch.dict(os.environ, {"MERCY_DEV_TOOLS": "true", "MERCY_OTEL_ENABLED": "true"}):
             record_dependency_observation(  # type: ignore[misc]
-                path="/health",
-                method="GET",
+                path="/v1/matters",
+                method="POST",
                 status_code=200,
                 latency_ms=12.5,
                 source_node="web_dashboard",
-                route_family="/health",
+                route_family="/v1/matters/*",
                 trace_id="0123456789abcdef0123456789abcdef",
             )
             observed = self._client().get("/devops/observed-system-map.json").json()
@@ -231,13 +251,54 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
 
         observed_edges = {edge["id"]: edge for edge in observed["edges"]}
         self.assertIn("edge_web_core", observed_edges)
-        self.assertIn("edge_core_health", observed_edges)
-        self.assertTrue(observed_edges["edge_core_health"]["observed"])
-        self.assertGreaterEqual(observed_edges["edge_core_health"]["callCount"], 1)
-        self.assertFalse(observed_edges["edge_core_health"]["allowsRawLegalText"])
+        self.assertIn("edge_matters_store", observed_edges)
+        self.assertTrue(observed_edges["edge_matters_store"]["observed"])
+        self.assertGreaterEqual(observed_edges["edge_matters_store"]["callCount"], 1)
+        self.assertFalse(observed_edges["edge_matters_store"]["allowsRawLegalText"])
         merged_edges = {edge["id"]: edge for edge in merged["edges"]}
-        self.assertTrue(merged_edges["edge_core_health"]["observed"])
-        self.assertEqual(merged_edges["edge_core_health"]["status"], "observed")
+        self.assertTrue(merged_edges["edge_matters_store"]["observed"])
+        self.assertEqual(merged_edges["edge_matters_store"]["status"], "observed")
+        self.assert_no_known_secret_like_values(json.dumps(observed))
+
+    def test_observed_source_classification_is_truthful(self) -> None:
+        self.assertEqual(classify_request_source("/devops/system-map-merged.json", {"user-agent": "Mozilla/5.0"}), "devops_console")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/health", {"user-agent": "PowerShell/7.4"}), "manual_client")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/health", {"user-agent": "curl/8.0"}), "manual_client")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/health", {"user-agent": "Mozilla/5.0"}), "external_client")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/v1/matters", {"origin": "http://127.0.0.1:3100", "user-agent": "Mozilla/5.0"}), "web_dashboard")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/v1/agent", {"x-mercy-surface": "word-addin", "user-agent": "Office Word"}), "word_addin")  # type: ignore[misc]
+        self.assertEqual(classify_request_source("/v1/agent", {"x-mercy-surface": "outlook-addin", "user-agent": "Office Outlook"}), "outlook_addin")  # type: ignore[misc]
+
+    def test_manual_and_devops_observed_edges_are_not_fake_web_traffic(self) -> None:
+        with patch.dict(os.environ, {"MERCY_DEV_TOOLS": "true", "MERCY_OTEL_ENABLED": "true"}):
+            record_dependency_observation(  # type: ignore[misc]
+                path="/health",
+                method="GET",
+                status_code=200,
+                latency_ms=8.0,
+                source_node="manual_client",
+                route_family="/health",
+                trace_id="abcdef0123456789abcdef0123456789",
+            )
+            record_dependency_observation(  # type: ignore[misc]
+                path="/devops/system-map-merged.json",
+                method="GET",
+                status_code=200,
+                latency_ms=6.0,
+                source_node="devops_console",
+                route_family="/devops/*",
+                trace_id="fedcba9876543210fedcba9876543210",
+            )
+            observed = self._client().get("/devops/observed-system-map.json").json()
+
+        edges = {edge["id"]: edge for edge in observed["edges"]}
+        self.assertIn("edge_manual_core", edges)
+        self.assertIn("edge_console_map", edges)
+        self.assertNotEqual(edges["edge_manual_core"]["from"], "web_dashboard")
+        for key in ("callCount", "avgLatencyMs", "errorRate", "lastSeen"):
+            self.assertIn(key, edges["edge_manual_core"])
+            self.assertIsNotNone(edges["edge_manual_core"][key])
+        self.assertEqual(edges["edge_manual_core"]["status"], "unknown_observed_dependency")
         self.assert_no_known_secret_like_values(json.dumps(observed))
 
 

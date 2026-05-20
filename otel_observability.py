@@ -24,6 +24,9 @@ OBSERVED_NODE_LABELS: dict[str, dict[str, str]] = {
     "word_addin": {"label": "Word Add-in", "type": "office_addin", "group": "product_surfaces", "lane": "Product Surfaces", "layer": "surfaces"},
     "outlook_addin": {"label": "Outlook Add-in", "type": "office_addin", "group": "product_surfaces", "lane": "Product Surfaces", "layer": "surfaces"},
     "devops_console": {"label": "Mercy System Map", "type": "surface", "group": "product_surfaces", "lane": "Product Surfaces", "layer": "surfaces"},
+    "manual_client": {"label": "Manual Client", "type": "client", "group": "runtime_services", "lane": "External/Runtime Services", "layer": "runtime"},
+    "external_client": {"label": "External Client", "type": "client", "group": "runtime_services", "lane": "External/Runtime Services", "layer": "runtime"},
+    "unknown_client": {"label": "Unknown Client", "type": "client", "group": "runtime_services", "lane": "External/Runtime Services", "layer": "runtime"},
     "fastapi_core": {"label": "FastAPI Core on port 8000", "type": "backend", "group": "backend_api", "lane": "Backend/API", "layer": "backend"},
     "health_route": {"label": "Health Route", "type": "route", "group": "backend_api", "lane": "Backend/API", "layer": "backend"},
     "matter_routes": {"label": "Matter Routes", "type": "route_family", "group": "backend_api", "lane": "Backend/API", "layer": "backend"},
@@ -50,6 +53,9 @@ EDGE_DEFINITIONS: dict[str, tuple[str, str, str, str]] = {
     "edge_word_core": ("word_addin", "fastapi_core", "Word add-in calls backend", "safe route telemetry"),
     "edge_outlook_core": ("outlook_addin", "fastapi_core", "Outlook add-in calls backend", "safe route telemetry"),
     "edge_console_map": ("devops_console", "fastapi_core", "Loads system map", "system metadata"),
+    "edge_manual_core": ("manual_client", "fastapi_core", "Manual request hits backend", "safe route telemetry"),
+    "edge_external_core": ("external_client", "fastapi_core", "External request hits backend", "safe route telemetry"),
+    "edge_unknown_core": ("unknown_client", "fastapi_core", "Unknown request hits backend", "safe route telemetry"),
     "edge_core_health": ("fastapi_core", "health_route", "Serves health", "service status"),
     "edge_core_auth": ("fastapi_core", "tenant_auth", "Resolves tenant context", "tenant metadata"),
     "edge_core_security": ("fastapi_core", "security_middleware", "Applies request controls", "request metadata"),
@@ -107,20 +113,31 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _source_node_for_request(request: Request) -> str:
-    surface = (request.headers.get("x-mercy-surface") or request.headers.get("x-mercy-client") or "").lower()
-    origin = (request.headers.get("origin") or request.headers.get("referer") or "").lower()
-    user_agent = (request.headers.get("user-agent") or "").lower()
-    path = request.url.path
+def classify_request_source(path: str, headers: dict[str, str] | Any) -> str:
+    surface = (headers.get("x-mercy-surface") or headers.get("x-mercy-client") or "").lower()
+    origin = (headers.get("origin") or headers.get("referer") or "").lower()
+    user_agent = (headers.get("user-agent") or "").lower()
     if "word" in surface or "word" in user_agent:
+        return "word_addin"
+    if "office" in origin and "word" in origin:
         return "word_addin"
     if "outlook" in surface or "outlook" in user_agent:
         return "outlook_addin"
+    if "office" in origin and "outlook" in origin:
+        return "outlook_addin"
     if path.startswith("/devops") or path in {"/", "/admin/devops"}:
         return "devops_console"
-    if "3100" in origin or "mercy-legal-web" in surface or "web" in surface:
+    if "3100" in origin or "mercy-legal-web" in surface or "mercy-legal-web" in origin:
         return "web_dashboard"
-    return "web_dashboard"
+    if any(token in user_agent for token in ("powershell", "curl", "httpie", "python", "node-fetch", "undici")):
+        return "manual_client"
+    if not origin:
+        return "external_client" if "mozilla" in user_agent else "manual_client"
+    return "unknown_client"
+
+
+def _source_node_for_request(request: Request) -> str:
+    return classify_request_source(request.url.path, request.headers)
 
 
 def _route_edges(path: str, source_node: str) -> list[str]:
@@ -131,6 +148,12 @@ def _route_edges(path: str, source_node: str) -> list[str]:
         edges.append("edge_word_core")
     elif source_node == "outlook_addin":
         edges.append("edge_outlook_core")
+    elif source_node == "manual_client":
+        edges.append("edge_manual_core")
+    elif source_node == "external_client":
+        edges.append("edge_external_core")
+    elif source_node == "unknown_client":
+        edges.append("edge_unknown_core")
     else:
         edges.append("edge_web_core")
 
@@ -245,7 +268,8 @@ def observed_system_map(declared_edge_ids: set[str] | None = None) -> dict[str, 
     edges = []
     for obs in observations:
         error_rate = round(obs.error_count / obs.call_count, 4) if obs.call_count else 0
-        status = "failing" if error_rate > 0 else "observed"
+        declared = obs.edge_id in declared_edge_ids
+        status = "failing" if error_rate > 0 else "observed" if declared else "unknown_observed_dependency"
         edges.append(
             {
                 "id": obs.edge_id,
@@ -253,7 +277,7 @@ def observed_system_map(declared_edge_ids: set[str] | None = None) -> dict[str, 
                 "to": obs.to_node,
                 "label": obs.label,
                 "observed": True,
-                "declared": obs.edge_id in declared_edge_ids,
+                "declared": declared,
                 "callCount": obs.call_count,
                 "avgLatencyMs": round(obs.total_latency_ms / obs.call_count, 2) if obs.call_count else None,
                 "errorRate": error_rate,
