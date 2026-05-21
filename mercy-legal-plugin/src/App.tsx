@@ -66,6 +66,9 @@ function authLabel(auth: MercyAuthStatus): string {
   if (auth.source === "sign-in-required") {
     return "sign in required";
   }
+  if (auth.source === "office-naa") {
+    return "enterprise SSO";
+  }
   if (auth.source === "office-pkce") {
     return "Office sign-in";
   }
@@ -126,6 +129,7 @@ export function App() {
   const [matterSearch, setMatterSearch] = useState("");
   const [matterLoading, setMatterLoading] = useState(false);
   const [auth, setAuth] = useState<MercyAuthStatus>(() => initializeAuthHandoff());
+  const [authStage, setAuthStage] = useState<"checking-enterprise" | "signed-in" | "fallback-available" | "auth-failed">("checking-enterprise");
   const [coreStatus, setCoreStatus] = useState<"checking" | "online" | "offline">("checking");
   const [composer, setComposer] = useState("");
   const [detectedSelection, setDetectedSelection] = useState("");
@@ -141,11 +145,20 @@ export function App() {
       const nextAuth = initializeAuthHandoff();
       setAuth(nextAuth);
       if (!nextAuth.hasToken && nextAuth.source === "sign-in-required") {
-        api.setActiveMatter(null);
-        setMatters([]);
-        setCoreStatus("offline");
-        return;
+        setAuthStage("checking-enterprise");
+        try {
+          const enterpriseAuth = await api.beginOfficeNaaSignIn(surface, { allowSignInPrompt: false });
+          setAuth(enterpriseAuth);
+          setAuthStage("signed-in");
+        } catch {
+          setAuthStage("fallback-available");
+          api.setActiveMatter(null);
+          setMatters([]);
+          setCoreStatus("offline");
+          return;
+        }
       }
+      setAuthStage("signed-in");
       setCoreStatus("checking");
       try {
         const loadedMatters = sortRecentFirst(await api.listMatters());
@@ -244,11 +257,13 @@ export function App() {
 
   const runSignIn = async () => {
     setProcessing("authenticating");
+    setAuthStage("checking-enterprise");
     setNotice(null);
     setErrorMessage(null);
     try {
-      const nextAuth = await api.beginOfficePkceSignIn(surface);
+      const nextAuth = await api.beginOfficeHybridSignIn(surface);
       setAuth(nextAuth);
+      setAuthStage("signed-in");
       setNotice("Signed in to Mercy");
       setCoreStatus("checking");
       const loadedMatters = sortRecentFirst(await api.listMatters());
@@ -259,6 +274,7 @@ export function App() {
       api.setActiveMatter(firstMatter);
       setCoreStatus("online");
     } catch (error) {
+      setAuthStage("auth-failed");
       setErrorMessage(error instanceof Error ? error.message : "Mercy sign-in could not be completed.");
     } finally {
       setProcessing("idle");
@@ -404,10 +420,20 @@ export function App() {
       <section className="matterPanel" aria-label="Matter context">
         {signInRequired ? (
           <div className="signinRequired" role="status">
-            <Text weight="semibold">Sign in required</Text>
-            <Text>Use Mercy web sign-in to connect this {surface} task pane. Tenant access is verified by the Mercy core.</Text>
+            <Text weight="semibold">
+              {authStage === "checking-enterprise"
+                ? "Checking enterprise sign-in"
+                : authStage === "auth-failed"
+                  ? "Auth failed"
+                  : "Sign in required"}
+            </Text>
+            <Text>
+              {authStage === "fallback-available"
+                ? "Enterprise SSO is unavailable here. Use the Supabase fallback to connect this task pane."
+                : "Mercy tries Microsoft enterprise SSO first. Tenant access is verified by the Mercy core."}
+            </Text>
             <Button appearance="primary" onClick={runSignIn} disabled={isBusy}>
-              {isBusy ? "Opening sign-in..." : "Sign in"}
+              {isBusy ? "Opening sign-in..." : authStage === "fallback-available" ? "Use fallback sign-in" : "Sign in"}
             </Button>
           </div>
         ) : null}

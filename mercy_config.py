@@ -105,6 +105,13 @@ class MercyConfig(BaseSettings):
     supabase_anon_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "MERCY_SUPABASE_ANON_KEY"))
     supabase_service_role_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_SERVICE_ROLE_KEY", "MERCY_SUPABASE_SERVICE_ROLE_KEY"))
     supabase_jwt_secret: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_JWT_SECRET", "MERCY_SUPABASE_JWT_SECRET"))
+    microsoft_entra_tenant_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_TENANT_ID", "MERCY_MICROSOFT_ENTRA_TENANT_ID"))
+    microsoft_entra_client_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_CLIENT_ID", "MERCY_MICROSOFT_ENTRA_CLIENT_ID"))
+    microsoft_entra_issuer: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_ISSUER", "MERCY_MICROSOFT_ENTRA_ISSUER"))
+    microsoft_entra_jwks_url: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_JWKS_URL", "MERCY_MICROSOFT_ENTRA_JWKS_URL"))
+    office_naa_enabled: bool = Field(default=False, validation_alias=AliasChoices("MERCY_OFFICE_NAA_ENABLED"))
+    office_pkce_fallback_enabled: bool = Field(default=True, validation_alias=AliasChoices("MERCY_OFFICE_PKCE_FALLBACK_ENABLED"))
+    microsoft_identity_map_json: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_MICROSOFT_IDENTITY_MAP_JSON"))
 
     # Stripe billing and price IDs.
     stripe_secret_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("STRIPE_SECRET_KEY", "MERCY_STRIPE_SECRET_KEY"))
@@ -253,6 +260,11 @@ class MercyConfig(BaseSettings):
         if production_like and self.mercy_auth_mode == "supabase":
             if not self.supabase_url or not self.supabase_anon_key or not self.supabase_jwt_secret:
                 issues.append("SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_JWT_SECRET are required for Supabase auth.")
+        if production_like and self.office_naa_enabled:
+            if not self.microsoft_entra_tenant_id or not self.microsoft_entra_client_id or not self.microsoft_entra_issuer or not self.microsoft_entra_jwks_url:
+                issues.append("MICROSOFT_ENTRA_TENANT_ID, MICROSOFT_ENTRA_CLIENT_ID, MICROSOFT_ENTRA_ISSUER, and MICROSOFT_ENTRA_JWKS_URL are required for Office NAA.")
+            if not self.microsoft_identity_map_json:
+                issues.append("MERCY_MICROSOFT_IDENTITY_MAP_JSON is required to map Microsoft identities to Mercy tenants.")
         if not any([self.openai_api_key, self.anthropic_api_key, self.groq_api_key, self.openrouter_api_key, self.gemini_api_key]):
             issues.append("At least one LLM provider key is required.")
         if self.enable_hermes and self.hermes_primary_model.startswith("openrouter/") and not self.openrouter_api_key:

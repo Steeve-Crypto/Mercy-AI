@@ -35,10 +35,21 @@ class OfficeAuthHandoffTests(unittest.TestCase):
         app_source = (PLUGIN / "App.tsx").read_text(encoding="utf-8")
         api_source = (PLUGIN / "services" / "api.ts").read_text(encoding="utf-8")
 
-        self.assertIn("api.beginOfficePkceSignIn(surface)", app_source)
+        self.assertIn("api.beginOfficeHybridSignIn(surface)", app_source)
         self.assertIn('surface: "Word" | "Outlook" | "Office"', api_source)
         self.assertIn("Office.context.ui.displayDialogAsync", api_source)
         self.assertIn("persistOfficeSessionToken(message.access_token)", api_source)
+
+    def test_office_tries_naa_first_and_falls_back_to_pkce(self) -> None:
+        app_source = (PLUGIN / "App.tsx").read_text(encoding="utf-8")
+        api_source = (PLUGIN / "services" / "api.ts").read_text(encoding="utf-8")
+
+        self.assertIn("api.beginOfficeNaaSignIn(surface, { allowSignInPrompt: false })", app_source)
+        self.assertIn("OfficeRuntime", api_source)
+        self.assertIn("exchangeMicrosoftBootstrapToken", api_source)
+        self.assertIn('persistOfficeSessionToken(mercyToken, "office-naa")', api_source)
+        self.assertIn("return beginOfficePkceSignIn(surface)", api_source)
+        self.assertIn("fallback-available", app_source)
 
     def test_office_production_client_does_not_spoof_tenant_user_headers_or_auth_context(self) -> None:
         source = (PLUGIN / "services" / "api.ts").read_text(encoding="utf-8")
@@ -60,4 +71,3 @@ class OfficeAuthHandoffTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

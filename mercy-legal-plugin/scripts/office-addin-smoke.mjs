@@ -12,6 +12,7 @@ const args = new Set(process.argv.slice(2));
 const manifests = ["manifest.xml", "manifest.outlook.xml"];
 const requiredFiles = ["taskpane.html", "src/main.tsx", "src/App.tsx", "src/services/api.ts", "src/services/word.ts"];
 const authRouteFiles = [
+  "../microsoft_auth.py",
   "../mercy-legal-web/src/app/api/auth/office/start/route.ts",
   "../mercy-legal-web/src/app/api/auth/office/callback/route.ts",
 ];
@@ -82,7 +83,7 @@ function printChecklist() {
   section("Manual Word Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.xml in Word.");
   console.log("2. Open the Mercy task pane and confirm the native grey sidebar, purple accents, and Mercy branding.");
-  console.log("3. Confirm auth handoff: Sign in opens the Supabase PKCE Office dialog, then the task pane stores the returned session token.");
+  console.log("3. Confirm auth handoff: Mercy tries Microsoft Office SSO first, then falls back to the Supabase PKCE dialog.");
   console.log("4. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
   console.log("5. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
 

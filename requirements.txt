@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 python-multipart
 langgraph
 langgraph-checkpoint
@@ -9,6 +10,7 @@ litellm>=1.67
 SQLAlchemy>=2.0
 psycopg[binary]>=3.2
 pgvector>=0.3
+PyJWT[crypto]>=2.8
 qdrant-client
 langchain-qdrant
 neo4j

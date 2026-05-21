@@ -27,6 +27,7 @@ const viteEnv = (import.meta as ImportMeta & {
     VITE_MERCY_API_TOKEN?: string;
     VITE_MERCY_CORE_API_URL?: string;
     VITE_MERCY_WEB_AUTH_URL?: string;
+    VITE_MERCY_OFFICE_PKCE_FALLBACK_ENABLED?: string;
     VITE_MERCY_ENV?: string;
     VITE_MERCY_AUTH_MODE?: string;
     VITE_MERCY_TENANT_ID?: string;
@@ -48,7 +49,7 @@ export type MercyAuthStatus = {
   userId: string;
   roles: string;
   hasToken: boolean;
-  source: "office-pkce" | "office-settings" | "url-handoff" | "env" | "local-dev" | "sign-in-required";
+  source: "office-naa" | "office-pkce" | "office-settings" | "url-handoff" | "env" | "local-dev" | "sign-in-required";
 };
 
 type CoreIntakeResponse = {
@@ -747,6 +748,45 @@ type OfficeAuthDialogMessage = {
   error?: string;
 };
 
+type OfficeNaaOptions = {
+  allowSignInPrompt?: boolean;
+  fallbackToPkce?: boolean;
+};
+
+async function getOfficeBootstrapToken(allowSignInPrompt: boolean): Promise<string> {
+  const runtimeAuth = (globalThis as { OfficeRuntime?: { auth?: { getAccessToken?: (options?: Record<string, unknown>) => Promise<string> } } }).OfficeRuntime?.auth;
+  const officeAuth = (globalThis as { Office?: { auth?: { getAccessToken?: (options?: Record<string, unknown>) => Promise<string> } } }).Office?.auth;
+  const getAccessToken = runtimeAuth?.getAccessToken ?? officeAuth?.getAccessToken;
+  if (!getAccessToken) {
+    throw new Error("Microsoft Office SSO is unavailable in this host.");
+  }
+  return getAccessToken({
+    allowSignInPrompt,
+    allowConsentPrompt: allowSignInPrompt,
+    forMSGraphAccess: false
+  });
+}
+
+async function exchangeMicrosoftBootstrapToken(bootstrapToken: string): Promise<string> {
+  const response = await fetch(`${CORE_API_URL}/v1/auth/microsoft/exchange`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ bootstrap_token: bootstrapToken })
+  });
+  const data = (await response.json()) as { access_token?: string; detail?: string };
+  if (!response.ok || !data.access_token) {
+    throw new Error(data.detail || "Microsoft Office SSO exchange failed.");
+  }
+  return data.access_token;
+}
+
+export async function beginOfficeNaaSignIn(_surface: "Word" | "Outlook" | "Office" = "Office", options: OfficeNaaOptions = {}): Promise<MercyAuthStatus> {
+  const bootstrapToken = await getOfficeBootstrapToken(Boolean(options.allowSignInPrompt));
+  const mercyToken = await exchangeMicrosoftBootstrapToken(bootstrapToken);
+  persistOfficeSessionToken(mercyToken, "office-naa");
+  return initializeAuthHandoff();
+}
+
 export async function beginOfficePkceSignIn(surface: "Word" | "Outlook" | "Office" = "Office"): Promise<MercyAuthStatus> {
   const startUrl = `${WEB_AUTH_URL}/api/auth/office/start?surface=${encodeURIComponent(surface.toLowerCase())}`;
   if (typeof Office === "undefined" || !Office.context?.ui?.displayDialogAsync) {
@@ -796,6 +836,17 @@ export async function beginOfficePkceSignIn(surface: "Word" | "Outlook" | "Offic
       },
     );
   });
+}
+
+export async function beginOfficeHybridSignIn(surface: "Word" | "Outlook" | "Office" = "Office"): Promise<MercyAuthStatus> {
+  try {
+    return await beginOfficeNaaSignIn(surface, { allowSignInPrompt: true });
+  } catch (error) {
+    if (viteEnv?.VITE_MERCY_OFFICE_PKCE_FALLBACK_ENABLED === "false") {
+      throw error;
+    }
+    return beginOfficePkceSignIn(surface);
+  }
 }
 
 function scoreFromMetadata(metadata: CoreResponseMetadata): number {
@@ -966,6 +1017,8 @@ export const api = {
   getBetaStatus,
   listMatters,
   initializeAuthHandoff,
+  beginOfficeNaaSignIn,
+  beginOfficeHybridSignIn,
   beginOfficePkceSignIn,
   setActiveMatter,
   syncOfflineAgentQueue,

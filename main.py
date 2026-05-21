@@ -49,6 +49,7 @@ from mercy_context import (
     update_matter_context,
 )
 from mercy_config import get_config
+from microsoft_auth import exchange_microsoft_token_for_mercy_session
 from monitoring import cost_breakdown, monitoring_dashboard, monitoring_metrics
 from observability import configure_langsmith_environment, observability_dashboard, trace_event, trace_span
 from otel_observability import configure_fastapi_otel, observed_system_map, otel_enabled
@@ -317,6 +318,10 @@ class MatterCreateRequest(BaseModel):
     matter_type: str | None = Field(None, description="Optional matter type.")
 
 
+class MicrosoftExchangeRequest(BaseModel):
+    bootstrap_token: str = Field(..., min_length=1, description="Microsoft Office SSO bootstrap token.")
+
+
 class MatterIntakeRequest(BaseModel):
     matter_id: str | None = Field(None, description="Matter identifier to create or update.")
     client_id: str | None = Field(None, description="Client identifier.")
@@ -438,6 +443,11 @@ class BetaFeedbackRequest(BaseModel):
     route_expert: str | None = Field(None, description="Optional MoE expert.")
     guardrail_status: str | None = Field(None, description="Optional guardrail status.")
     template_id: str | None = Field(None, description="Optional gallery template ID.")
+
+
+@app.post("/v1/auth/microsoft/exchange")
+async def microsoft_auth_exchange(request: MicrosoftExchangeRequest) -> dict[str, Any]:
+    return exchange_microsoft_token_for_mercy_session(request.bootstrap_token)
 
 
 def _tenant_context(tenant_user: TenantUser) -> dict[str, Any]:
