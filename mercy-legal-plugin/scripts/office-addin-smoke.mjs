@@ -17,6 +17,7 @@ const authRouteFiles = [
   "../mercy-legal-web/src/app/api/auth/office/callback/route.ts",
 ];
 const taskpaneUrl = process.env.MERCY_ADDIN_TASKPANE_URL || "https://127.0.0.1:3000/taskpane.html";
+const placeholderIds = new Set(["", "00000000-0000-0000-0000-000000000000"]);
 
 function section(title) {
   console.log(`\n${title}`);
@@ -44,11 +45,44 @@ function validateManifest(manifest) {
       process.platform === "win32"
         ? ["cmd.exe", ["/d", "/s", "/c", `npx office-addin-manifest validate ${manifest}`]]
         : ["npx", ["office-addin-manifest", "validate", manifest]];
-    execFileSync(command[0], command[1], { cwd: root, stdio: "pipe" });
+    const output = execFileSync(command[0], command[1], { cwd: root, stdio: "pipe", encoding: "utf8" });
+    if (output.includes("The manifest is not valid.")) {
+      throw new Error(output);
+    }
     console.log(`PASS ${manifest} validates`);
   } catch (error) {
     fail(`${manifest} validation failed\n${String(error.stdout || error.message)}`);
   }
+}
+
+function webApplicationInfo(manifest) {
+  const source = fs.readFileSync(path.join(root, manifest), "utf8");
+  const block = source.match(/<WebApplicationInfo>[\s\S]*?<\/WebApplicationInfo>/)?.[0] || "";
+  return {
+    id: block.match(/<Id>([^<]+)<\/Id>/)?.[1]?.trim() || "",
+    resource: block.match(/<Resource>([^<]+)<\/Resource>/)?.[1]?.trim() || "",
+    scopes: [...block.matchAll(/<Scope>([^<]+)<\/Scope>/g)].map((match) => match[1].trim()),
+  };
+}
+
+function checkWebApplicationInfo(manifest) {
+  const info = webApplicationInfo(manifest);
+  const requiredScopes = ["openid", "profile", "access_as_user"];
+  if (!info.id || !info.resource || requiredScopes.some((scope) => !info.scopes.includes(scope))) {
+    fail(`${manifest} is missing WebApplicationInfo Id, Resource, or required openid/profile/access_as_user scopes.`);
+    return;
+  }
+  const expectedClientId = (process.env.MICROSOFT_ENTRA_CLIENT_ID || "").trim();
+  const expectedResource = (process.env.MICROSOFT_ENTRA_APPLICATION_ID_URI || "").trim();
+  if (!placeholderIds.has(expectedClientId) && info.id !== expectedClientId) {
+    fail(`${manifest} WebApplicationInfo Id ${info.id} does not match MICROSOFT_ENTRA_CLIENT_ID.`);
+    return;
+  }
+  if (expectedResource && !expectedResource.includes("00000000-0000-0000-0000-000000000000") && info.resource !== expectedResource) {
+    fail(`${manifest} WebApplicationInfo Resource ${info.resource} does not match MICROSOFT_ENTRA_APPLICATION_ID_URI.`);
+    return;
+  }
+  console.log(`PASS ${manifest} WebApplicationInfo includes required scopes and matches configured Entra values when provided`);
 }
 
 function checkTaskpane(url) {
@@ -84,8 +118,9 @@ function printChecklist() {
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.xml in Word.");
   console.log("2. Open the Mercy task pane and confirm the native grey sidebar, purple accents, and Mercy branding.");
   console.log("3. Confirm auth handoff: Mercy tries Microsoft Office SSO first, then falls back to the Supabase PKCE dialog.");
-  console.log("4. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
-  console.log("5. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
+  console.log("4. Before enterprise pilots, pre-authorize Office client applications for the Entra access_as_user scope.");
+  console.log("5. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
+  console.log("6. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
 
   section("Manual Outlook Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.outlook.xml in Outlook.");
@@ -108,6 +143,7 @@ for (const file of authRouteFiles) {
 }
 for (const manifest of manifests) {
   validateManifest(manifest);
+  checkWebApplicationInfo(manifest);
 }
 
 if (args.has("--check-server")) {

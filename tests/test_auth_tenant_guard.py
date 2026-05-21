@@ -86,6 +86,11 @@ def _supabase_jwt(
 def _patched_env(*args, **kwargs):
     from mercy_config import get_config
 
+    if len(args) >= 2 and isinstance(args[1], dict):
+        values = args[1]
+        if values.get("MERCY_AUTH_MODE") == "supabase" and "SUPABASE_URL" not in values:
+            values = values | {"SUPABASE_URL": ""}
+            args = (args[0], values, *args[2:])
     with patch.dict(*args, **kwargs):
         get_config.cache_clear()
         try:

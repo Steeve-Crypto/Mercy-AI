@@ -20,6 +20,9 @@ class OfficeAuthHandoffTests(unittest.TestCase):
         self.assertIn("mercy-office-pkce", source)
         self.assertIn("mercy-office-state", source)
         self.assertIn("MERCY_OFFICE_PKCE_PROVIDER", source)
+        self.assertIn("NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER", source)
+        self.assertNotIn('|| "azure"', source)
+        self.assertIn("MERCY_SUPABASE_AZURE_PROVIDER_ENABLED", source)
 
     def test_office_fallback_callback_exchanges_code_and_messages_office_parent(self) -> None:
         source = (WEB / "app" / "api" / "auth" / "office" / "callback" / "route.ts").read_text(encoding="utf-8")

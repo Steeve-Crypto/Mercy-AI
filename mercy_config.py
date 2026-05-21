@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _placeholder_value(value: str) -> bool:
+    normalized = value.strip()
+    return any(marker in normalized for marker in ("USER:PASSWORD@HOST:PORT", "YOUR_TENANT_ID"))
 
 
 class MercyConfig(BaseSettings):
@@ -107,10 +113,13 @@ class MercyConfig(BaseSettings):
     supabase_jwt_secret: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_JWT_SECRET", "MERCY_SUPABASE_JWT_SECRET"))
     microsoft_entra_tenant_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_TENANT_ID", "MERCY_MICROSOFT_ENTRA_TENANT_ID"))
     microsoft_entra_client_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_CLIENT_ID", "MERCY_MICROSOFT_ENTRA_CLIENT_ID"))
+    microsoft_entra_application_id_uri: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_APPLICATION_ID_URI", "MERCY_MICROSOFT_ENTRA_APPLICATION_ID_URI"))
     microsoft_entra_issuer: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_ISSUER", "MERCY_MICROSOFT_ENTRA_ISSUER"))
     microsoft_entra_jwks_url: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_JWKS_URL", "MERCY_MICROSOFT_ENTRA_JWKS_URL"))
     office_naa_enabled: bool = Field(default=False, validation_alias=AliasChoices("MERCY_OFFICE_NAA_ENABLED"))
     office_pkce_fallback_enabled: bool = Field(default=True, validation_alias=AliasChoices("MERCY_OFFICE_PKCE_FALLBACK_ENABLED"))
+    office_pkce_provider: str | None = Field(default=None, validation_alias=AliasChoices("MERCY_OFFICE_PKCE_PROVIDER", "NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER"))
+    supabase_azure_provider_enabled: bool = Field(default=False, validation_alias=AliasChoices("MERCY_SUPABASE_AZURE_PROVIDER_ENABLED"))
     microsoft_identity_map_json: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_MICROSOFT_IDENTITY_MAP_JSON"))
 
     # Stripe billing and price IDs.
@@ -177,10 +186,13 @@ class MercyConfig(BaseSettings):
         supabase_database_url = None
         if self.supabase_url and self.supabase_url.startswith(("postgres://", "postgresql://")):
             supabase_database_url = self.supabase_url
+        supabase_db_url = self.supabase_db_url
+        if self.is_local and not (os.environ.get("SUPABASE_DB_URL") or os.environ.get("MERCY_SUPABASE_DB_URL")):
+            supabase_db_url = None
         return first_secret(
             self.postgres_url,
             self.database_url_override,
-            self.supabase_db_url,
+            supabase_db_url,
             self.pgvector_dsn,
         ) or supabase_database_url
 
@@ -263,8 +275,16 @@ class MercyConfig(BaseSettings):
         if production_like and self.office_naa_enabled:
             if not self.microsoft_entra_tenant_id or not self.microsoft_entra_client_id or not self.microsoft_entra_issuer or not self.microsoft_entra_jwks_url:
                 issues.append("MICROSOFT_ENTRA_TENANT_ID, MICROSOFT_ENTRA_CLIENT_ID, MICROSOFT_ENTRA_ISSUER, and MICROSOFT_ENTRA_JWKS_URL are required for Office NAA.")
+            if not self.microsoft_entra_application_id_uri:
+                issues.append("MICROSOFT_ENTRA_APPLICATION_ID_URI is required so Office manifest WebApplicationInfo can be validated.")
             if not self.microsoft_identity_map_json:
                 issues.append("MERCY_MICROSOFT_IDENTITY_MAP_JSON is required to map Microsoft identities to Mercy tenants.")
+        if production_like and self.office_pkce_fallback_enabled:
+            office_provider = (self.office_pkce_provider or "").strip().lower()
+            if not office_provider:
+                issues.append("MERCY_OFFICE_PKCE_PROVIDER must name the Supabase OAuth provider used by the Office PKCE fallback.")
+            if office_provider == "azure" and not self.supabase_azure_provider_enabled:
+                issues.append("MERCY_SUPABASE_AZURE_PROVIDER_ENABLED=true is required when MERCY_OFFICE_PKCE_PROVIDER=azure; Office NAA does not require Azure in Supabase.")
         if not any([self.openai_api_key, self.anthropic_api_key, self.groq_api_key, self.openrouter_api_key, self.gemini_api_key]):
             issues.append("At least one LLM provider key is required.")
         if self.enable_hermes and self.hermes_primary_model.startswith("openrouter/") and not self.openrouter_api_key:
@@ -293,9 +313,9 @@ def first_secret(*values: SecretStr | str | None) -> str | None:
     for value in values:
         if isinstance(value, SecretStr):
             secret = value.get_secret_value()
-            if secret:
+            if secret and not _placeholder_value(secret):
                 return secret
-        elif value:
+        elif value and not _placeholder_value(value):
             return value
     return None
 

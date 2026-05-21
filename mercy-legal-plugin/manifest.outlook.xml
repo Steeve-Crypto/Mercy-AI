@@ -187,5 +187,14 @@
         <bt:String id="ML.MailDraft.Tip" DefaultValue="Draft attorney-review language from the active Outlook draft context." />
       </bt:LongStrings>
     </Resources>
+    <WebApplicationInfo>
+    <Id>e8456ac3-6d14-4f17-a0e8-a5227e74dbf5</Id>
+    <Resource>api://e8456ac3-6d14-4f17-a0e8-a5227e74dbf5</Resource>
+    <Scopes>
+      <Scope>openid</Scope>
+      <Scope>profile</Scope>
+      <Scope>access_as_user</Scope>
+    </Scopes>
+  </WebApplicationInfo>
   </VersionOverrides>
 </OfficeApp>

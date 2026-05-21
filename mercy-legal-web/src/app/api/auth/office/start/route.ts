@@ -21,7 +21,18 @@ function callbackUrl(request: NextRequest) {
 }
 
 function officeAuthProvider() {
-  return process.env.MERCY_OFFICE_PKCE_PROVIDER || process.env.NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER || "azure";
+  return (process.env.MERCY_OFFICE_PKCE_PROVIDER || process.env.NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER || "").trim();
+}
+
+function validateOfficePkceProvider() {
+  const provider = officeAuthProvider();
+  if (!provider) {
+    return "Supabase Office PKCE provider is not configured. Set MERCY_OFFICE_PKCE_PROVIDER to the Supabase OAuth provider enabled for the fallback flow.";
+  }
+  if (provider.toLowerCase() === "azure" && process.env.MERCY_SUPABASE_AZURE_PROVIDER_ENABLED !== "true") {
+    return "Supabase Azure OAuth fallback is not confirmed. Set MERCY_SUPABASE_AZURE_PROVIDER_ENABLED=true only after Azure is enabled in Supabase Auth, or use the configured fallback provider.";
+  }
+  return null;
 }
 
 function cookieOptions(request: NextRequest) {
@@ -37,6 +48,10 @@ function cookieOptions(request: NextRequest) {
 export function GET(request: NextRequest) {
   if (!supabaseConfigured()) {
     return NextResponse.json({ detail: "Supabase Office auth is not configured." }, { status: 503 });
+  }
+  const providerError = validateOfficePkceProvider();
+  if (providerError) {
+    return NextResponse.json({ detail: providerError }, { status: 503 });
   }
 
   const verifier = base64Url(crypto.randomBytes(32));
