@@ -780,7 +780,8 @@ async function exchangeMicrosoftBootstrapToken(bootstrapToken: string): Promise<
   return data.access_token;
 }
 
-export async function beginOfficeNaaSignIn(_surface: "Word" | "Outlook" | "Office" = "Office", options: OfficeNaaOptions = {}): Promise<MercyAuthStatus> {
+export async function beginOfficeNaaSignIn(surface: "Word" | "Outlook" | "Office" = "Office", options: OfficeNaaOptions = {}): Promise<MercyAuthStatus> {
+  void surface;
   const bootstrapToken = await getOfficeBootstrapToken(Boolean(options.allowSignInPrompt));
   const mercyToken = await exchangeMicrosoftBootstrapToken(bootstrapToken);
   persistOfficeSessionToken(mercyToken, "office-naa");

@@ -511,6 +511,36 @@ export type CoreMonitoringMetrics = {
   [key: string]: unknown;
 };
 
+export type CoreMicrosoftIdentityMapping = {
+  id: string;
+  microsoft_tenant_id: string;
+  microsoft_object_id: string;
+  email?: string | null;
+  email_domain?: string | null;
+  mercy_user_id: string;
+  tenant_id: string;
+  firm_id?: string | null;
+  account_type: "firm" | "solo" | string;
+  attorney_seat_limit: number;
+  effective_scope_type: "firm" | "solo" | string;
+  effective_scope_id: string;
+  roles: string[];
+  status: "active" | "disabled" | "pending" | string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_login_at?: string | null;
+};
+
+export type CoreMicrosoftIdentityMappingsEnvelope = {
+  version: string;
+  mappings: CoreMicrosoftIdentityMapping[];
+};
+
+export type CoreMicrosoftIdentityMappingEnvelope = {
+  version: string;
+  mapping: CoreMicrosoftIdentityMapping;
+};
+
 export type CoreUserProfile = {
   user_id: string;
   tenant_id: string;
@@ -736,6 +766,53 @@ export async function getBetaAnalytics(auth?: CoreAuthContext): Promise<CoreClie
 
 export async function getMonitoringMetrics(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMonitoringMetrics>> {
   return coreFetch<CoreMonitoringMetrics>("/v1/monitoring/metrics", undefined, auth);
+}
+
+export async function listMicrosoftIdentityMappings(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMicrosoftIdentityMappingsEnvelope>> {
+  return coreFetch<CoreMicrosoftIdentityMappingsEnvelope>("/v1/admin/microsoft-identity-mappings", undefined, auth);
+}
+
+export async function upsertMicrosoftIdentityMapping(payload: {
+  microsoft_tenant_id: string;
+  microsoft_object_id: string;
+  email?: string;
+  mercy_user_id: string;
+  tenant_id: string;
+  firm_id?: string;
+  roles: string[];
+  status: "active" | "disabled" | "pending";
+  attorney_seat_limit?: number;
+}, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMicrosoftIdentityMappingEnvelope>> {
+  return coreFetch<CoreMicrosoftIdentityMappingEnvelope>(
+    "/v1/admin/microsoft-identity-mappings",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
+}
+
+export async function updateMicrosoftIdentityMappingStatus(
+  microsoftTenantId: string,
+  microsoftObjectId: string,
+  status: "active" | "disabled" | "pending",
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<CoreMicrosoftIdentityMappingEnvelope>> {
+  return coreFetch<CoreMicrosoftIdentityMappingEnvelope>(
+    `/v1/admin/microsoft-identity-mappings/${encodeURIComponent(microsoftTenantId)}/${encodeURIComponent(microsoftObjectId)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status }),
+    },
+    auth,
+  );
 }
 
 export async function getUserProfile(auth?: CoreAuthContext): Promise<CoreClientResult<CoreUserProfile>> {

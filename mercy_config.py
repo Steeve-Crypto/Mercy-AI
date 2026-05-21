@@ -49,6 +49,8 @@ class MercyConfig(BaseSettings):
         validation_alias=AliasChoices("MERCY_AUTH_MODE"),
     )
     mercy_require_https: bool = Field(default=False, validation_alias=AliasChoices("MERCY_REQUIRE_HTTPS"))
+    mercy_dev_tools: bool = Field(default=False, validation_alias=AliasChoices("MERCY_DEV_TOOLS"))
+    auto_init_storage_schema: bool = Field(default=False, validation_alias=AliasChoices("MERCY_AUTO_INIT_STORAGE_SCHEMA"))
     api_token: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_API_TOKEN"))
     core_api_token: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_CORE_API_TOKEN"))
     allowed_origins: str = Field(
@@ -262,6 +264,10 @@ class MercyConfig(BaseSettings):
             issues.append("MERCY_AUTH_MODE=dev is not production safe.")
         if production_like and self.mercy_auth_mode == "test":
             issues.append("MERCY_AUTH_MODE=test is only for CI/CD and verification environments.")
+        if production_like and self.mercy_auth_mode in {"dev", "test", "token"}:
+            issues.append("MERCY_AUTH_MODE must not be dev, test, or token in production.")
+        if production_like and self.mercy_dev_tools:
+            issues.append("MERCY_DEV_TOOLS must be false in production.")
         if production_like and not self.mercy_require_https:
             issues.append("MERCY_REQUIRE_HTTPS=true is required for production.")
         if production_like and not self.database_url:

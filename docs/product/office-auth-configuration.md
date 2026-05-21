@@ -8,6 +8,9 @@ Required live values:
 
 - `MERCY_OFFICE_NAA_ENABLED=true`
 - `POSTGRES_URL` or `SUPABASE_DB_URL`
+- `MERCY_AUTH_MODE=supabase`
+- `MERCY_DEV_TOOLS=false`
+- `MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON=false`
 - `MICROSOFT_ENTRA_TENANT_ID`
 - `MICROSOFT_ENTRA_CLIENT_ID`
 - `MICROSOFT_ENTRA_APPLICATION_ID_URI`
@@ -46,9 +49,16 @@ The Office pane receives only the returned Supabase access token from the dialog
 
 ## Durable Identity Mapping
 
-Office NAA provisioning is manual for beta. Microsoft tokens never create Mercy users, firms, tenants, or domain-based mappings automatically. Unknown Microsoft identities fail closed. Auto-provisioning is disabled during beta so a verified Mercy operator confirms the user, firm or solo tenant boundary, and role set before any Office token can access legal workflows.
+Office NAA provisioning is manual for beta. Microsoft tokens never create Mercy users, firms, tenants, or domain-based mappings automatically. Unknown Microsoft identities fail closed. Auto-provisioning is disabled during beta so a verified Mercy admin confirms the user, universal tenant boundary, firm boundary when applicable, seat limit, and role set before any Office token can access legal workflows.
 
 Production uses the PostgreSQL/Supabase Postgres table `microsoft_identity_mappings` as the durable source of truth. `MERCY_MICROSOFT_IDENTITY_MAP_JSON` is not a production source. It is only available for local/dev/test when `MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON=true`.
+
+Run the controlled migration before production use:
+
+```powershell
+py -3 scripts\microsoft_identity_db.py apply
+py -3 scripts\microsoft_identity_db.py check
+```
 
 Required Microsoft claims:
 
@@ -61,11 +71,17 @@ The durable mapping records the Microsoft tenant ID and Microsoft object ID as t
 Required Mercy fields:
 
 - `mercy_user_id`
-- `firm_id` for firm accounts, or `tenant_id` for solo attorneys
+- `tenant_id` for every customer account
+- `firm_id` for firm accounts; solo attorney accounts leave `firm_id` empty
 - `roles`
 - `status`: `active`, `pending`, or `disabled`
+- `attorney_seat_limit`: solo defaults to 1; firm accounts require at least 2
 
-`firm_id` takes priority when both `firm_id` and `tenant_id` are present. The backend derives `effective_scope_type` and `effective_scope_id`; clients and provisioning operators must not supply those values directly.
+`tenant_id` is the universal workspace/account boundary for both solo and firm customers. Firm accounts also carry `firm_id`; the current Office authorization token still uses `firm_id` as the effective scope for firm-specific authorization behavior. The backend derives `effective_scope_type` and `effective_scope_id`; clients and provisioning operators must not supply those values directly.
+
+### Manual Admin UI Provisioning
+
+In the Mercy Legal Web admin console, open `/admin/provisioning`. Admins can create firm and solo mappings, list status, update roles by resaving a mapping, set tenant and firm IDs, set firm seat limits, and disable users. The backend API is the security boundary and requires an `admin` or `superadmin` role.
 
 ### Manual Firm User Provisioning
 
@@ -75,7 +91,9 @@ py -3 scripts\provision_microsoft_identity.py create `
   --microsoft-object-id "ENTRA_OBJECT_ID" `
   --email "attorney@example.com" `
   --mercy-user-id "MERCY_USER_ID" `
+  --tenant-id "TENANT_ID" `
   --firm-id "FIRM_ID" `
+  --attorney-seat-limit 2 `
   --roles "attorney,firm_admin" `
   --status active
 ```
@@ -102,6 +120,10 @@ py -3 scripts\provision_microsoft_identity.py disable `
 ```
 
 Disabled and pending mappings fail closed at `/v1/auth/microsoft/exchange`.
+
+### Validate Live Office Auth
+
+After provisioning, run the Office manifest/static checks, sideload the add-in, sign in with the provisioned Microsoft account, and confirm `/v1/auth/microsoft/exchange` returns a Mercy session. Unknown, pending, and disabled accounts should receive a sign-in failure and no backend token.
 
 ### Office NAA and PKCE Relationship
 

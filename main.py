@@ -56,6 +56,11 @@ from otel_observability import configure_fastapi_otel, observed_system_map, otel
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
 from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
+from mercy_storage import (
+    list_microsoft_identity_mappings,
+    set_microsoft_identity_mapping_status,
+    upsert_microsoft_identity_mapping,
+)
 from system_prompts import CLERK_OS_VERSION, DC_CLERK_OPERATING_SYSTEM
 from template_gallery import list_template_gallery, trace_template_usage
 
@@ -322,6 +327,22 @@ class MicrosoftExchangeRequest(BaseModel):
     bootstrap_token: str = Field(..., min_length=1, description="Microsoft Office SSO bootstrap token.")
 
 
+class MicrosoftIdentityProvisionRequest(BaseModel):
+    microsoft_tenant_id: str = Field(..., min_length=1, description="Microsoft Entra tenant ID claim.")
+    microsoft_object_id: str = Field(..., min_length=1, description="Microsoft Entra object ID claim.")
+    email: str | None = Field(None, description="Verified Microsoft email/preferred_username for admin review.")
+    mercy_user_id: str = Field(..., min_length=1, description="Mercy user ID to bind.")
+    tenant_id: str = Field(..., min_length=1, description="Universal Mercy tenant/workspace account ID.")
+    firm_id: str | None = Field(None, description="Firm ID for firm accounts. Omit for solo accounts.")
+    roles: list[str] = Field(default_factory=lambda: ["attorney"], description="Mercy roles for the user.")
+    status: str = Field("pending", description="active, disabled, or pending.")
+    attorney_seat_limit: int | None = Field(None, description="Firm accounts require at least 2 seats; solo defaults to 1.")
+
+
+class MicrosoftIdentityStatusRequest(BaseModel):
+    status: str = Field(..., description="active, disabled, or pending.")
+
+
 class MatterIntakeRequest(BaseModel):
     matter_id: str | None = Field(None, description="Matter identifier to create or update.")
     client_id: str | None = Field(None, description="Client identifier.")
@@ -450,6 +471,78 @@ async def microsoft_auth_exchange(request: MicrosoftExchangeRequest) -> dict[str
     return exchange_microsoft_token_for_mercy_session(request.bootstrap_token)
 
 
+@app.get("/v1/admin/microsoft-identity-mappings")
+async def admin_list_microsoft_identity_mappings(
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_provisioning_admin(tenant_user)
+    mappings = list_microsoft_identity_mappings()
+    record_security_audit(
+        "microsoft_identity_mappings_listed",
+        tenant_context=_tenant_context(tenant_user),
+        category="admin_provisioning",
+        metadata={"count": len(mappings)},
+    )
+    return {"version": "mercy-microsoft-identity-admin-1.0", "mappings": mappings}
+
+
+@app.post("/v1/admin/microsoft-identity-mappings")
+async def admin_create_microsoft_identity_mapping(
+    request: MicrosoftIdentityProvisionRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_provisioning_admin(tenant_user)
+    try:
+        mapping = upsert_microsoft_identity_mapping(
+            microsoft_tenant_id=request.microsoft_tenant_id,
+            microsoft_object_id=request.microsoft_object_id,
+            email=request.email,
+            mercy_user_id=request.mercy_user_id,
+            firm_id=request.firm_id,
+            tenant_id=request.tenant_id,
+            roles=request.roles,
+            status=request.status,
+            attorney_seat_limit=request.attorney_seat_limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record_security_audit(
+        "microsoft_identity_mapping_upserted",
+        tenant_context=_tenant_context(tenant_user),
+        category="admin_provisioning",
+        metadata={
+            "mapping_id": mapping.get("id"),
+            "target_tenant_id": mapping.get("tenant_id"),
+            "account_type": mapping.get("account_type"),
+            "status": mapping.get("status"),
+        },
+    )
+    return {"version": "mercy-microsoft-identity-admin-1.0", "mapping": mapping}
+
+
+@app.patch("/v1/admin/microsoft-identity-mappings/{microsoft_tenant_id}/{microsoft_object_id}/status")
+async def admin_update_microsoft_identity_mapping_status(
+    microsoft_tenant_id: str,
+    microsoft_object_id: str,
+    request: MicrosoftIdentityStatusRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    _require_provisioning_admin(tenant_user)
+    try:
+        mapping = set_microsoft_identity_mapping_status(microsoft_tenant_id, microsoft_object_id, request.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    record_security_audit(
+        "microsoft_identity_mapping_status_updated",
+        tenant_context=_tenant_context(tenant_user),
+        category="admin_provisioning",
+        metadata={"mapping_id": mapping.get("id"), "status": mapping.get("status")},
+    )
+    return {"version": "mercy-microsoft-identity-admin-1.0", "mapping": mapping}
+
+
 def _tenant_context(tenant_user: TenantUser) -> dict[str, Any]:
     return tenant_user.to_context()
 
@@ -468,6 +561,14 @@ def _require_monitoring_admin(tenant_user: TenantUser) -> None:
     if "admin" in tenant_user.roles or "ops" in tenant_user.roles:
         return
     raise HTTPException(status_code=403, detail="Monitoring endpoints require an admin or ops role.")
+
+
+def _require_provisioning_admin(tenant_user: TenantUser) -> None:
+    if tenant_user.auth_mode == "local_dev":
+        return
+    if any(role in {"admin", "superadmin"} for role in tenant_user.roles):
+        return
+    raise HTTPException(status_code=403, detail="Microsoft identity provisioning requires an admin or superadmin role.")
 
 
 def _matter_context(matter_id: str | None, tenant_user: TenantUser) -> dict[str, Any]:

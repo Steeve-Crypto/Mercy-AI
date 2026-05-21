@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, Gauge, HeartPulse, Shield, UsersRound } from "lucide-react";
+import { Activity, BarChart3, Gauge, HeartPulse, Shield, UserCog, UsersRound } from "lucide-react";
 import { useMercySession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const adminItems = [
   { href: "/admin/monitoring", label: "Monitoring", icon: Gauge },
   { href: "/admin/beta-users", label: "Beta Users", icon: UsersRound },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/provisioning", label: "Provisioning", icon: UserCog },
   { href: "/admin/security", label: "Security", icon: Shield },
   { href: "/admin/system-health", label: "System Health", icon: HeartPulse },
 ] as const;

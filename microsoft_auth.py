@@ -76,7 +76,7 @@ def _safe_mapping(record: dict[str, Any], identity: MicrosoftIdentity) -> MercyI
         )
     except ValueError as exc:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
-    if scope_type == "solo" and not raw_tenant_id:
+    if not raw_tenant_id:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
     user_id = str(record.get("user_id") or f"ms:{identity.tid}:{identity.oid}").strip()
     return MercyIdentityMapping(user_id=user_id, tenant_id=scope_id, firm_id=firm_id, roles=_roles(record.get("roles")), status="active")
@@ -97,6 +97,8 @@ def _safe_db_mapping(record: dict[str, Any]) -> MercyIdentityMapping:
         )
     except ValueError as exc:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.") from exc
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
     if scope_type == "firm" and not firm_id:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
     if scope_type == "solo" and not tenant_id:

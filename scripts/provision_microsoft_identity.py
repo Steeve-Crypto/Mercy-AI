@@ -25,6 +25,7 @@ def _print_json(payload: Any) -> None:
 def _add_scope_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--firm-id", default=None, help="Mercy firm boundary for firm users. Takes priority over tenant-id.")
     parser.add_argument("--tenant-id", default=None, help="Mercy solo tenant boundary. Required for solo users.")
+    parser.add_argument("--attorney-seat-limit", type=int, default=None, help="Attorney seat limit. Firm mappings require at least 2; solo defaults to 1.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
                 tenant_id=args.tenant_id,
                 roles=args.roles,
                 status=args.status,
+                attorney_seat_limit=args.attorney_seat_limit,
             )
             _print_json(mapping)
             return 0

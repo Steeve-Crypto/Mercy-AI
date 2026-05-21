@@ -89,7 +89,17 @@ def main() -> int:
     results.append(
         _run(
             "Backend py_compile",
-            [str(python), "-m", "py_compile", *CORE_FILES, "scripts/verify.py", "scripts/core_smoke.py", "scripts/ragas_quick_check.py"],
+            [
+                str(python),
+                "-m",
+                "py_compile",
+                *CORE_FILES,
+                "scripts/verify.py",
+                "scripts/core_smoke.py",
+                "scripts/ragas_quick_check.py",
+                "scripts/microsoft_identity_db.py",
+                "scripts/provision_microsoft_identity.py",
+            ],
         )
     )
     results.append(_run("Backend pyright", [str(python), "-m", "pyright"]))
@@ -112,6 +122,7 @@ def main() -> int:
     results.append(_run("Office add-in lint", f"{npm_command} run lint", cwd=ROOT / "mercy-legal-plugin"))
     results.append(_run("Office add-in build", f"{npm_command} run build", cwd=ROOT / "mercy-legal-plugin"))
     results.append(_run("Office manifest validation", f"{npm_command} run validate:manifest", cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Office static smoke", f"{npm_command} run smoke:office", cwd=ROOT / "mercy-legal-plugin"))
     return _summary(results)
 
 

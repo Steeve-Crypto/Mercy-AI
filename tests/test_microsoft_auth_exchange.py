@@ -34,7 +34,7 @@ SUPABASE_URL = "https://mercy-test.supabase.co"
 
 
 def _mapping(*, firm: bool = True) -> str:
-    scope = {"firm_id": "firm-alpha"} if firm else {"tenant_id": "solo-alpha"}
+    scope = {"tenant_id": "tenant-alpha", "firm_id": "firm-alpha"} if firm else {"tenant_id": "solo-alpha"}
     return json.dumps(
         {
             "users": [
@@ -112,9 +112,10 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
         self,
         *,
         firm_id: str | None = "firm-alpha",
-        tenant_id: str | None = None,
+        tenant_id: str | None = "tenant-alpha",
         status: str = "active",
         roles: str | list[str] = "attorney,firm_admin",
+        attorney_seat_limit: int | None = None,
     ) -> None:
         upsert_microsoft_identity_mapping(
             microsoft_tenant_id=TENANT_ID,
@@ -125,6 +126,7 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
             tenant_id=tenant_id,
             roles=roles,
             status=status,
+            attorney_seat_limit=attorney_seat_limit,
         )
 
     def test_exchange_accepts_valid_mocked_microsoft_token_and_returns_backend_token(self) -> None:
@@ -184,7 +186,7 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
     def test_firm_scope_takes_priority_when_firm_and_tenant_exist(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with _patched_env(self._db_env(temp_dir)), _patched_jwks():
-                self._provision(firm_id="firm-alpha", tenant_id="solo-ignored")
+                self._provision(firm_id="firm-alpha", tenant_id="tenant-alpha")
                 exchange = exchange_microsoft_token_for_mercy_session(_token())
                 tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
                 stored = get_microsoft_identity_mapping(TENANT_ID, "user-oid")
@@ -204,11 +206,26 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
                 self.assertEqual(raised.exception.status_code, 403)
                 self.assertEqual(raised.exception.detail, "Microsoft identity mapping is not active.")
 
-    def test_missing_scope_fails_closed_at_provisioning(self) -> None:
+    def test_missing_tenant_fails_closed_at_provisioning(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with _patched_env(self._db_env(temp_dir)), _patched_jwks():
                 with self.assertRaises(ValueError):
                     self._provision(firm_id=None, tenant_id=None)
+
+    def test_firm_mapping_requires_tenant_firm_and_two_attorney_seats(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                with self.assertRaises(ValueError):
+                    self._provision(firm_id="firm-alpha", tenant_id=None, attorney_seat_limit=2)
+                with self.assertRaises(ValueError):
+                    self._provision(firm_id="firm-alpha", tenant_id="tenant-alpha", attorney_seat_limit=1)
+                self._provision(firm_id="firm-alpha", tenant_id="tenant-alpha", attorney_seat_limit=2)
+                stored = get_microsoft_identity_mapping(TENANT_ID, "user-oid")
+
+        self.assertEqual(stored["tenant_id"], "tenant-alpha")
+        self.assertEqual(stored["firm_id"], "firm-alpha")
+        self.assertEqual(stored["attorney_seat_limit"], 2)
+        self.assertEqual(stored["effective_scope_id"], "firm-alpha")
 
     def test_exchange_fails_closed_when_naa_disabled_or_misconfigured(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

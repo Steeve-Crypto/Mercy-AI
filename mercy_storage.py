@@ -9,13 +9,13 @@ from observability import trace_event, trace_span
 from mercy_config import get_config
 
 try:
-    from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, create_engine, text
+    from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, create_engine, text
     from sqlalchemy.engine import Engine
     from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
     SQLALCHEMY_AVAILABLE = True
 except ModuleNotFoundError:
-    JSON = Boolean = DateTime = Index = String = Text = create_engine = text = None  # type: ignore[assignment]
+    JSON = Boolean = CheckConstraint = DateTime = Index = Integer = String = Text = create_engine = text = None  # type: ignore[assignment]
     Engine = Session = Any  # type: ignore[misc,assignment]
     DeclarativeBase = object  # type: ignore[assignment]
     Mapped = Any  # type: ignore[assignment]
@@ -189,6 +189,19 @@ if SQLALCHEMY_AVAILABLE:
 
     class MicrosoftIdentityMappingRecord(Base):
         __tablename__ = "microsoft_identity_mappings"
+        __table_args__ = (
+            CheckConstraint("status IN ('active', 'disabled', 'pending')", name="ck_microsoft_identity_status"),
+            CheckConstraint("account_type IN ('firm', 'solo')", name="ck_microsoft_identity_account_type"),
+            CheckConstraint("tenant_id IS NOT NULL AND length(tenant_id) > 0", name="ck_microsoft_identity_tenant_required"),
+            CheckConstraint(
+                "(account_type = 'solo' AND firm_id IS NULL) OR (account_type = 'firm' AND firm_id IS NOT NULL AND length(firm_id) > 0)",
+                name="ck_microsoft_identity_firm_scope",
+            ),
+            CheckConstraint(
+                "(account_type = 'solo' AND attorney_seat_limit >= 1) OR (account_type = 'firm' AND attorney_seat_limit >= 2)",
+                name="ck_microsoft_identity_seat_limit",
+            ),
+        )
 
         id: Mapped[str] = mapped_column(String(128), primary_key=True)
         microsoft_tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
@@ -197,7 +210,9 @@ if SQLALCHEMY_AVAILABLE:
         email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
         mercy_user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
         firm_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-        tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        account_type: Mapped[str] = mapped_column(String(32), nullable=False, default="solo", index=True)
+        attorney_seat_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
         effective_scope_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
         effective_scope_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
         roles: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
@@ -271,7 +286,13 @@ def init_storage() -> dict[str, Any]:
         if engine.dialect.name.startswith("postgres"):
             with engine.begin() as connection:
                 connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        Base.metadata.create_all(engine)
+        if get_config().is_local or engine.dialect.name == "sqlite" or get_config().auto_init_storage_schema:
+            Base.metadata.create_all(engine)
+        else:
+            raise RuntimeError(
+                "Persistent storage schema is not auto-created in production. "
+                "Run: py -3 scripts\\microsoft_identity_db.py apply"
+            )
         _INITIALIZED = True
         span["metadata"] = {**storage_status(), "initialized": True}
     return storage_status()
@@ -405,11 +426,11 @@ def _normalized_roles(value: list[str] | tuple[str, ...] | str | None) -> list[s
 def derive_microsoft_identity_scope(*, firm_id: str | None, tenant_id: str | None) -> tuple[str, str]:
     firm = (firm_id or "").strip()
     tenant = (tenant_id or "").strip()
+    if not tenant:
+        raise ValueError("Microsoft identity mapping requires tenant_id for all accounts.")
     if firm:
         return "firm", firm
-    if tenant:
-        return "solo", tenant
-    raise ValueError("Microsoft identity mapping requires firm_id for firm users or tenant_id for solo users.")
+    return "solo", tenant
 
 
 def validate_microsoft_identity_mapping_scope(
@@ -427,6 +448,20 @@ def validate_microsoft_identity_mapping_scope(
     return scope_type, scope_id
 
 
+def validate_attorney_seat_limit(*, firm_id: str | None, attorney_seat_limit: int | None) -> tuple[str, int]:
+    account_type = "firm" if (firm_id or "").strip() else "solo"
+    seats = attorney_seat_limit if attorney_seat_limit is not None else (2 if account_type == "firm" else 1)
+    try:
+        normalized = int(seats)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("attorney_seat_limit must be an integer.") from exc
+    if account_type == "firm" and normalized < 2:
+        raise ValueError("Firm account mappings require an attorney seat limit of at least 2.")
+    if account_type == "solo" and normalized < 1:
+        raise ValueError("Solo account mappings require an attorney seat limit of at least 1.")
+    return account_type, normalized
+
+
 def upsert_microsoft_identity_mapping(
     *,
     microsoft_tenant_id: str,
@@ -437,6 +472,7 @@ def upsert_microsoft_identity_mapping(
     tenant_id: str | None = None,
     roles: list[str] | tuple[str, ...] | str | None = None,
     status: str = "pending",
+    attorney_seat_limit: int | None = None,
 ) -> dict[str, Any]:
     if not persistent_storage_configured():
         raise RuntimeError("PostgreSQL/Supabase Postgres is required for Microsoft identity provisioning.")
@@ -451,6 +487,7 @@ def upsert_microsoft_identity_mapping(
     firm = (firm_id or "").strip() or None
     tenant = (tenant_id or "").strip() or None
     scope_type, scope_id = validate_microsoft_identity_mapping_scope(firm_id=firm, tenant_id=tenant)
+    account_type, seats = validate_attorney_seat_limit(firm_id=firm, attorney_seat_limit=attorney_seat_limit)
     normalized_email = _normalized_email(email)
     now = datetime.now(UTC)
     with session_scope() as session:
@@ -471,7 +508,9 @@ def upsert_microsoft_identity_mapping(
                 email_domain=_email_domain(normalized_email),
                 mercy_user_id=user_id,
                 firm_id=firm,
-                tenant_id=tenant,
+                tenant_id=tenant or "",
+                account_type=account_type,
+                attorney_seat_limit=seats,
                 effective_scope_type=scope_type,
                 effective_scope_id=scope_id,
                 roles=_normalized_roles(roles),
@@ -486,7 +525,9 @@ def upsert_microsoft_identity_mapping(
             record.email_domain = _email_domain(normalized_email)
             record.mercy_user_id = user_id
             record.firm_id = firm
-            record.tenant_id = tenant
+            record.tenant_id = tenant or ""
+            record.account_type = account_type
+            record.attorney_seat_limit = seats
             record.effective_scope_type = scope_type
             record.effective_scope_id = scope_id
             record.roles = _normalized_roles(roles)
@@ -507,6 +548,8 @@ def microsoft_identity_mapping_to_dict(record: MicrosoftIdentityMappingRecord) -
         "mercy_user_id": record.mercy_user_id,
         "firm_id": record.firm_id,
         "tenant_id": record.tenant_id,
+        "account_type": record.account_type,
+        "attorney_seat_limit": record.attorney_seat_limit,
         "effective_scope_type": record.effective_scope_type,
         "effective_scope_id": record.effective_scope_id,
         "roles": list(record.roles or []),
