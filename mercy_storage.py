@@ -187,7 +187,33 @@ if SQLALCHEMY_AVAILABLE:
         created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
+    class MicrosoftIdentityMappingRecord(Base):
+        __tablename__ = "microsoft_identity_mappings"
+
+        id: Mapped[str] = mapped_column(String(128), primary_key=True)
+        microsoft_tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        microsoft_object_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        email: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+        email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+        mercy_user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        firm_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+        effective_scope_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+        effective_scope_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+        roles: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+        status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
     Index("ix_mercy_dc_chunks_tenant_source", DCRagChunkRecord.tenant_id, DCRagChunkRecord.source_id)
+    Index(
+        "ix_microsoft_identity_mappings_tid_oid",
+        MicrosoftIdentityMappingRecord.microsoft_tenant_id,
+        MicrosoftIdentityMappingRecord.microsoft_object_id,
+        unique=True,
+    )
 else:
 
     class Base:
@@ -213,6 +239,9 @@ else:
     class AuditLogRecord:
         pass
 
+    class MicrosoftIdentityMappingRecord:
+        pass
+
 
 def get_engine() -> Engine:
     global _ENGINE, _SESSION_FACTORY
@@ -220,7 +249,7 @@ def get_engine() -> Engine:
         raise RuntimeError("SQLAlchemy is required for persistent Mercy storage.")
     url = configured_database_url()
     if not url:
-        raise RuntimeError("POSTGRES_URL or SUPABASE_URL is required for persistent Mercy storage.")
+        raise RuntimeError("POSTGRES_URL or SUPABASE_DB_URL is required for persistent Mercy storage.")
     if _ENGINE is None:
         _ENGINE = create_engine(url, pool_pre_ping=True, future=True)
         _SESSION_FACTORY = sessionmaker(bind=_ENGINE, expire_on_commit=False, future=True)
@@ -350,6 +379,209 @@ def record_audit_log(
                 created_at=timestamp or datetime.now(UTC),
             )
         )
+
+
+def _normalized_email(value: str | None) -> str | None:
+    email = (value or "").strip().lower()
+    return email or None
+
+
+def _email_domain(email: str | None) -> str | None:
+    if email and "@" in email:
+        return email.rsplit("@", 1)[1].strip().lower() or None
+    return None
+
+
+def _normalized_roles(value: list[str] | tuple[str, ...] | str | None) -> list[str]:
+    if isinstance(value, str):
+        roles = [role.strip() for role in value.split(",") if role.strip()]
+    elif value:
+        roles = [str(role).strip() for role in value if str(role).strip()]
+    else:
+        roles = []
+    return list(dict.fromkeys(roles or ["attorney"]))
+
+
+def derive_microsoft_identity_scope(*, firm_id: str | None, tenant_id: str | None) -> tuple[str, str]:
+    firm = (firm_id or "").strip()
+    tenant = (tenant_id or "").strip()
+    if firm:
+        return "firm", firm
+    if tenant:
+        return "solo", tenant
+    raise ValueError("Microsoft identity mapping requires firm_id for firm users or tenant_id for solo users.")
+
+
+def validate_microsoft_identity_mapping_scope(
+    *,
+    firm_id: str | None,
+    tenant_id: str | None,
+    effective_scope_type: str | None = None,
+    effective_scope_id: str | None = None,
+) -> tuple[str, str]:
+    scope_type, scope_id = derive_microsoft_identity_scope(firm_id=firm_id, tenant_id=tenant_id)
+    if effective_scope_type and effective_scope_type != scope_type:
+        raise ValueError("effective_scope_type conflicts with server-derived Microsoft identity scope.")
+    if effective_scope_id and effective_scope_id != scope_id:
+        raise ValueError("effective_scope_id conflicts with server-derived Microsoft identity scope.")
+    return scope_type, scope_id
+
+
+def upsert_microsoft_identity_mapping(
+    *,
+    microsoft_tenant_id: str,
+    microsoft_object_id: str,
+    mercy_user_id: str,
+    email: str | None = None,
+    firm_id: str | None = None,
+    tenant_id: str | None = None,
+    roles: list[str] | tuple[str, ...] | str | None = None,
+    status: str = "pending",
+) -> dict[str, Any]:
+    if not persistent_storage_configured():
+        raise RuntimeError("PostgreSQL/Supabase Postgres is required for Microsoft identity provisioning.")
+    tid = microsoft_tenant_id.strip()
+    oid = microsoft_object_id.strip()
+    user_id = mercy_user_id.strip()
+    normalized_status = status.strip().lower()
+    if normalized_status not in {"active", "disabled", "pending"}:
+        raise ValueError("status must be active, disabled, or pending.")
+    if not tid or not oid or not user_id:
+        raise ValueError("microsoft_tenant_id, microsoft_object_id, and mercy_user_id are required.")
+    firm = (firm_id or "").strip() or None
+    tenant = (tenant_id or "").strip() or None
+    scope_type, scope_id = validate_microsoft_identity_mapping_scope(firm_id=firm, tenant_id=tenant)
+    normalized_email = _normalized_email(email)
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        record = (
+            session.query(MicrosoftIdentityMappingRecord)
+            .filter(
+                MicrosoftIdentityMappingRecord.microsoft_tenant_id == tid,
+                MicrosoftIdentityMappingRecord.microsoft_object_id == oid,
+            )
+            .one_or_none()
+        )
+        if record is None:
+            record = MicrosoftIdentityMappingRecord(
+                id=str(uuid4()),
+                microsoft_tenant_id=tid,
+                microsoft_object_id=oid,
+                email=normalized_email,
+                email_domain=_email_domain(normalized_email),
+                mercy_user_id=user_id,
+                firm_id=firm,
+                tenant_id=tenant,
+                effective_scope_type=scope_type,
+                effective_scope_id=scope_id,
+                roles=_normalized_roles(roles),
+                status=normalized_status,
+                created_at=now,
+                updated_at=now,
+                last_login_at=None,
+            )
+            session.add(record)
+        else:
+            record.email = normalized_email
+            record.email_domain = _email_domain(normalized_email)
+            record.mercy_user_id = user_id
+            record.firm_id = firm
+            record.tenant_id = tenant
+            record.effective_scope_type = scope_type
+            record.effective_scope_id = scope_id
+            record.roles = _normalized_roles(roles)
+            record.status = normalized_status
+            record.updated_at = now
+        result = microsoft_identity_mapping_to_dict(record)
+    trace_storage_event("microsoft_identity_mapping_upserted", "identity_mapping_upsert", tenant_id=result["effective_scope_id"], metadata={"status": normalized_status, "scope_type": scope_type})
+    return result
+
+
+def microsoft_identity_mapping_to_dict(record: MicrosoftIdentityMappingRecord) -> dict[str, Any]:
+    return {
+        "id": record.id,
+        "microsoft_tenant_id": record.microsoft_tenant_id,
+        "microsoft_object_id": record.microsoft_object_id,
+        "email": record.email,
+        "email_domain": record.email_domain,
+        "mercy_user_id": record.mercy_user_id,
+        "firm_id": record.firm_id,
+        "tenant_id": record.tenant_id,
+        "effective_scope_type": record.effective_scope_type,
+        "effective_scope_id": record.effective_scope_id,
+        "roles": list(record.roles or []),
+        "status": record.status,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        "last_login_at": record.last_login_at.isoformat() if record.last_login_at else None,
+    }
+
+
+def get_microsoft_identity_mapping(microsoft_tenant_id: str, microsoft_object_id: str) -> dict[str, Any] | None:
+    if not persistent_storage_configured():
+        return None
+    with session_scope() as session:
+        record = (
+            session.query(MicrosoftIdentityMappingRecord)
+            .filter(
+                MicrosoftIdentityMappingRecord.microsoft_tenant_id == microsoft_tenant_id.strip(),
+                MicrosoftIdentityMappingRecord.microsoft_object_id == microsoft_object_id.strip(),
+            )
+            .one_or_none()
+        )
+        return microsoft_identity_mapping_to_dict(record) if record else None
+
+
+def list_microsoft_identity_mappings() -> list[dict[str, Any]]:
+    if not persistent_storage_configured():
+        raise RuntimeError("PostgreSQL/Supabase Postgres is required for Microsoft identity provisioning.")
+    with session_scope() as session:
+        records = (
+            session.query(MicrosoftIdentityMappingRecord)
+            .order_by(MicrosoftIdentityMappingRecord.created_at.desc())
+            .all()
+        )
+        return [microsoft_identity_mapping_to_dict(record) for record in records]
+
+
+def set_microsoft_identity_mapping_status(microsoft_tenant_id: str, microsoft_object_id: str, status: str) -> dict[str, Any]:
+    normalized_status = status.strip().lower()
+    if normalized_status not in {"active", "disabled", "pending"}:
+        raise ValueError("status must be active, disabled, or pending.")
+    with session_scope() as session:
+        record = (
+            session.query(MicrosoftIdentityMappingRecord)
+            .filter(
+                MicrosoftIdentityMappingRecord.microsoft_tenant_id == microsoft_tenant_id.strip(),
+                MicrosoftIdentityMappingRecord.microsoft_object_id == microsoft_object_id.strip(),
+            )
+            .one_or_none()
+        )
+        if record is None:
+            raise KeyError("Microsoft identity mapping was not found.")
+        record.status = normalized_status
+        record.updated_at = datetime.now(UTC)
+        result = microsoft_identity_mapping_to_dict(record)
+    trace_storage_event("microsoft_identity_mapping_status_changed", "identity_mapping_status", tenant_id=result["effective_scope_id"], metadata={"status": normalized_status})
+    return result
+
+
+def mark_microsoft_identity_login(microsoft_tenant_id: str, microsoft_object_id: str) -> dict[str, Any]:
+    with session_scope() as session:
+        record = (
+            session.query(MicrosoftIdentityMappingRecord)
+            .filter(
+                MicrosoftIdentityMappingRecord.microsoft_tenant_id == microsoft_tenant_id.strip(),
+                MicrosoftIdentityMappingRecord.microsoft_object_id == microsoft_object_id.strip(),
+            )
+            .one_or_none()
+        )
+        if record is None:
+            raise KeyError("Microsoft identity mapping was not found.")
+        record.last_login_at = datetime.now(UTC)
+        record.updated_at = record.last_login_at
+        result = microsoft_identity_mapping_to_dict(record)
+    return result
 
 
 def soft_delete_tenant_records(tenant_id: str, *, user_id: str | None = None) -> dict[str, Any]:

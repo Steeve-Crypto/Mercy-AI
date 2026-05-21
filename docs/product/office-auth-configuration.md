@@ -1,12 +1,13 @@
 # Office Auth Configuration
 
-Mercy Office auth uses Microsoft Entra directly for the primary Office SSO/NAA flow. Supabase Auth remains the fallback identity and session provider. PostgreSQL/Supabase Postgres remains the durable data source for users, firms, tenants, matters, documents, and future identity mappings.
+Mercy Office auth uses Microsoft Entra directly for the primary Office SSO/NAA flow. Supabase Auth remains the fallback identity and session provider. PostgreSQL/Supabase Postgres remains the durable data source for users, firms, tenants, matters, documents, and Microsoft identity mappings.
 
 ## Primary Office SSO
 
 Required live values:
 
 - `MERCY_OFFICE_NAA_ENABLED=true`
+- `POSTGRES_URL` or `SUPABASE_DB_URL`
 - `MICROSOFT_ENTRA_TENANT_ID`
 - `MICROSOFT_ENTRA_CLIENT_ID`
 - `MICROSOFT_ENTRA_APPLICATION_ID_URI`
@@ -45,13 +46,65 @@ The Office pane receives only the returned Supabase access token from the dialog
 
 ## Durable Identity Mapping
 
-The current Microsoft mapping layer is a safe fail-closed bridge. The next production step is a PostgreSQL/Supabase Postgres table for Microsoft identity provisioning with:
+Office NAA provisioning is manual for beta. Microsoft tokens never create Mercy users, firms, tenants, or domain-based mappings automatically. Unknown Microsoft identities fail closed. Auto-provisioning is disabled during beta so a verified Mercy operator confirms the user, firm or solo tenant boundary, and role set before any Office token can access legal workflows.
 
-- Microsoft tenant ID
-- Microsoft object ID
-- email and/or domain
-- Mercy user ID
-- `firm_id` for firm accounts or `tenant_id` for solo accounts
-- roles
-- active/disabled state
-- created, updated, and audit timestamps
+Production uses the PostgreSQL/Supabase Postgres table `microsoft_identity_mappings` as the durable source of truth. `MERCY_MICROSOFT_IDENTITY_MAP_JSON` is not a production source. It is only available for local/dev/test when `MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON=true`.
+
+Required Microsoft claims:
+
+- `tid`: Microsoft Entra tenant ID
+- `oid`: Microsoft object ID; `sub` is used only if `oid` is absent
+- `preferred_username`, `email`, or `upn`: stored for admin review, not used for domain auto-provisioning
+
+The durable mapping records the Microsoft tenant ID and Microsoft object ID as the stable lookup key.
+
+Required Mercy fields:
+
+- `mercy_user_id`
+- `firm_id` for firm accounts, or `tenant_id` for solo attorneys
+- `roles`
+- `status`: `active`, `pending`, or `disabled`
+
+`firm_id` takes priority when both `firm_id` and `tenant_id` are present. The backend derives `effective_scope_type` and `effective_scope_id`; clients and provisioning operators must not supply those values directly.
+
+### Manual Firm User Provisioning
+
+```powershell
+py -3 scripts\provision_microsoft_identity.py create `
+  --microsoft-tenant-id "ENTRA_TENANT_ID" `
+  --microsoft-object-id "ENTRA_OBJECT_ID" `
+  --email "attorney@example.com" `
+  --mercy-user-id "MERCY_USER_ID" `
+  --firm-id "FIRM_ID" `
+  --roles "attorney,firm_admin" `
+  --status active
+```
+
+### Manual Solo Attorney Provisioning
+
+```powershell
+py -3 scripts\provision_microsoft_identity.py create `
+  --microsoft-tenant-id "ENTRA_TENANT_ID" `
+  --microsoft-object-id "ENTRA_OBJECT_ID" `
+  --email "solo@example.com" `
+  --mercy-user-id "MERCY_USER_ID" `
+  --tenant-id "SOLO_TENANT_ID" `
+  --roles "attorney" `
+  --status active
+```
+
+### Disable a Mapping
+
+```powershell
+py -3 scripts\provision_microsoft_identity.py disable `
+  --microsoft-tenant-id "ENTRA_TENANT_ID" `
+  --microsoft-object-id "ENTRA_OBJECT_ID"
+```
+
+Disabled and pending mappings fail closed at `/v1/auth/microsoft/exchange`.
+
+### Office NAA and PKCE Relationship
+
+The Office add-in tries Microsoft Office SSO/NAA first and sends the Microsoft bootstrap token to `/v1/auth/microsoft/exchange`. The backend verifies the Microsoft token, loads the provisioned Mercy identity from PostgreSQL/Supabase Postgres, updates `last_login_at`, and returns the same short-lived backend-accepted Supabase-compatible token used by protected Mercy endpoints.
+
+Supabase PKCE remains the fallback Office sign-in path. The fallback returns a Supabase Auth access token from the web callback dialog and does not use `microsoft_identity_mappings`.

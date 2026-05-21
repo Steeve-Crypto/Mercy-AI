@@ -10,6 +10,12 @@ import jwt
 from fastapi import HTTPException
 
 from mercy_config import get_config
+from mercy_storage import (
+    get_microsoft_identity_mapping,
+    mark_microsoft_identity_login,
+    persistent_storage_configured,
+    validate_microsoft_identity_mapping_scope,
+)
 from observability import trace_event
 
 
@@ -27,6 +33,7 @@ class MercyIdentityMapping:
     tenant_id: str
     firm_id: str | None
     roles: tuple[str, ...]
+    status: str = "active"
 
 
 def _b64url(payload: dict[str, Any]) -> str:
@@ -34,6 +41,9 @@ def _b64url(payload: dict[str, Any]) -> str:
 
 
 def _mapping_config() -> dict[str, Any]:
+    config = get_config()
+    if not (config.is_local and config.allow_dev_microsoft_identity_map_json):
+        raise HTTPException(status_code=403, detail="Microsoft identity is not mapped to a Mercy tenant.")
     raw = get_config().microsoft_identity_map_json
     if raw is None or not raw.get_secret_value().strip():
         raise HTTPException(status_code=403, detail="Microsoft identity is not mapped to a Mercy tenant.")
@@ -56,14 +66,58 @@ def _roles(value: Any) -> tuple[str, ...]:
 
 def _safe_mapping(record: dict[str, Any], identity: MicrosoftIdentity) -> MercyIdentityMapping:
     firm_id = str(record.get("firm_id") or "").strip() or None
-    tenant_id = firm_id or str(record.get("tenant_id") or "").strip()
-    if not tenant_id:
+    raw_tenant_id = str(record.get("tenant_id") or "").strip() or None
+    try:
+        scope_type, scope_id = validate_microsoft_identity_mapping_scope(
+            firm_id=firm_id,
+            tenant_id=raw_tenant_id,
+            effective_scope_type=str(record.get("effective_scope_type") or "").strip() or None,
+            effective_scope_id=str(record.get("effective_scope_id") or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
+    if scope_type == "solo" and not raw_tenant_id:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
     user_id = str(record.get("user_id") or f"ms:{identity.tid}:{identity.oid}").strip()
-    return MercyIdentityMapping(user_id=user_id, tenant_id=tenant_id, firm_id=firm_id, roles=_roles(record.get("roles")))
+    return MercyIdentityMapping(user_id=user_id, tenant_id=scope_id, firm_id=firm_id, roles=_roles(record.get("roles")), status="active")
+
+
+def _safe_db_mapping(record: dict[str, Any]) -> MercyIdentityMapping:
+    status = str(record.get("status") or "").strip().lower()
+    if status != "active":
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is not active.")
+    firm_id = str(record.get("firm_id") or "").strip() or None
+    tenant_id = str(record.get("tenant_id") or "").strip() or None
+    try:
+        scope_type, scope_id = validate_microsoft_identity_mapping_scope(
+            firm_id=firm_id,
+            tenant_id=tenant_id,
+            effective_scope_type=str(record.get("effective_scope_type") or "").strip() or None,
+            effective_scope_id=str(record.get("effective_scope_id") or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.") from exc
+    if scope_type == "firm" and not firm_id:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
+    if scope_type == "solo" and not tenant_id:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
+    user_id = str(record.get("mercy_user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
+    return MercyIdentityMapping(user_id=user_id, tenant_id=scope_id, firm_id=firm_id, roles=_roles(record.get("roles")), status=status)
 
 
 def map_microsoft_identity(identity: MicrosoftIdentity) -> MercyIdentityMapping:
+    if persistent_storage_configured():
+        record = get_microsoft_identity_mapping(identity.tid, identity.oid)
+        if record is None:
+            raise HTTPException(status_code=403, detail="Microsoft identity is not mapped to a Mercy tenant.")
+        return _safe_db_mapping(record)
+
+    config = get_config()
+    if not (config.is_local and config.allow_dev_microsoft_identity_map_json):
+        raise HTTPException(status_code=500, detail="Microsoft identity provisioning storage is not configured.")
+
     config = _mapping_config()
     users = config.get("users") if isinstance(config.get("users"), list) else []
     email = (identity.email or "").strip().lower()
@@ -76,16 +130,6 @@ def map_microsoft_identity(identity: MicrosoftIdentity) -> MercyIdentityMapping:
         if candidate_tid == identity.tid and candidate_oid == identity.oid:
             return _safe_mapping(candidate, identity)
         if email and candidate_email == email:
-            return _safe_mapping(candidate, identity)
-
-    domains = config.get("domains") if isinstance(config.get("domains"), list) else []
-    email_domain = email.rsplit("@", 1)[1] if "@" in email else ""
-    for candidate in domains:
-        if not isinstance(candidate, dict):
-            continue
-        domain = str(candidate.get("domain") or "").strip().lower()
-        candidate_tid = str(candidate.get("tid") or "").strip()
-        if domain and domain == email_domain and (not candidate_tid or candidate_tid == identity.tid):
             return _safe_mapping(candidate, identity)
 
     raise HTTPException(status_code=403, detail="Microsoft identity is not mapped to a Mercy tenant.")
@@ -159,6 +203,8 @@ def exchange_microsoft_token_for_mercy_session(token: str) -> dict[str, Any]:
     identity = verify_microsoft_bootstrap_token(token.strip())
     mapping = map_microsoft_identity(identity)
     access_token = issue_mercy_session_token(identity, mapping)
+    if persistent_storage_configured():
+        mark_microsoft_identity_login(identity.tid, identity.oid)
     trace_event(
         name="office_microsoft_sso_exchanged",
         surface_context="office_auth",
@@ -176,4 +222,3 @@ def exchange_microsoft_token_for_mercy_session(token: str) -> dict[str, Any]:
         "expires_in": 900,
         "auth_mode": "microsoft_naa",
     }
-

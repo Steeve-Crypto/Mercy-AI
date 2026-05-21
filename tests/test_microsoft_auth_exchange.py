@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 import unittest
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -15,6 +17,11 @@ from fastapi import HTTPException
 
 from auth_context import _tenant_user_from_supabase_jwt
 from microsoft_auth import exchange_microsoft_token_for_mercy_session
+from mercy_storage import (
+    get_microsoft_identity_mapping,
+    reset_storage_for_tests,
+    upsert_microsoft_identity_mapping,
+)
 
 
 PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -61,27 +68,32 @@ def _token(**overrides: object) -> str:
 
 
 @contextmanager
-def _patched_env(extra: dict[str, str]):
+def _patched_env(extra: dict[str, str], *, clear: bool = True):
     from mercy_config import get_config
 
     env = {
         "MERCY_ENV": "prod",
         "MERCY_AUTH_MODE": "supabase",
         "SUPABASE_URL": SUPABASE_URL,
+        "SUPABASE_DB_URL": "",
         "SUPABASE_JWT_SECRET": SUPABASE_SECRET,
+        "POSTGRES_URL": "",
+        "MERCY_DATABASE_URL": "",
+        "MERCY_PGVECTOR_DSN": "",
         "MERCY_OFFICE_NAA_ENABLED": "true",
         "MICROSOFT_ENTRA_TENANT_ID": TENANT_ID,
         "MICROSOFT_ENTRA_CLIENT_ID": CLIENT_ID,
         "MICROSOFT_ENTRA_ISSUER": ISSUER,
         "MICROSOFT_ENTRA_JWKS_URL": "https://login.microsoftonline.com/unit/discovery/v2.0/keys",
-        "MERCY_MICROSOFT_IDENTITY_MAP_JSON": _mapping(),
         **extra,
     }
-    with patch.dict(os.environ, env):
+    with patch.dict(os.environ, env, clear=clear):
         get_config.cache_clear()
+        reset_storage_for_tests()
         try:
             yield
         finally:
+            reset_storage_for_tests()
             get_config.cache_clear()
 
 
@@ -93,60 +105,150 @@ def _patched_jwks():
 
 
 class MicrosoftAuthExchangeTests(unittest.TestCase):
+    def _db_env(self, temp_dir: str) -> dict[str, str]:
+        return {"POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'microsoft-auth.db'}"}
+
+    def _provision(
+        self,
+        *,
+        firm_id: str | None = "firm-alpha",
+        tenant_id: str | None = None,
+        status: str = "active",
+        roles: str | list[str] = "attorney,firm_admin",
+    ) -> None:
+        upsert_microsoft_identity_mapping(
+            microsoft_tenant_id=TENANT_ID,
+            microsoft_object_id="user-oid",
+            email="attorney@example.test",
+            mercy_user_id="mercy-user-a",
+            firm_id=firm_id,
+            tenant_id=tenant_id,
+            roles=roles,
+            status=status,
+        )
+
     def test_exchange_accepts_valid_mocked_microsoft_token_and_returns_backend_token(self) -> None:
-        with _patched_env({}), _patched_jwks():
-            exchange = exchange_microsoft_token_for_mercy_session(_token())
-            access_token = exchange["access_token"]
-            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {access_token}")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                self._provision()
+                exchange = exchange_microsoft_token_for_mercy_session(_token())
+                access_token = exchange["access_token"]
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {access_token}")
+                stored = get_microsoft_identity_mapping(TENANT_ID, "user-oid")
 
         self.assertEqual(exchange["token_type"], "bearer")
         self.assertEqual(exchange["auth_mode"], "microsoft_naa")
         self.assertEqual(tenant_user.tenant_id, "firm-alpha")
         self.assertEqual(tenant_user.user_id, "mercy-user-a")
         self.assertIn("firm_admin", tenant_user.roles)
+        self.assertIsNotNone(stored)
+        self.assertIsNotNone(stored["last_login_at"])
 
     def test_exchange_rejects_missing_invalid_expired_wrong_issuer_and_wrong_audience(self) -> None:
-        with _patched_env({}), _patched_jwks():
-            failures = [
-                ("", {401}),
-                ("not-a-jwt", {401}),
-                (_token(exp=int(time.time()) - 10), {401}),
-                (_token(iss="https://wrong.example"), {401}),
-                (_token(aud="wrong-client"), {401}),
-            ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                self._provision()
+                failures = [
+                    ("", {401}),
+                    ("not-a-jwt", {401}),
+                    (_token(exp=int(time.time()) - 10), {401}),
+                    (_token(iss="https://wrong.example"), {401}),
+                    (_token(aud="wrong-client"), {401}),
+                ]
 
-            for token, expected_statuses in failures:
-                with self.subTest(token=token[:12]):
-                    with self.assertRaises(HTTPException) as raised:
-                        exchange_microsoft_token_for_mercy_session(token)
-                    self.assertIn(raised.exception.status_code, expected_statuses)
+                for token, expected_statuses in failures:
+                    with self.subTest(token=token[:12]):
+                        with self.assertRaises(HTTPException) as raised:
+                            exchange_microsoft_token_for_mercy_session(token)
+                        self.assertIn(raised.exception.status_code, expected_statuses)
 
     def test_exchange_rejects_unmapped_identity_safely(self) -> None:
-        with _patched_env({"MERCY_MICROSOFT_IDENTITY_MAP_JSON": json.dumps({"users": []})}), _patched_jwks():
-            with self.assertRaises(HTTPException) as raised:
-                exchange_microsoft_token_for_mercy_session(_token())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                with self.assertRaises(HTTPException) as raised:
+                    exchange_microsoft_token_for_mercy_session(_token())
 
         self.assertEqual(raised.exception.status_code, 403)
         self.assertEqual(raised.exception.detail, "Microsoft identity is not mapped to a Mercy tenant.")
 
     def test_exchange_maps_solo_tenant_scope(self) -> None:
-        with _patched_env({"MERCY_MICROSOFT_IDENTITY_MAP_JSON": _mapping(firm=False)}), _patched_jwks():
-            exchange = exchange_microsoft_token_for_mercy_session(_token())
-            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                self._provision(firm_id=None, tenant_id="solo-alpha", roles=["attorney"])
+                exchange = exchange_microsoft_token_for_mercy_session(_token())
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
 
         self.assertEqual(tenant_user.tenant_id, "solo-alpha")
         self.assertEqual(tenant_user.user_id, "mercy-user-a")
 
+    def test_firm_scope_takes_priority_when_firm_and_tenant_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                self._provision(firm_id="firm-alpha", tenant_id="solo-ignored")
+                exchange = exchange_microsoft_token_for_mercy_session(_token())
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
+                stored = get_microsoft_identity_mapping(TENANT_ID, "user-oid")
+
+        self.assertEqual(tenant_user.tenant_id, "firm-alpha")
+        self.assertEqual(stored["effective_scope_type"], "firm")
+        self.assertEqual(stored["effective_scope_id"], "firm-alpha")
+
+    def test_disabled_and_pending_mappings_fail_closed(self) -> None:
+        for status in ("disabled", "pending"):
+            with self.subTest(status=status):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                        self._provision(status=status)
+                        with self.assertRaises(HTTPException) as raised:
+                            exchange_microsoft_token_for_mercy_session(_token())
+                self.assertEqual(raised.exception.status_code, 403)
+                self.assertEqual(raised.exception.detail, "Microsoft identity mapping is not active.")
+
+    def test_missing_scope_fails_closed_at_provisioning(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                with self.assertRaises(ValueError):
+                    self._provision(firm_id=None, tenant_id=None)
+
     def test_exchange_fails_closed_when_naa_disabled_or_misconfigured(self) -> None:
-        with _patched_env({"MERCY_OFFICE_NAA_ENABLED": "false"}), _patched_jwks():
-            with self.assertRaises(HTTPException) as disabled:
-                exchange_microsoft_token_for_mercy_session(_token())
-        with _patched_env({"MICROSOFT_ENTRA_CLIENT_ID": ""}), _patched_jwks():
-            with self.assertRaises(HTTPException) as misconfigured:
-                exchange_microsoft_token_for_mercy_session(_token())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir) | {"MERCY_OFFICE_NAA_ENABLED": "false"}), _patched_jwks():
+                with self.assertRaises(HTTPException) as disabled:
+                    exchange_microsoft_token_for_mercy_session(_token())
+            with _patched_env(self._db_env(temp_dir) | {"MICROSOFT_ENTRA_CLIENT_ID": ""}), _patched_jwks():
+                with self.assertRaises(HTTPException) as misconfigured:
+                    exchange_microsoft_token_for_mercy_session(_token())
 
         self.assertEqual(disabled.exception.status_code, 503)
         self.assertEqual(misconfigured.exception.status_code, 500)
+
+    def test_production_does_not_use_json_mapping(self) -> None:
+        with _patched_env({"MERCY_MICROSOFT_IDENTITY_MAP_JSON": _mapping(), "POSTGRES_URL": ""}), _patched_jwks():
+            with self.assertRaises(HTTPException) as raised:
+                exchange_microsoft_token_for_mercy_session(_token())
+
+        self.assertEqual(raised.exception.status_code, 500)
+        self.assertEqual(raised.exception.detail, "Microsoft identity provisioning storage is not configured.")
+
+    def test_json_mapping_only_works_in_explicit_local_dev_test_mode(self) -> None:
+        env = {
+            "MERCY_ENV": "test",
+            "MERCY_AUTH_MODE": "supabase",
+            "SUPABASE_URL": SUPABASE_URL,
+            "SUPABASE_JWT_SECRET": SUPABASE_SECRET,
+            "MERCY_OFFICE_NAA_ENABLED": "true",
+            "MICROSOFT_ENTRA_TENANT_ID": TENANT_ID,
+            "MICROSOFT_ENTRA_CLIENT_ID": CLIENT_ID,
+            "MICROSOFT_ENTRA_ISSUER": ISSUER,
+            "MICROSOFT_ENTRA_JWKS_URL": "https://login.microsoftonline.com/unit/discovery/v2.0/keys",
+            "MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON": "true",
+            "MERCY_MICROSOFT_IDENTITY_MAP_JSON": _mapping(firm=False),
+        }
+        with _patched_env(env), _patched_jwks():
+            exchange = exchange_microsoft_token_for_mercy_session(_token())
+            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
+
+        self.assertEqual(tenant_user.tenant_id, "solo-alpha")
 
     def test_main_registers_microsoft_exchange_route(self) -> None:
         source = (os.path.dirname(os.path.dirname(__file__)) + "/main.py")

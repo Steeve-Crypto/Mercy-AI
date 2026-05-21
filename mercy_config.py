@@ -121,6 +121,7 @@ class MercyConfig(BaseSettings):
     office_pkce_provider: str | None = Field(default=None, validation_alias=AliasChoices("MERCY_OFFICE_PKCE_PROVIDER", "NEXT_PUBLIC_MERCY_OFFICE_PKCE_PROVIDER"))
     supabase_azure_provider_enabled: bool = Field(default=False, validation_alias=AliasChoices("MERCY_SUPABASE_AZURE_PROVIDER_ENABLED"))
     microsoft_identity_map_json: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_MICROSOFT_IDENTITY_MAP_JSON"))
+    allow_dev_microsoft_identity_map_json: bool = Field(default=False, validation_alias=AliasChoices("MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON"))
 
     # Stripe billing and price IDs.
     stripe_secret_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("STRIPE_SECRET_KEY", "MERCY_STRIPE_SECRET_KEY"))
@@ -277,8 +278,12 @@ class MercyConfig(BaseSettings):
                 issues.append("MICROSOFT_ENTRA_TENANT_ID, MICROSOFT_ENTRA_CLIENT_ID, MICROSOFT_ENTRA_ISSUER, and MICROSOFT_ENTRA_JWKS_URL are required for Office NAA.")
             if not self.microsoft_entra_application_id_uri:
                 issues.append("MICROSOFT_ENTRA_APPLICATION_ID_URI is required so Office manifest WebApplicationInfo can be validated.")
-            if not self.microsoft_identity_map_json:
-                issues.append("MERCY_MICROSOFT_IDENTITY_MAP_JSON is required to map Microsoft identities to Mercy tenants.")
+            if not self.database_url:
+                issues.append("POSTGRES_URL or SUPABASE_DB_URL is required for Microsoft identity provisioning.")
+            if self.microsoft_identity_map_json:
+                issues.append("MERCY_MICROSOFT_IDENTITY_MAP_JSON is not allowed as the production Microsoft identity mapping source.")
+            if self.allow_dev_microsoft_identity_map_json:
+                issues.append("MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON must be false in production.")
         if production_like and self.office_pkce_fallback_enabled:
             office_provider = (self.office_pkce_provider or "").strip().lower()
             if not office_provider:
