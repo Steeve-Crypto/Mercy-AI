@@ -58,6 +58,19 @@ def _run(component: str, command: list[str] | str, *, cwd: Path = ROOT, env: dic
     return CheckResult(component, status, elapsed)
 
 
+def _local_verification_env() -> dict[str, str]:
+    return {
+        "MERCY_ENV": "local",
+        "MERCY_AUTH_MODE": "dev",
+        "POSTGRES_URL": "",
+        "MERCY_POSTGRES_URL": "",
+        "MERCY_DATABASE_URL": "",
+        "MERCY_PGVECTOR_DSN": "",
+        "SUPABASE_DB_URL": "",
+        "MERCY_SUPABASE_DB_URL": "",
+    }
+
+
 def _require(command_name: str) -> None:
     if shutil.which(command_name) is None:
         raise SystemExit(f"Required command not found on PATH: {command_name}")
@@ -96,7 +109,9 @@ def main() -> int:
     print(f"Python executable: {python}")
 
     results: list[CheckResult] = []
-    results.append(_run("Backend unittest discovery", [str(python), "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]))
+    verify_env = _local_verification_env()
+    print("Local verification DB: disabled; inherited Postgres/Supabase DB URLs are cleared for verifier subprocesses")
+    results.append(_run("Backend unittest discovery", [str(python), "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"], env=verify_env))
     results.append(
         _run(
             "Backend py_compile",
@@ -111,29 +126,32 @@ def main() -> int:
                 "scripts/microsoft_identity_db.py",
                 "scripts/provision_microsoft_identity.py",
             ],
+            env=verify_env,
         )
     )
-    results.append(_run("Backend pyright", [str(python), "-m", "pyright"]))
+    results.append(_run("Backend pyright", [str(python), "-m", "pyright"], env=verify_env))
     results.append(
         _run(
             "Backend ruff lint",
             [str(python), "-m", "ruff", "check", *CORE_FILES, "tests", "scripts", "--select", "E9,F63,F7,F82"],
+            env=verify_env,
         )
     )
-    results.append(_run("Core smoke endpoints", [str(python), "scripts/core_smoke.py"]))
+    results.append(_run("Core smoke endpoints", [str(python), "scripts/core_smoke.py"], env=verify_env))
     results.append(
         _run(
             "Quick RAGAS eval",
             [str(python), "scripts/ragas_quick_check.py"],
+            env=verify_env,
         )
     )
-    results.append(_run("Web typecheck", [npm_command, "run", "typecheck"], cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Web lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Web build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Office add-in lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office add-in build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office manifest validation", [npm_command, "run", "validate:manifest"], cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office static smoke", [npm_command, "run", "smoke:office"], cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Web typecheck", [npm_command, "run", "typecheck"], cwd=ROOT / "mercy-legal-web", env=verify_env))
+    results.append(_run("Web lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-web", env=verify_env))
+    results.append(_run("Web build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-web", env=verify_env))
+    results.append(_run("Office add-in lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-plugin", env=verify_env))
+    results.append(_run("Office add-in build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-plugin", env=verify_env))
+    results.append(_run("Office manifest validation", [npm_command, "run", "validate:manifest"], cwd=ROOT / "mercy-legal-plugin", env=verify_env))
+    results.append(_run("Office static smoke", [npm_command, "run", "smoke:office"], cwd=ROOT / "mercy-legal-plugin", env=verify_env))
     return _summary(results)
 
 

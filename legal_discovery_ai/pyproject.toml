@@ -5,14 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "legal-discovery-ai"
 version = "0.1.0"
-description = "Multi-agent legal discovery workflow for DC solo attorneys using CrewAI."
+description = "Optional legal discovery bridge helpers for Mercy Legal AI."
 requires-python = ">=3.10,<3.14"
 dependencies = [
-  "crewai[tools,google-genai]",
   "python-dotenv",
   "streamlit",
   "reportlab",
   "python-docx",
+]
+
+[project.optional-dependencies]
+crewai = [
+  "crewai[tools,google-genai]",
 ]
 
 [tool.setuptools]

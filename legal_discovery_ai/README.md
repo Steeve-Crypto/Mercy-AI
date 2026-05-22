@@ -1,4 +1,8 @@
-# Legal Discovery AI (CrewAI)
+# Legal Discovery AI (Optional CrewAI Bridge)
+
+Mercy's beta runtime does not require CrewAI. The FastAPI core can import
+`bridge.py` without CrewAI installed and will use a deterministic attorney-review
+fallback for this brownfield discovery path.
 
 Production-oriented multi-agent legal discovery pipeline for DC solo attorneys.
 
@@ -49,8 +53,9 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-If you plan to use Gemini, the project now installs CrewAI with the Google GenAI provider via:
-`crewai[tools,google-genai]`.
+If you intentionally run the legacy CrewAI discovery path, install the optional
+dependencies with `pip install -e .[crewai]` from this directory or
+`pip install -r requirements-optional.txt`.
 
 3) Create `.env` from `.env.example`:
 

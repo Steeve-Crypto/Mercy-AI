@@ -1,0 +1,4 @@
+# Optional brownfield discovery bridge dependencies.
+# Mercy beta runtime does not require CrewAI; install these only when running
+# the legacy Legal Discovery AI crew directly.
+crewai[tools,google-genai]

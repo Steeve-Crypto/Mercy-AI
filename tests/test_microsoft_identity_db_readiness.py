@@ -143,6 +143,16 @@ class MicrosoftIdentityDbReadinessTests(unittest.TestCase):
         self.assertIn('[npm_command, "run", "build"]', source)
         self.assertIn('[npm_command, "run", "smoke:office"]', source)
 
+    def test_canonical_verify_forces_local_database_environment(self) -> None:
+        source = (ROOT / "scripts" / "verify.py").read_text(encoding="utf-8")
+
+        self.assertIn("def _local_verification_env", source)
+        self.assertIn('"MERCY_ENV": "local"', source)
+        self.assertIn('"MERCY_AUTH_MODE": "dev"', source)
+        self.assertIn('"POSTGRES_URL": ""', source)
+        self.assertIn('"SUPABASE_DB_URL": ""', source)
+        self.assertIn("inherited Postgres/Supabase DB URLs are cleared", source)
+
 
 if __name__ == "__main__":
     unittest.main()
