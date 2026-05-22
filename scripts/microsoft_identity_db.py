@@ -54,6 +54,20 @@ CREATE INDEX IF NOT EXISTS ix_microsoft_identity_mappings_firm_id
 CREATE INDEX IF NOT EXISTS ix_microsoft_identity_mappings_status
     ON microsoft_identity_mappings (status);
 
+ALTER TABLE microsoft_identity_mappings ENABLE ROW LEVEL SECURITY;
+COMMENT ON TABLE microsoft_identity_mappings IS
+    'Backend-only Mercy Microsoft identity provisioning map. Supabase browser roles must not read or write this table.';
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+        REVOKE ALL ON TABLE microsoft_identity_mappings FROM anon;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+        REVOKE ALL ON TABLE microsoft_identity_mappings FROM authenticated;
+    END IF;
+END $$;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -116,6 +130,14 @@ REQUIRED_COLUMNS = {
     "last_login_at",
 }
 
+REQUIRED_CONSTRAINTS = {
+    "ck_microsoft_identity_status",
+    "ck_microsoft_identity_account_type",
+    "ck_microsoft_identity_tenant_required",
+    "ck_microsoft_identity_firm_scope",
+    "ck_microsoft_identity_seat_limit",
+}
+
 
 def production_readiness_issues(*, check_database: bool = True) -> list[str]:
     config = get_config()
@@ -157,6 +179,44 @@ def production_readiness_issues(*, check_database: bool = True) -> list[str]:
                     )
                     if not unique_tid_oid:
                         issues.append("microsoft_identity_mappings is missing unique index on microsoft_tenant_id + microsoft_object_id.")
+                    if engine.dialect.name == "postgresql":
+                        with engine.connect() as connection:
+                            constraint_rows = connection.exec_driver_sql(
+                                """
+                                SELECT conname
+                                FROM pg_constraint
+                                WHERE conrelid = 'public.microsoft_identity_mappings'::regclass
+                                """
+                            ).fetchall()
+                            constraints = {row[0] for row in constraint_rows}
+                            missing_constraints = sorted(REQUIRED_CONSTRAINTS - constraints)
+                            if missing_constraints:
+                                issues.append(
+                                    "microsoft_identity_mappings is missing constraints: "
+                                    + ", ".join(missing_constraints)
+                                    + "."
+                                )
+                            rls_row = connection.exec_driver_sql(
+                                """
+                                SELECT relrowsecurity
+                                FROM pg_class
+                                WHERE oid = 'public.microsoft_identity_mappings'::regclass
+                                """
+                            ).fetchone()
+                            if not rls_row or not bool(rls_row[0]):
+                                issues.append("microsoft_identity_mappings must have row level security enabled in Supabase/PostgreSQL.")
+                            unsafe_grants = connection.exec_driver_sql(
+                                """
+                                SELECT grantee, privilege_type
+                                FROM information_schema.role_table_grants
+                                WHERE table_schema = 'public'
+                                  AND table_name = 'microsoft_identity_mappings'
+                                  AND grantee IN ('anon', 'authenticated')
+                                  AND privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+                                """
+                            ).fetchall()
+                            if unsafe_grants:
+                                issues.append("microsoft_identity_mappings grants direct browser-role access to anon/authenticated.")
             except Exception as exc:
                 issues.append(f"Database readiness inspection failed: {exc}")
     return list(dict.fromkeys(issues))

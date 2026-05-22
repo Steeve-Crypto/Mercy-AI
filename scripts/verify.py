@@ -63,6 +63,17 @@ def _require(command_name: str) -> None:
         raise SystemExit(f"Required command not found on PATH: {command_name}")
 
 
+def _resolve_command(command_name: str) -> str:
+    if os.name == "nt":
+        resolved_cmd = shutil.which(f"{command_name}.cmd")
+        if resolved_cmd:
+            return resolved_cmd
+    resolved = shutil.which(command_name)
+    if resolved:
+        return resolved
+    return command_name
+
+
 def _summary(results: list[CheckResult]) -> int:
     print("\nComponent | Status | Time")
     print("--- | --- | ---")
@@ -78,8 +89,8 @@ def _summary(results: list[CheckResult]) -> int:
 
 def main() -> int:
     python = _project_python()
-    npm_command = "npm"
-    _require(npm_command)
+    npm_command = _resolve_command("npm")
+    _require("npm")
 
     print(f"Mercy verification root: {ROOT}")
     print(f"Python executable: {python}")
@@ -116,13 +127,13 @@ def main() -> int:
             [str(python), "scripts/ragas_quick_check.py"],
         )
     )
-    results.append(_run("Web typecheck", f"{npm_command} run typecheck", cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Web lint", f"{npm_command} run lint", cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Web build", f"{npm_command} run build", cwd=ROOT / "mercy-legal-web"))
-    results.append(_run("Office add-in lint", f"{npm_command} run lint", cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office add-in build", f"{npm_command} run build", cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office manifest validation", f"{npm_command} run validate:manifest", cwd=ROOT / "mercy-legal-plugin"))
-    results.append(_run("Office static smoke", f"{npm_command} run smoke:office", cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Web typecheck", [npm_command, "run", "typecheck"], cwd=ROOT / "mercy-legal-web"))
+    results.append(_run("Web lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-web"))
+    results.append(_run("Web build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-web"))
+    results.append(_run("Office add-in lint", [npm_command, "run", "lint"], cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Office add-in build", [npm_command, "run", "build"], cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Office manifest validation", [npm_command, "run", "validate:manifest"], cwd=ROOT / "mercy-legal-plugin"))
+    results.append(_run("Office static smoke", [npm_command, "run", "smoke:office"], cwd=ROOT / "mercy-legal-plugin"))
     return _summary(results)
 
 

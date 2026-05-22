@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from mercy_config import get_config
 from mercy_storage import reset_storage_for_tests
-from scripts.microsoft_identity_db import production_readiness_issues
+from scripts.microsoft_identity_db import MICROSOFT_IDENTITY_MIGRATION_SQL, REQUIRED_CONSTRAINTS, production_readiness_issues
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +66,27 @@ class MicrosoftIdentityDbReadinessTests(unittest.TestCase):
         self.assertIn("MERCY_MICROSOFT_IDENTITY_MAP_JSON", issues)
         self.assertIn("MERCY_ALLOW_DEV_MICROSOFT_IDENTITY_MAP_JSON", issues)
 
+    def test_migration_sql_declares_supabase_safe_rls_and_constraints(self) -> None:
+        sql = MICROSOFT_IDENTITY_MIGRATION_SQL
+
+        self.assertIn("ALTER TABLE microsoft_identity_mappings ENABLE ROW LEVEL SECURITY", sql)
+        self.assertIn("REVOKE ALL ON TABLE microsoft_identity_mappings FROM anon", sql)
+        self.assertIn("REVOKE ALL ON TABLE microsoft_identity_mappings FROM authenticated", sql)
+        self.assertNotIn("DROP TABLE", sql.upper())
+        self.assertNotIn("Base.metadata.create_all", sql)
+        for constraint in REQUIRED_CONSTRAINTS:
+            self.assertIn(constraint, sql)
+        self.assertIn("tenant_id IS NOT NULL", sql)
+        self.assertIn("account_type = 'firm' AND attorney_seat_limit >= 2", sql)
+        self.assertIn("last_login_at timestamptz", sql)
+
+    def test_production_storage_init_does_not_auto_create_postgres_schema(self) -> None:
+        source = (ROOT / "mercy_storage.py").read_text(encoding="utf-8")
+
+        self.assertIn("Persistent storage schema is not auto-created in production", source)
+        self.assertIn("MERCY_AUTO_INIT_STORAGE_SCHEMA", (ROOT / ".env.example").read_text(encoding="utf-8"))
+        self.assertIn("scripts\\\\microsoft_identity_db.py apply", source)
+
     def test_cli_fallback_create_list_disable_still_works(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{(Path(temp_dir) / 'cli-provisioning.db').as_posix()}"
@@ -119,6 +140,8 @@ class MicrosoftIdentityDbReadinessTests(unittest.TestCase):
         self.assertGreater(manifest, build)
         self.assertGreater(smoke, manifest)
         self.assertNotIn("ThreadPoolExecutor", source)
+        self.assertIn('[npm_command, "run", "build"]', source)
+        self.assertIn('[npm_command, "run", "smoke:office"]', source)
 
 
 if __name__ == "__main__":

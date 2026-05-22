@@ -2,25 +2,32 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any, Iterator
+from typing import Any, Iterator, TYPE_CHECKING
 from uuid import uuid4
 
 from observability import trace_event, trace_span
 from mercy_config import get_config
 
-try:
+if TYPE_CHECKING:
     from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, create_engine, text
     from sqlalchemy.engine import Engine
     from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
     SQLALCHEMY_AVAILABLE = True
-except ModuleNotFoundError:
-    JSON = Boolean = CheckConstraint = DateTime = Index = Integer = String = Text = create_engine = text = None  # type: ignore[assignment]
-    Engine = Session = Any  # type: ignore[misc,assignment]
-    DeclarativeBase = object  # type: ignore[assignment]
-    Mapped = Any  # type: ignore[assignment]
-    mapped_column = sessionmaker = None  # type: ignore[assignment]
-    SQLALCHEMY_AVAILABLE = False
+else:
+    try:
+        from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, create_engine, text
+        from sqlalchemy.engine import Engine
+        from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+        SQLALCHEMY_AVAILABLE = True
+    except ModuleNotFoundError:
+        JSON = Boolean = CheckConstraint = DateTime = Index = Integer = String = Text = create_engine = text = None  # type: ignore[assignment]
+        Engine = Session = Any  # type: ignore[misc,assignment]
+        DeclarativeBase = object  # type: ignore[assignment]
+        Mapped = Any  # type: ignore[assignment]
+        mapped_column = sessionmaker = None  # type: ignore[assignment]
+        SQLALCHEMY_AVAILABLE = False
 
 
 STORAGE_VERSION = "mercy-storage-pgvector-1.0"
@@ -76,7 +83,7 @@ def _normalize_database_url(raw: str) -> str:
     return value
 
 
-if SQLALCHEMY_AVAILABLE:
+if TYPE_CHECKING or SQLALCHEMY_AVAILABLE:
 
     class Base(DeclarativeBase):  # type: ignore[misc]
         pass
@@ -621,8 +628,9 @@ def mark_microsoft_identity_login(microsoft_tenant_id: str, microsoft_object_id:
         )
         if record is None:
             raise KeyError("Microsoft identity mapping was not found.")
-        record.last_login_at = datetime.now(UTC)
-        record.updated_at = record.last_login_at
+        now = datetime.now(UTC)
+        record.last_login_at = now
+        record.updated_at = now
         result = microsoft_identity_mapping_to_dict(record)
     return result
 

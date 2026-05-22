@@ -157,7 +157,7 @@ def _read_json_file(path: Path) -> dict[str, Any]:
 
 
 def _declared_edge_ids(declared: dict[str, Any]) -> set[str]:
-    return {edge.get("id") for edge in declared.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
+    return {str(edge["id"]) for edge in declared.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
 
 
 def _merge_system_maps(declared: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:

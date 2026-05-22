@@ -307,6 +307,8 @@ def validate_config(strict: bool) -> tuple[bool, list[str], object | None]:
 
 def print_readiness(ok: bool, issues: list[str], config: object | None) -> None:
     Console, Panel, _, _, Table = load_rich()
+    get_hermes_model = getattr(config, "get_hermes_model", None)
+    hermes_model = get_hermes_model() if callable(get_hermes_model) else "unknown"
     if Console and Panel and Table:
         console = Console()
         if config is not None:
@@ -316,7 +318,7 @@ def print_readiness(ok: bool, issues: list[str], config: object | None) -> None:
             table.add_row("Environment", getattr(config, "mercy_env", "unknown"))
             table.add_row("Auth mode", getattr(config, "mercy_auth_mode", "unknown"))
             table.add_row("Database", "configured" if getattr(config, "database_url", None) else "missing")
-            table.add_row("Hermes model", config.get_hermes_model() if hasattr(config, "get_hermes_model") else "unknown")
+            table.add_row("Hermes model", hermes_model)
             table.add_row("Production ready", "yes" if ok else "no")
             console.print(table)
         if issues:

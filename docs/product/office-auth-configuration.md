@@ -56,9 +56,12 @@ Production uses the PostgreSQL/Supabase Postgres table `microsoft_identity_mappi
 Run the controlled migration before production use:
 
 ```powershell
+py -3 scripts\microsoft_identity_db.py sql
 py -3 scripts\microsoft_identity_db.py apply
 py -3 scripts\microsoft_identity_db.py check
 ```
+
+The migration is additive and idempotent for Supabase Postgres: it creates the table if needed, adds missing columns, creates indexes, adds validation constraints, and enables row level security. It does not drop data. Because the table is backend-only provisioning state, the migration also revokes direct `anon` and `authenticated` browser-role access. Admins manage mappings through Mercy backend admin APIs; the Supabase service role key or privileged Postgres credentials must stay server-side only and must never be exposed to Mercy Legal Web, Office, or browser clients.
 
 Required Microsoft claims:
 

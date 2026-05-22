@@ -175,7 +175,7 @@ export function App() {
     };
 
     void load();
-  }, []);
+  }, [surface]);
 
   useEffect(() => {
     const handle = window.setTimeout(async () => {

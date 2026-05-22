@@ -33,7 +33,25 @@ except Exception:
 if str(DISCOVERY_SRC) not in sys.path:
     sys.path.insert(0, str(DISCOVERY_SRC))
 
-from legal_discovery_ai.crew import PROJECT_ROOT, run_crew  # noqa: E402
+try:
+    from legal_discovery_ai.crew import PROJECT_ROOT, run_crew  # type: ignore[import-not-found] # noqa: E402
+except ImportError as exc:
+    PROJECT_ROOT = ROOT_DIR / "legal_discovery_ai"
+    _CREW_IMPORT_ERROR = exc
+
+    def run_crew(*, document_path: str, document_text: str | None = None) -> dict[str, Any]:
+        text = (document_text or "").strip()
+        if not text:
+            try:
+                text = Path(document_path).read_text(encoding="utf-8", errors="ignore")[:4000]
+            except OSError:
+                text = ""
+        return {
+            "case_summary": text[:1200] or "CrewAI discovery stack unavailable; attorney must review the source document directly.",
+            "key_issues": ["CrewAI optional dependency unavailable; deterministic bridge fallback used."],
+            "timeline": [],
+            "fallback_reason": str(_CREW_IMPORT_ERROR),
+        }
 
 
 def _normalize_result(result: object) -> dict[str, Any]:

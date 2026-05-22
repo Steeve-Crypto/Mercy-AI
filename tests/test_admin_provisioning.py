@@ -94,6 +94,22 @@ class AdminProvisioningTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed")
+    def test_unauthenticated_user_cannot_provision_mappings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'admin-provisioning.db'}"
+            with patch.dict(
+                os.environ,
+                {"POSTGRES_URL": db_url, "MERCY_ENV": "test", "MERCY_AUTH_MODE": "test", "MERCY_API_TOKEN": "admin-test-token"},
+                clear=False,
+            ):
+                reset_storage_for_tests()
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.get("/v1/admin/microsoft-identity-mappings")
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 401)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed")
     def test_admin_provisioning_rejects_invalid_firm_seat_limit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'admin-provisioning.db'}"
@@ -122,6 +138,21 @@ class AdminProvisioningTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("at least 2", response.json()["detail"])
+
+    def test_admin_provisioning_page_is_wired_to_backend_client(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        page = root / "mercy-legal-web" / "src" / "app" / "(admin)" / "admin" / "provisioning" / "page.tsx"
+        admin_pages = root / "mercy-legal-web" / "src" / "components" / "app" / "pages" / "admin-pages.tsx"
+        client = root / "mercy-legal-web" / "src" / "lib" / "core-client.ts"
+
+        self.assertTrue(page.exists())
+        self.assertIn("ProvisioningAdminPage", page.read_text(encoding="utf-8"))
+        admin_source = admin_pages.read_text(encoding="utf-8")
+        self.assertIn("listMicrosoftIdentityMappings", admin_source)
+        self.assertIn("upsertMicrosoftIdentityMapping", admin_source)
+        self.assertIn("updateMicrosoftIdentityMappingStatus", admin_source)
+        client_source = client.read_text(encoding="utf-8")
+        self.assertIn("/v1/admin/microsoft-identity-mappings", client_source)
 
 
 if __name__ == "__main__":
