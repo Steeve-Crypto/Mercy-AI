@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { SignupPlanSelection } from "@/components/auth/signup-flow";
 
 export default function SignUpPage() {
-  return (
-    <Suspense>
-      <AuthShell mode="sign-up" />
-    </Suspense>
-  );
+  return <SignupPlanSelection />;
 }

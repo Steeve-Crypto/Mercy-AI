@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { Check } from "lucide-react";
 import { pricingTiers } from "@/lib/data";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { AnimatedShell } from "@/components/marketing/animated-shell";
-import { CheckoutButton } from "@/components/marketing/checkout-button";
 
 export function PricingSection() {
   return (
@@ -44,12 +45,11 @@ export function PricingSection() {
                   </li>
                 ))}
               </ul>
-              <CheckoutButton
-                plan={tier.id}
-                label={tier.featured ? "Start checkout" : tier.price === "Custom" ? "Book a Demo" : "Choose plan"}
-                featured={tier.featured}
-                className="mt-8 w-full"
-              />
+              <Button asChild variant={tier.featured ? "gold" : "outline"} className="mt-8 w-full">
+                <Link href={tier.price === "Custom" ? "/contact" : "/sign-up"}>
+                  {tier.featured ? "Start signup" : tier.price === "Custom" ? "Book a Demo" : "Choose plan"}
+                </Link>
+              </Button>
             </AnimatedShell>
           ))}
         </div>

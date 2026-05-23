@@ -33,7 +33,6 @@ export function BillingUsagePage({
   invoicesError,
 }: BillingUsagePageProps) {
   const { session } = useMercySession();
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const usage = metrics?.usage && typeof metrics.usage === "object" ? metrics.usage as Record<string, unknown> : {};
@@ -47,28 +46,6 @@ export function BillingUsagePage({
     const used = betaStatus?.quota.strong_model_used ?? 0;
     return limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   }, [betaStatus?.quota.strong_model_monthly_limit, betaStatus?.quota.strong_model_used]);
-
-  async function startCheckout(planName: string) {
-    setCheckoutBusy(true);
-    setCheckoutError(null);
-    try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planName }),
-      });
-      const data = (await response.json()) as { url?: string };
-      if (data.url) {
-        window.location.href = data.url;
-        return;
-      }
-      setCheckoutError("Stripe checkout is not configured for this environment.");
-    } catch (error) {
-      setCheckoutError(error instanceof Error ? error.message : "Checkout could not be started.");
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }
 
   async function manageBilling() {
     setPortalBusy(true);
@@ -168,24 +145,6 @@ export function BillingUsagePage({
               >
                 {portalBusy ? <Loader2 className="size-4 animate-spin" /> : <Receipt className="size-4" />}
                 Manage Billing in Stripe
-              </button>
-              <button
-                type="button"
-                onClick={() => startCheckout("solo")}
-                disabled={checkoutBusy}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                {checkoutBusy ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
-                Solo checkout
-              </button>
-              <button
-                type="button"
-                onClick={() => startCheckout("small-firm")}
-                disabled={checkoutBusy}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
-              >
-                {checkoutBusy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                Firm checkout
               </button>
             </div>
           </aside>

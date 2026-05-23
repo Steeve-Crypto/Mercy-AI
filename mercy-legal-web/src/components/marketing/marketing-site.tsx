@@ -635,7 +635,7 @@ export function PricingPage() {
         <Hero
           eyebrow="Beta pricing"
           title="Simple beta pricing for solo attorneys and small firms."
-          description="Payment and onboarding are planned for a later pass. For now, pricing CTAs route to sign-up or demo request."
+          description="Pricing is informational here. Payment starts only after choosing a beta signup path."
         />
         <section className="px-5 py-20 lg:px-8">
           <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
@@ -656,7 +656,7 @@ export function PricingPage() {
             />
           </div>
           <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-6 text-slate-600">
-            Payment checkout and production onboarding are intentionally not implemented in this marketing pass.
+            Checkout runs inside signup after account details, seat count, and beta acknowledgments are collected.
           </p>
         </section>
         <CtaBand />

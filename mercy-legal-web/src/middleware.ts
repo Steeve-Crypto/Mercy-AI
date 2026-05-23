@@ -3,6 +3,8 @@ import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/chat", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
 const ADMIN_ROLES = new Set(["admin", "superadmin", "platform_admin", "ops"]);
+const PLATFORM_BYPASS_ROLES = new Set(["superadmin", "platform_admin", "ops"]);
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 
 function supabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -17,6 +19,27 @@ function rolesFromMetadata(metadata: Record<string, unknown> | undefined): strin
   if (Array.isArray(rawRoles)) return rawRoles.map(String).filter(Boolean);
   if (typeof rawRoles === "string") return rawRoles.split(",").map((role) => role.trim()).filter(Boolean);
   return [];
+}
+
+function stringFromMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function hasWorkspaceAccess(user: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }) {
+  const roles = [...rolesFromMetadata(user.app_metadata), ...rolesFromMetadata(user.user_metadata)];
+  if (roles.some((role) => PLATFORM_BYPASS_ROLES.has(role))) return true;
+
+  const app = user.app_metadata || {};
+  const userMeta = user.user_metadata || {};
+  const tenantId = stringFromMetadata(app, "tenant_id") || stringFromMetadata(userMeta, "tenant_id");
+  const firmId = stringFromMetadata(app, "firm_id") || stringFromMetadata(userMeta, "firm_id");
+  const accountType = stringFromMetadata(app, "account_type") || stringFromMetadata(userMeta, "account_type");
+  const subscriptionStatus = stringFromMetadata(app, "subscription_status") || stringFromMetadata(userMeta, "subscription_status");
+
+  if (!tenantId || !subscriptionStatus || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) return false;
+  if (accountType === "firm" && !firmId) return false;
+  return true;
 }
 
 export async function middleware(request: NextRequest) {
@@ -63,13 +86,24 @@ export async function middleware(request: NextRequest) {
 
   if (path === "/admin" || path.startsWith("/admin/")) {
     const roles = [...rolesFromMetadata(user.app_metadata), ...rolesFromMetadata(user.user_metadata)];
-    const isAdmin = roles.some((role) => ADMIN_ROLES.has(role));
+    const accountType = stringFromMetadata(user.app_metadata, "account_type") || stringFromMetadata(user.user_metadata, "account_type");
+    const platformBypass = roles.some((role) => PLATFORM_BYPASS_ROLES.has(role));
+    const isAdmin = roles.some((role) => ADMIN_ROLES.has(role)) && (!accountType || platformBypass);
     if (!isAdmin) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/dashboard";
       redirectUrl.searchParams.set("auth", "admin-required");
       return NextResponse.redirect(redirectUrl);
     }
+    return response;
+  }
+
+  if (!hasWorkspaceAccess(user)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/sign-up";
+    redirectUrl.searchParams.set("next", `${path}${request.nextUrl.search}`);
+    redirectUrl.searchParams.set("subscription", "required");
+    return NextResponse.redirect(redirectUrl);
   }
 
   return response;

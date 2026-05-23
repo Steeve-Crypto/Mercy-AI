@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CreditCard, Loader2, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type CheckoutButtonProps = {
@@ -12,38 +12,17 @@ type CheckoutButtonProps = {
 };
 
 export function CheckoutButton({ plan, label, featured, className }: CheckoutButtonProps) {
-  const [loading, setLoading] = useState(false);
-
-  async function startCheckout() {
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-      const data = (await response.json()) as { url?: string };
-
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <Button
-      type="button"
-      onClick={startCheckout}
+      asChild
       className={className}
       variant={featured ? "gold" : "outline"}
       size="lg"
-      disabled={loading}
     >
-      {loading ? <Loader2 className="animate-spin" /> : featured ? <Sparkles /> : <CreditCard />}
-      {label}
+      <Link href={plan === "small-firm" || plan === "firm" ? "/sign-up/firm" : "/sign-up/solo"}>
+        <Sparkles />
+        {label}
+      </Link>
     </Button>
   );
 }

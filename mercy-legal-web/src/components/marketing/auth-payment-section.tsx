@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2, CreditCard, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { AnimatedShell } from "@/components/marketing/animated-shell";
-import { CheckoutButton } from "@/components/marketing/checkout-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authBenefits } from "@/lib/data";
@@ -51,7 +50,7 @@ export function AuthPaymentSection() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-[#f0d46a]">Payment method</p>
-              <h3 className="mt-2 text-3xl font-semibold">Secure firm checkout</h3>
+              <h3 className="mt-2 text-3xl font-semibold">Signup-gated checkout</h3>
             </div>
             <div className="grid size-12 place-items-center rounded-md bg-white text-mercy-navy">
               <CreditCard className="size-5" />
@@ -69,10 +68,12 @@ export function AuthPaymentSection() {
             </div>
             <div className="mt-5 flex items-center gap-2 text-xs text-white/58">
               <ShieldCheck className="size-4 text-[#f0d46a]" />
-              Stripe Checkout is wired through `/api/checkout`; missing keys fall back to demo signup.
+              Stripe Checkout opens only after signup collects account type, seats, and beta acknowledgments.
             </div>
           </div>
-          <CheckoutButton plan="small-firm" label="Start Small Firm checkout" featured className="mt-6 w-full" />
+          <Button asChild variant="gold" className="mt-6 w-full">
+            <Link href="/sign-up">Start beta signup</Link>
+          </Button>
         </AnimatedShell>
       </div>
     </section>
