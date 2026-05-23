@@ -28,16 +28,30 @@ export async function POST(request: Request) {
     const session = event.data.object as Stripe.Checkout.Session;
     const result = await provisionPaidSignup(session);
     if (result.mode === "auth_error" || result.mode === "storage_error" || result.mode === "invalid" || result.mode === "not_configured") {
+      console.error("Stripe signup provisioning failed", {
+        eventId: event.id,
+        sessionId: session.id,
+        mode: result.mode,
+      });
       return NextResponse.json({ error: "Signup provisioning failed." }, { status: 500 });
     }
   }
   if (
+    event.type === "customer.subscription.created" ||
     event.type === "customer.subscription.updated" ||
     event.type === "customer.subscription.deleted" ||
     event.type === "customer.subscription.paused"
   ) {
     const subscription = event.data.object as Stripe.Subscription;
-    await syncStripeSubscriptionStatus(subscription);
+    const result = await syncStripeSubscriptionStatus(subscription);
+    if (result.mode === "storage_error") {
+      console.error("Stripe subscription status sync failed", {
+        eventId: event.id,
+        subscriptionId: subscription.id,
+        mode: result.mode,
+      });
+      return NextResponse.json({ error: "Subscription status sync failed." }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ received: true });

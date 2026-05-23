@@ -44,6 +44,9 @@ function hasWorkspaceAccess(user: { app_metadata?: Record<string, unknown>; user
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  if (path === "/api/stripe/webhook") {
+    return NextResponse.next();
+  }
   const protectedRoute = PROTECTED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
   if (!protectedRoute) {
     return NextResponse.next();

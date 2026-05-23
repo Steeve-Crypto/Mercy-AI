@@ -158,21 +158,33 @@ export function SignupForm({ accountType }: SignupFormProps) {
       setError(authResponse.error?.message || "Could not create your Mercy account.");
       return;
     }
+    if (!authResponse.data.session) {
+      const signInResponse = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (signInResponse.error) {
+        setBusy(false);
+        setError("Account created. Please confirm your email if required, then sign in before continuing to payment.");
+        return;
+      }
+    }
 
+    const checkoutPayload = {
+      accountType,
+      userId: authResponse.data.user.id,
+      email,
+      fullName,
+      tenantName,
+      firmName,
+      seats: isFirm ? seats : 1,
+      practiceAreas,
+      jurisdictionFocus,
+      termsAccepted,
+      responsibilityAccepted,
+    };
+    window.sessionStorage.setItem("mercy.pendingSignupCheckout", JSON.stringify(checkoutPayload));
     const checkoutResponse = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accountType,
-        userId: authResponse.data.user.id,
-        email,
-        fullName,
-        tenantName,
-        firmName,
-        seats: isFirm ? seats : 1,
-        practiceAreas,
-        jurisdictionFocus,
-      }),
+      body: JSON.stringify(checkoutPayload),
     });
     const checkout = (await checkoutResponse.json().catch(() => ({}))) as { url?: string; error?: string };
     setBusy(false);
@@ -181,6 +193,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
       setError(checkout.error || "Checkout failed. Please try again.");
       return;
     }
+    window.sessionStorage.removeItem("mercy.pendingSignupCheckout");
     window.location.href = checkout.url;
   }
 

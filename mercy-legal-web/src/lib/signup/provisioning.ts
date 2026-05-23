@@ -16,6 +16,7 @@ export type PendingSignup = {
 };
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+const DB_SUBSCRIPTION_STATUSES = new Set(["pending", "active", "past_due", "canceled", "incomplete"]);
 
 function supabaseAdminConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -47,6 +48,13 @@ function stableId(prefix: string, seed: string, sessionId: string) {
   const normalized = seed.replace(/[^a-zA-Z0-9_-]+/g, "").slice(0, 28) || prefix;
   const suffix = sessionId.replace(/[^a-zA-Z0-9]+/g, "").slice(-16) || "checkout";
   return `${prefix}_${normalized}_${suffix}`;
+}
+
+function dbSubscriptionStatus(status: string | null | undefined) {
+  if (status === "trialing") return "active";
+  if (status === "unpaid" || status === "paused") return "past_due";
+  if (status === "active" || status === "past_due" || status === "canceled" || status === "incomplete") return status;
+  return "pending";
 }
 
 export function normalizeSignup(input: Partial<PendingSignup>): PendingSignup {
@@ -91,6 +99,32 @@ export function signupMetadata(signup: PendingSignup) {
   };
 }
 
+async function findExistingTenant(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  session: Stripe.Checkout.Session,
+  subscriptionId: string | null,
+) {
+  const filters = [`stripe_checkout_session_id.eq.${session.id}`];
+  if (subscriptionId) {
+    filters.push(`stripe_subscription_id.eq.${subscriptionId}`);
+  }
+  const { data, error } = await supabase
+    .from("mercy_tenants")
+    .select("tenant_id,firm_id")
+    .or(filters.join(","))
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message, tenantId: null as string | null, firmId: null as string | null };
+  }
+  return {
+    error: null,
+    tenantId: typeof data?.tenant_id === "string" ? data.tenant_id : null,
+    firmId: typeof data?.firm_id === "string" ? data.firm_id : null,
+  };
+}
+
 export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -114,22 +148,24 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
     return { mode: "invalid" as const, error: validationError };
   }
 
-  const subscriptionStatus =
-    typeof session.subscription === "string" || session.subscription
-      ? "active"
-      : session.payment_status === "paid"
-        ? "active"
-        : "incomplete";
+  const subscriptionStatus = session.payment_status === "paid" ? "active" : "incomplete";
   if (!ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
     return { mode: "skipped" as const, subscriptionStatus };
   }
 
   const tenantSeed = slugify(signup.tenantName, signup.accountType);
-  const tenantId = stableId("tenant", tenantSeed, session.id);
-  const firmId = signup.accountType === "firm" ? stableId("firm", slugify(signup.firmName || signup.tenantName, "firm"), session.id) : null;
   const roles = signup.accountType === "firm" ? ["admin", "firm_admin", "attorney"] : ["admin", "attorney"];
   const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id || null;
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id || null;
+  const existing = await findExistingTenant(supabase, session, subscriptionId);
+  if (existing.error) {
+    return { mode: "storage_error" as const, error: existing.error };
+  }
+  const tenantId = existing.tenantId || stableId("tenant", tenantSeed, session.id);
+  const firmId =
+    signup.accountType === "firm"
+      ? existing.firmId || stableId("firm", slugify(signup.firmName || signup.tenantName, "firm"), session.id)
+      : null;
 
   const appMetadata = {
     tenant_id: tenantId,
@@ -152,13 +188,19 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
   const { error: tenantError } = await supabase.from("mercy_tenants").upsert(
     {
       tenant_id: tenantId,
-      tenant_name: signup.tenantName,
+      name: signup.tenantName,
+      workspace_name: signup.tenantName,
       account_type: signup.accountType,
       firm_id: firmId,
       attorney_seat_limit: signup.seats,
       subscription_status: subscriptionStatus,
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
+      stripe_checkout_session_id: session.id,
+      practice_areas: signup.practiceAreas,
+      jurisdiction_focus: signup.jurisdictionFocus,
+      created_by_user_id: signup.userId,
+      created_by_email: signup.email,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id" },
@@ -174,6 +216,7 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
         tenant_id: tenantId,
         firm_name: signup.firmName,
         attorney_seat_limit: signup.seats,
+        created_by_user_id: signup.userId,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "firm_id" },
@@ -189,6 +232,7 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
       firm_id: firmId,
       user_id: signup.userId,
       email: signup.email,
+      full_name: signup.fullName,
       roles,
       status: "active",
       updated_at: new Date().toISOString(),
@@ -213,23 +257,16 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
 export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscription) {
   const supabase = getSupabaseAdmin();
   const userId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : "";
-  if (!supabase || !userId) {
+  if (!supabase) {
     return { mode: "skipped" as const };
   }
 
-  const { data } = await supabase.auth.admin.getUserById(userId);
-  const currentAppMetadata = data.user?.app_metadata || {};
-  const status = subscription.status;
+  const status = dbSubscriptionStatus(subscription.status);
+  if (!DB_SUBSCRIPTION_STATUSES.has(status)) {
+    return { mode: "skipped" as const };
+  }
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null;
-  await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: {
-      ...currentAppMetadata,
-      subscription_status: status,
-      stripe_customer_id: customerId,
-      stripe_subscription_id: subscription.id,
-    },
-  });
-  await supabase
+  const { error: tenantError } = await supabase
     .from("mercy_tenants")
     .update({
       subscription_status: status,
@@ -237,5 +274,21 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
       updated_at: new Date().toISOString(),
     })
     .eq("stripe_subscription_id", subscription.id);
+  if (tenantError) {
+    return { mode: "storage_error" as const, error: tenantError.message };
+  }
+
+  if (userId) {
+    const { data } = await supabase.auth.admin.getUserById(userId);
+    const currentAppMetadata = data.user?.app_metadata || {};
+    await supabase.auth.admin.updateUserById(userId, {
+      app_metadata: {
+        ...currentAppMetadata,
+        subscription_status: status,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscription.id,
+      },
+    });
+  }
   return { mode: "synced" as const, status };
 }
