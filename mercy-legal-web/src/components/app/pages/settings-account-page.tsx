@@ -49,7 +49,7 @@ export function SettingsAccountPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("attorney");
   const [inviting, setInviting] = useState(false);
-  const isAdmin = session.roles.some((role) => ["admin", "platform_admin", "firm_admin", "ops"].includes(role));
+  const isAdmin = session.roles.some((role) => ["admin", "superadmin", "platform_admin", "firm_admin", "ops"].includes(role));
 
   useEffect(() => {
     if (!profileLoaded) {

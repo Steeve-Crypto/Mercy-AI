@@ -66,8 +66,13 @@ def _local_verification_env() -> dict[str, str]:
         "MERCY_POSTGRES_URL": "",
         "MERCY_DATABASE_URL": "",
         "MERCY_PGVECTOR_DSN": "",
+        "SUPABASE_URL": "",
         "SUPABASE_DB_URL": "",
         "MERCY_SUPABASE_DB_URL": "",
+        "SUPABASE_JWKS_URL": "",
+        "MERCY_SUPABASE_JWKS_URL": "",
+        "SUPABASE_JWT_ISSUER": "",
+        "MERCY_SUPABASE_JWT_ISSUER": "",
     }
 
 

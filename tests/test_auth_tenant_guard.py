@@ -7,9 +7,17 @@ import hashlib
 import hmac
 import json
 import time
+import tempfile
 from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
+
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+from mercy_storage import reset_storage_for_tests
 
 os.environ.setdefault("MERCY_ENV", "local")
 
@@ -60,11 +68,12 @@ def _supabase_jwt(
     expires_in: int = 3600,
     roles: list[str] | None = None,
     issuer: str | None = None,
+    audience: str = "authenticated",
 ) -> str:
     now = int(time.time())
     header = {"alg": "HS256", "typ": "JWT"}
     payload: dict[str, object] = {
-        "aud": "authenticated",
+        "aud": audience,
         "sub": user_id,
         "iat": now,
         "exp": now + expires_in,
@@ -82,6 +91,34 @@ def _supabase_jwt(
     return f"{signing_input}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode('ascii')}"
 
 
+RS_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+RS_PUBLIC_KEY = RS_PRIVATE_KEY.public_key()
+
+
+def _supabase_rs256_jwt(
+    *,
+    user_id: str = "rs-user-a",
+    tenant_id: str = "rs-tenant-a",
+    roles: list[str] | None = None,
+    issuer: str = "https://mercy-test.supabase.co/auth/v1",
+    audience: str = "authenticated",
+    expires_in: int = 3600,
+    kid: str | None = "supabase-unit-key",
+) -> str:
+    now = int(time.time())
+    payload: dict[str, object] = {
+        "iss": issuer,
+        "aud": audience,
+        "sub": user_id,
+        "iat": now,
+        "exp": now + expires_in,
+        "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
+        "user_metadata": {},
+    }
+    headers = {"kid": kid} if kid else None
+    return jwt.encode(payload, RS_PRIVATE_KEY, algorithm="RS256", headers=headers)
+
+
 @contextmanager
 def _patched_env(*args, **kwargs):
     from mercy_config import get_config
@@ -90,6 +127,13 @@ def _patched_env(*args, **kwargs):
         values = args[1]
         if values.get("MERCY_AUTH_MODE") == "supabase" and "SUPABASE_URL" not in values:
             values = values | {"SUPABASE_URL": ""}
+        if values.get("MERCY_AUTH_MODE") == "supabase":
+            values = {
+                "SUPABASE_JWT_ISSUER": "",
+                "MERCY_SUPABASE_JWT_ISSUER": "",
+                "SUPABASE_JWKS_URL": "",
+                "MERCY_SUPABASE_JWKS_URL": "",
+            } | values
             args = (args[0], values, *args[2:])
     with patch.dict(*args, **kwargs):
         get_config.cache_clear()
@@ -122,6 +166,65 @@ class AuthTenantGuardTests(unittest.TestCase):
         payload = created.json()
         self.assertEqual(payload["tenant_id"], "jwt-tenant-a")
         self.assertEqual(payload["created_by_user_id"], "jwt-user-a")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_modern_supabase_rs256_jwt_uses_jwks_and_derives_identity(self) -> None:
+        token = _supabase_rs256_jwt(user_id="rs-user-a", tenant_id="rs-tenant-a")
+        env = {
+            "MERCY_ENV": "prod",
+            "MERCY_AUTH_MODE": "supabase",
+            "SUPABASE_URL": "https://mercy-test.supabase.co",
+            "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+        }
+        with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+            jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+            client = TestClient(app)  # type: ignore[arg-type]
+            created = client.post("/v1/matters", headers=_jwt_headers(token, tenant_id="spoofed-tenant"), json={"name": "RS matter"})
+
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertEqual(created.json()["tenant_id"], "rs-tenant-a")
+        self.assertEqual(created.json()["created_by_user_id"], "rs-user-a")
+        jwks.return_value.get_signing_key.assert_called_once_with("supabase-unit-key")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_modern_supabase_superadmin_metadata_grants_admin_access(self) -> None:
+        token = _supabase_rs256_jwt(user_id="admin-user", tenant_id="tenant_admin_001", roles=["superadmin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'superadmin.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.get("/v1/admin/microsoft-identity-mappings", headers={"Authorization": f"Bearer {token}"})
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 200, response.text)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_modern_supabase_attorney_metadata_does_not_grant_admin_access(self) -> None:
+        token = _supabase_rs256_jwt(user_id="attorney-user", tenant_id="tenant_attorney_001", roles=["attorney"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'attorney.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.get("/v1/admin/microsoft-identity-mappings", headers={"Authorization": f"Bearer {token}"})
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 403)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_firm_id_takes_precedence_and_tenant_id_supports_solo_accounts(self) -> None:
@@ -157,6 +260,53 @@ class AuthTenantGuardTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 401)
         self.assertEqual(bad_signature.status_code, 401)
         self.assertEqual(expired_response.status_code, 401)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_supabase_jwt_rejects_unsupported_algorithm_missing_kid_and_bad_claims(self) -> None:
+        unsupported = jwt.encode(
+            {
+                "aud": "authenticated",
+                "sub": "unsupported-user",
+                "exp": int(time.time()) + 600,
+                "app_metadata": {"tenant_id": "tenant-a", "roles": ["attorney"]},
+            },
+            "secret",
+            algorithm="HS384",
+        )
+        missing_kid = _supabase_rs256_jwt(kid=None)
+        wrong_audience = _supabase_rs256_jwt(audience="wrong-audience")
+        wrong_issuer = _supabase_rs256_jwt(issuer="https://wrong-project.supabase.co/auth/v1")
+        expired = _supabase_rs256_jwt(expires_in=-60)
+        env = {
+            "MERCY_ENV": "prod",
+            "MERCY_AUTH_MODE": "supabase",
+            "SUPABASE_URL": "https://mercy-test.supabase.co",
+            "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+        }
+        with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+            jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+            client = TestClient(app)  # type: ignore[arg-type]
+            responses = [
+                client.get("/v1/matters", headers={"Authorization": f"Bearer {unsupported}"}),
+                client.get("/v1/matters", headers={"Authorization": f"Bearer {missing_kid}"}),
+                client.get("/v1/matters", headers={"Authorization": f"Bearer {wrong_audience}"}),
+                client.get("/v1/matters", headers={"Authorization": f"Bearer {wrong_issuer}"}),
+                client.get("/v1/matters", headers={"Authorization": f"Bearer {expired}"}),
+            ]
+
+        self.assertEqual([response.status_code for response in responses], [401, 401, 401, 401, 401])
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_supabase_hs256_jwt_rejects_wrong_audience(self) -> None:
+        token = _supabase_jwt(audience="wrong-audience")
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            client = TestClient(app)  # type: ignore[arg-type]
+            response = client.get("/v1/matters", headers={"Authorization": f"Bearer {token}"})
+
+        self.assertEqual(response.status_code, 401)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_supabase_jwt_misconfiguration_fails_closed(self) -> None:

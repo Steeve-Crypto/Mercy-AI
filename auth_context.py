@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Header, HTTPException, Request
+import jwt
 
 from mercy_config import get_config
 from observability import trace_event
@@ -83,19 +84,36 @@ def _jwt_payload(token: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid JWT encoding.") from exc
     if not isinstance(header, dict) or not isinstance(payload, dict):
         raise HTTPException(status_code=401, detail="Invalid JWT payload.")
-    if header.get("alg") != "HS256":
-        raise HTTPException(status_code=401, detail="Unsupported JWT algorithm.")
-    secret = get_config().supabase_jwt_secret
-    if secret is None or not secret.get_secret_value():
-        raise HTTPException(status_code=500, detail="Supabase JWT verification is not configured.")
-    signing_input = f"{parts[0]}.{parts[1]}".encode("ascii")
-    expected = hmac.new(secret.get_secret_value().encode("utf-8"), signing_input, hashlib.sha256).digest()
-    try:
-        actual = _b64url_decode(parts[2])
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="Invalid JWT signature encoding.") from exc
-    if not hmac.compare_digest(actual, expected):
-        raise HTTPException(status_code=401, detail="Invalid JWT signature.")
+    alg = header.get("alg")
+    if alg == "HS256":
+        return _verify_hs256_jwt(parts, payload)
+    if alg in {"RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512"}:
+        return _verify_asymmetric_jwt(token, header)
+    raise HTTPException(status_code=401, detail=f"Unsupported JWT algorithm: {alg or 'missing'}.")
+
+
+def _expected_jwt_audience() -> str:
+    return get_config().supabase_jwt_audience or "authenticated"
+
+
+def _expected_jwt_issuer() -> str | None:
+    return get_config().effective_supabase_jwt_issuer
+
+
+def _validate_required_claims(payload: dict[str, Any]) -> None:
+    if not _claim_string(payload.get("sub")):
+        raise HTTPException(status_code=401, detail="JWT subject is required.")
+
+
+def _audience_matches(audience: Any, expected: str) -> bool:
+    if isinstance(audience, str):
+        return audience == expected
+    if isinstance(audience, list):
+        return expected in {str(item) for item in audience}
+    return False
+
+
+def _verify_registered_claims(payload: dict[str, Any]) -> None:
     exp = payload.get("exp")
     if exp is None:
         raise HTTPException(status_code=401, detail="JWT expiration is required.")
@@ -114,15 +132,66 @@ def _jwt_payload(token: str) -> dict[str, Any]:
             raise HTTPException(status_code=401, detail="Invalid JWT not-before claim.") from exc
         if not_before > now:
             raise HTTPException(status_code=401, detail="JWT is not active yet.")
-    aud = payload.get("aud")
-    if aud not in {None, "authenticated"}:
+    if not _audience_matches(payload.get("aud"), _expected_jwt_audience()):
         raise HTTPException(status_code=401, detail="Invalid JWT audience.")
-    supabase_url = get_config().supabase_url
-    expected_issuer = f"{supabase_url.rstrip('/')}/auth/v1" if supabase_url else None
+    expected_issuer = _expected_jwt_issuer()
     issuer = payload.get("iss")
     if expected_issuer and issuer != expected_issuer:
         raise HTTPException(status_code=401, detail="Invalid JWT issuer.")
+    _validate_required_claims(payload)
+
+
+def _verify_hs256_jwt(parts: list[str], payload: dict[str, Any]) -> dict[str, Any]:
+    secret = get_config().supabase_jwt_secret
+    if secret is None or not secret.get_secret_value():
+        raise HTTPException(status_code=500, detail="Supabase JWT verification is not configured.")
+    signing_input = f"{parts[0]}.{parts[1]}".encode("ascii")
+    expected = hmac.new(secret.get_secret_value().encode("utf-8"), signing_input, hashlib.sha256).digest()
+    try:
+        actual = _b64url_decode(parts[2])
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid JWT signature encoding.") from exc
+    if not hmac.compare_digest(actual, expected):
+        raise HTTPException(status_code=401, detail="Invalid JWT signature.")
+    _verify_registered_claims(payload)
     return payload
+
+
+def _verify_asymmetric_jwt(token: str, header: dict[str, Any]) -> dict[str, Any]:
+    kid = _claim_string(header.get("kid"))
+    if not kid:
+        raise HTTPException(status_code=401, detail="JWT key id is required for Supabase JWKS verification.")
+    jwks_url = get_config().effective_supabase_jwks_url
+    if not jwks_url:
+        raise HTTPException(status_code=500, detail="Supabase JWKS verification is not configured.")
+    try:
+        signing_key = jwt.PyJWKClient(jwks_url).get_signing_key(kid).key
+        decode_kwargs: dict[str, Any] = {
+            "key": signing_key,
+            "algorithms": [str(header["alg"])],
+            "audience": _expected_jwt_audience(),
+            "options": {"require": ["exp", "sub"]},
+        }
+        expected_issuer = _expected_jwt_issuer()
+        if expected_issuer:
+            decode_kwargs["issuer"] = expected_issuer
+        decoded = jwt.decode(token, **decode_kwargs)
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="JWT has expired.") from exc
+    except jwt.ImmatureSignatureError as exc:
+        raise HTTPException(status_code=401, detail="JWT is not active yet.") from exc
+    except jwt.InvalidAudienceError as exc:
+        raise HTTPException(status_code=401, detail="Invalid JWT audience.") from exc
+    except jwt.InvalidIssuerError as exc:
+        raise HTTPException(status_code=401, detail="Invalid JWT issuer.") from exc
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid JWT signature or claims.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Unable to verify Supabase JWT signing key.") from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(status_code=401, detail="Invalid JWT payload.")
+    _validate_required_claims(decoded)
+    return decoded
 
 
 def _claim_metadata(payload: dict[str, Any], name: str) -> dict[str, Any]:

@@ -5,13 +5,18 @@ import os
 from pathlib import Path
 from typing import Literal
 
+from dotenv import load_dotenv
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+ROOT_ENV_FILE = Path(__file__).resolve().with_name(".env")
+load_dotenv(ROOT_ENV_FILE, override=False)
+
+
 def _placeholder_value(value: str) -> bool:
     normalized = value.strip()
-    return any(marker in normalized for marker in ("USER:PASSWORD@HOST:PORT", "YOUR_TENANT_ID"))
+    return any(marker in normalized for marker in ("USER:PASSWORD@HOST:PORT", "YOUR_TENANT_ID", "your-project.supabase.co"))
 
 
 class MercyConfig(BaseSettings):
@@ -24,7 +29,7 @@ class MercyConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ROOT_ENV_FILE,
         env_file_encoding="utf-8",
         env_prefix="MERCY_",
         case_sensitive=False,
@@ -113,6 +118,9 @@ class MercyConfig(BaseSettings):
     supabase_anon_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "MERCY_SUPABASE_ANON_KEY"))
     supabase_service_role_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_SERVICE_ROLE_KEY", "MERCY_SUPABASE_SERVICE_ROLE_KEY"))
     supabase_jwt_secret: SecretStr | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_JWT_SECRET", "MERCY_SUPABASE_JWT_SECRET"))
+    supabase_jwks_url: str | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_JWKS_URL", "MERCY_SUPABASE_JWKS_URL"))
+    supabase_jwt_issuer: str | None = Field(default=None, validation_alias=AliasChoices("SUPABASE_JWT_ISSUER", "MERCY_SUPABASE_JWT_ISSUER"))
+    supabase_jwt_audience: str = Field(default="authenticated", validation_alias=AliasChoices("SUPABASE_JWT_AUDIENCE", "MERCY_SUPABASE_JWT_AUDIENCE"))
     microsoft_entra_tenant_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_TENANT_ID", "MERCY_MICROSOFT_ENTRA_TENANT_ID"))
     microsoft_entra_client_id: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_CLIENT_ID", "MERCY_MICROSOFT_ENTRA_CLIENT_ID"))
     microsoft_entra_application_id_uri: str | None = Field(default=None, validation_alias=AliasChoices("MICROSOFT_ENTRA_APPLICATION_ID_URI", "MERCY_MICROSOFT_ENTRA_APPLICATION_ID_URI"))
@@ -232,6 +240,22 @@ class MercyConfig(BaseSettings):
         return first_secret(self.database_url_override)
 
     @property
+    def effective_supabase_jwks_url(self) -> str | None:
+        if self.supabase_jwks_url and not _placeholder_value(self.supabase_jwks_url):
+            return self.supabase_jwks_url
+        if self.supabase_url and not _placeholder_value(self.supabase_url):
+            return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        return None
+
+    @property
+    def effective_supabase_jwt_issuer(self) -> str | None:
+        if self.supabase_jwt_issuer and not _placeholder_value(self.supabase_jwt_issuer):
+            return self.supabase_jwt_issuer
+        if self.supabase_url and not _placeholder_value(self.supabase_url):
+            return f"{self.supabase_url.rstrip('/')}/auth/v1"
+        return None
+
+    @property
     def upload_dir(self) -> Path:
         if self.upload_dir_raw:
             return Path(self.upload_dir_raw).expanduser()
@@ -277,8 +301,10 @@ class MercyConfig(BaseSettings):
         if not production_like and not self.effective_api_token and self.mercy_auth_mode in {"test", "token"}:
             issues.append("MERCY_API_TOKEN or MERCY_CORE_API_TOKEN is required for test/token auth.")
         if production_like and self.mercy_auth_mode == "supabase":
-            if not self.supabase_url or not self.supabase_anon_key or not self.supabase_jwt_secret:
-                issues.append("SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_JWT_SECRET are required for Supabase auth.")
+            if not self.supabase_url or not self.supabase_anon_key:
+                issues.append("SUPABASE_URL and SUPABASE_ANON_KEY are required for Supabase auth.")
+            if not self.supabase_jwt_secret and not self.effective_supabase_jwks_url:
+                issues.append("SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL is required for Supabase JWT verification.")
         if production_like and self.office_naa_enabled:
             if not self.microsoft_entra_tenant_id or not self.microsoft_entra_client_id or not self.microsoft_entra_issuer or not self.microsoft_entra_jwks_url:
                 issues.append("MICROSOFT_ENTRA_TENANT_ID, MICROSOFT_ENTRA_CLIENT_ID, MICROSOFT_ENTRA_ISSUER, and MICROSOFT_ENTRA_JWKS_URL are required for Office NAA.")
@@ -337,3 +363,4 @@ def get_config() -> MercyConfig:
 
 
 __all__ = ["MercyConfig", "get_config"]
+Path(__file__).with_name(".env")

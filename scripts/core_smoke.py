@@ -59,6 +59,10 @@ def main() -> int:
     os.environ["MERCY_ENV"] = "verify"
     os.environ["MERCY_AUTH_MODE"] = "supabase"
     os.environ["SUPABASE_URL"] = ""
+    os.environ["SUPABASE_JWKS_URL"] = ""
+    os.environ["MERCY_SUPABASE_JWKS_URL"] = ""
+    os.environ["SUPABASE_JWT_ISSUER"] = ""
+    os.environ["MERCY_SUPABASE_JWT_ISSUER"] = ""
     os.environ["SUPABASE_JWT_SECRET"] = JWT_SECRET
     temp_dir = tempfile.TemporaryDirectory()
     os.environ["POSTGRES_URL"] = f"sqlite+pysqlite:///{Path(temp_dir.name) / 'mercy-core-smoke.db'}"

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/chat", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
-const ADMIN_ROLES = new Set(["admin", "platform_admin", "ops"]);
+const ADMIN_ROLES = new Set(["admin", "superadmin", "platform_admin", "ops"]);
 
 function supabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
