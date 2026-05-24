@@ -16,7 +16,7 @@ type SignupFormProps = {
 };
 
 const practicePlaceholder = "Contract review, civil litigation, landlord-tenant...";
-const steps = ["Plan", "Account", "Payment", "Workspace"];
+const steps = ["Plan", "Register", "Payment", "Confirmation"];
 
 function priceFor(accountType: AccountType, seats: number) {
   return accountType === "firm" ? `$98 x ${seats} seats = $${98 * seats}/month` : "$98/month";
@@ -48,16 +48,18 @@ export function SignupPlanSelection() {
             icon={<UserRound className="size-5" />}
             title="Solo Practitioner"
             price="$98/month"
-            detail="One attorney seat, one tenant workspace, and admin access for your own practice."
+            detail="Individual attorney workspace with one seat and admin access for your own practice."
             points={["1 included attorney seat", "Tenant workspace created after payment", "No firm profile required"]}
+            cta="Choose Solo"
           />
           <PlanCard
             href="/sign-up/firm"
             icon={<Building2 className="size-5" />}
             title="Small Firm"
             price="$98/seat/month"
-            detail="A shared tenant workspace plus firm profile for teams with at least two attorney seats."
+            detail="Shared tenant workspace with a firm profile and attorney seats for small teams."
             points={["Minimum 2 attorney seats", "Starts at $196/month", "Firm admin access after payment"]}
+            cta="Choose Firm"
           />
         </div>
       </div>
@@ -65,7 +67,7 @@ export function SignupPlanSelection() {
   );
 }
 
-function Stepper({ activeStep }: { activeStep: "Plan" | "Account" | "Payment" | "Workspace" }) {
+function Stepper({ activeStep }: { activeStep: "Plan" | "Register" | "Payment" | "Confirmation" }) {
   const activeIndex = steps.indexOf(activeStep);
   return (
     <ol className="mb-8 grid gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-4">
@@ -89,6 +91,7 @@ function PlanCard({
   price,
   detail,
   points,
+  cta,
 }: {
   href: string;
   icon: ReactNode;
@@ -96,6 +99,7 @@ function PlanCard({
   price: string;
   detail: string;
   points: string[];
+  cta: string;
 }) {
   return (
     <section className="rounded-lg border bg-white p-7 shadow-[0_18px_60px_rgba(10,20,40,0.06)]">
@@ -112,7 +116,7 @@ function PlanCard({
         ))}
       </ul>
       <Button asChild variant="gold" className="mt-7 w-full">
-        <Link href={href}>Continue</Link>
+        <Link href={href}>{cta}</Link>
       </Button>
     </section>
   );
@@ -224,7 +228,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
             {isFirm ? "Create a paid firm workspace." : "Create your paid solo workspace."}
           </h1>
           <p className="mt-5 text-sm leading-7 text-white/72">
-            Payment happens before Mercy Workspace access. Tenant and firm IDs are created by the server after Stripe confirms the subscription.
+            Payment happens before activation. Tenant and firm IDs are created by the server after Stripe confirms the subscription.
           </p>
           <div className="mt-8 rounded-lg border border-white/12 bg-white/8 p-5">
             <p className="text-sm text-white/70">Beta price</p>
@@ -235,7 +239,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
 
       <section className="flex justify-center px-6 py-10">
         <div className="w-full max-w-2xl">
-          <Stepper activeStep="Account" />
+          <Stepper activeStep="Register" />
           <Button asChild variant="ghost" className="mb-8">
             <Link href="/sign-up">
               <ArrowLeft />
@@ -290,7 +294,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
               {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 md:col-span-2">{error}</div> : null}
               <Button type="submit" variant="gold" className="h-12 w-full md:col-span-2" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                {busy ? "Preparing review..." : "Review plan"}
+                {busy ? "Preparing review..." : "Review and continue"}
               </Button>
             </form>
           </div>
