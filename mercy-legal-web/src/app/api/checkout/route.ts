@@ -86,12 +86,12 @@ export async function POST(request: Request) {
   }
 
   const session = await stripe.checkout.sessions.create({
+    ui_mode: "embedded",
     mode: "subscription",
     payment_method_types: ["card"],
     customer_email: signup.email,
     line_items: [{ price: priceId, quantity: signup.seats }],
-    success_url: `${appUrl}/sign-up/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/sign-up/cancel?account=${encodeURIComponent(signup.accountType)}`,
+    return_url: `${appUrl}/sign-up/success?session_id={CHECKOUT_SESSION_ID}`,
     client_reference_id: signup.userId,
     metadata: {
       product: "mercy-ai",
@@ -106,5 +106,12 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ url: session.url });
+  if (!session.client_secret) {
+    return NextResponse.json({ error: "Stripe did not return an embedded checkout client secret." }, { status: 502 });
+  }
+
+  return NextResponse.json({
+    clientSecret: session.client_secret,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
+  });
 }

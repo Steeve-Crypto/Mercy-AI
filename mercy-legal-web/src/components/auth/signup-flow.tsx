@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { ArrowLeft, Building2, CheckCircle2, Loader2, Scale, ShieldCheck, UserRound } from "lucide-react";
@@ -15,6 +16,7 @@ type SignupFormProps = {
 };
 
 const practicePlaceholder = "Contract review, civil litigation, landlord-tenant...";
+const steps = ["Plan", "Account", "Payment", "Workspace"];
 
 function priceFor(accountType: AccountType, seats: number) {
   return accountType === "firm" ? `$98 x ${seats} seats = $${98 * seats}/month` : "$98/month";
@@ -31,6 +33,7 @@ export function SignupPlanSelection() {
           </Link>
         </Button>
         <div className="mt-10 max-w-3xl">
+          <Stepper activeStep="Plan" />
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#a37f12]">Beta signup</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-normal text-mercy-navy md:text-5xl">
             Choose your Mercy workspace.
@@ -59,6 +62,23 @@ export function SignupPlanSelection() {
         </div>
       </div>
     </main>
+  );
+}
+
+function Stepper({ activeStep }: { activeStep: "Plan" | "Account" | "Payment" | "Workspace" }) {
+  const activeIndex = steps.indexOf(activeStep);
+  return (
+    <ol className="mb-8 grid gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-4">
+      {steps.map((step, index) => (
+        <li
+          key={step}
+          className={`rounded-md border px-3 py-2 ${index <= activeIndex ? "border-[#d4af37]/50 bg-[#fff8df] text-mercy-navy" : "border-slate-200 bg-white"}`}
+        >
+          <span className="mr-2 text-[#9b740e]">{index + 1}</span>
+          {step}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -99,6 +119,7 @@ function PlanCard({
 }
 
 export function SignupForm({ accountType }: SignupFormProps) {
+  const router = useRouter();
   const isFirm = accountType === "firm";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -181,20 +202,8 @@ export function SignupForm({ accountType }: SignupFormProps) {
       responsibilityAccepted,
     };
     window.sessionStorage.setItem("mercy.pendingSignupCheckout", JSON.stringify(checkoutPayload));
-    const checkoutResponse = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(checkoutPayload),
-    });
-    const checkout = (await checkoutResponse.json().catch(() => ({}))) as { url?: string; error?: string };
     setBusy(false);
-
-    if (!checkoutResponse.ok || !checkout.url) {
-      setError(checkout.error || "Checkout failed. Please try again.");
-      return;
-    }
-    window.sessionStorage.removeItem("mercy.pendingSignupCheckout");
-    window.location.href = checkout.url;
+    router.push("/sign-up/checkout");
   }
 
   return (
@@ -226,6 +235,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
 
       <section className="flex justify-center px-6 py-10">
         <div className="w-full max-w-2xl">
+          <Stepper activeStep="Account" />
           <Button asChild variant="ghost" className="mb-8">
             <Link href="/sign-up">
               <ArrowLeft />
@@ -280,7 +290,7 @@ export function SignupForm({ accountType }: SignupFormProps) {
               {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 md:col-span-2">{error}</div> : null}
               <Button type="submit" variant="gold" className="h-12 w-full md:col-span-2" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                {busy ? "Opening checkout..." : "Continue to payment"}
+                {busy ? "Preparing review..." : "Review plan"}
               </Button>
             </form>
           </div>
