@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import type React from "react";
-import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { useState, type ReactNode } from "react";
 import {
   ArrowRight,
   BadgeCheck,
   BookOpenCheck,
   BriefcaseBusiness,
   Building2,
-  Check,
+  CheckCircle2,
+  ChevronDown,
   FileCheck2,
   FileText,
   Fingerprint,
@@ -31,7 +31,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const routes = {
@@ -39,7 +38,6 @@ const routes = {
   howItWorks: "/how-it-works",
   useCases: "/use-cases",
   security: "/security",
-  pricing: "/pricing",
   resources: "/resources",
   trust: "/trust",
   contact: "/contact",
@@ -47,141 +45,225 @@ const routes = {
   getStarted: "/sign-up",
 };
 
-const navItems = [
-  ["Home", routes.home],
-  ["How it works", routes.howItWorks],
-  ["Use cases", routes.useCases],
-  ["Security", routes.security],
-  ["Pricing", routes.pricing],
-  ["Resources", routes.resources],
-  ["Trust", routes.trust],
-  ["Contact / Demo", routes.contact],
+const productLinks = [
+  ["Overview", routes.home, "How Mercy’s surfaces work together."],
+  ["Mercy Workspace", `${routes.howItWorks}#workspace`, "Matter-centered web workspace."],
+  ["Word Add-in", `${routes.howItWorks}#word-addin`, "Draft and review inside Word."],
+  ["Outlook Add-in", `${routes.howItWorks}#outlook-addin`, "Work from selected email text."],
+  ["Reliability Panel", `${routes.howItWorks}#reliability`, "Citations, grounding, and review signals."],
+  ["Matter Intelligence", `${routes.howItWorks}#matter-context`, "Context organized around matters."],
 ] as const;
 
-type MarketingShellProps = {
-  children: React.ReactNode;
-};
+const solutionLinks = [
+  ["Solo Practitioners", `${routes.useCases}#solo`, "Focused workflows for individual attorneys."],
+  ["Small Firms", `${routes.useCases}#firms`, "Tenant workspaces for small teams."],
+  ["Drafting", `${routes.useCases}#drafting`, "First drafts with attorney review."],
+  ["Document Review", `${routes.useCases}#review`, "Review uploaded and selected text."],
+  ["Citation & Source Checking", `${routes.useCases}#citations`, "Source visibility before use."],
+  ["Intake & Matter Organization", `${routes.useCases}#intake`, "Structured context from the start."],
+] as const;
 
-type IconType = LucideIcon;
+const resourceLinks = [
+  ["Blog", `${routes.resources}#blog`, "Product notes and beta updates."],
+  ["Guides", `${routes.resources}#guides`, "Legal AI responsibility resources."],
+  ["About / Trust", routes.trust, "Principles behind Mercy."],
+  ["Contact Us", routes.contact, "Request a demo or trust packet."],
+] as const;
 
-type FeatureItem = {
+type Feature = {
   title: string;
   description: string;
-  icon: IconType;
+  icon: LucideIcon;
+  href?: string;
+  id?: string;
 };
 
 function LogoMark() {
   return (
     <Link href={routes.home} className="flex items-center gap-3">
-      <span className="flex size-10 items-center justify-center rounded-md bg-mercy-navy text-white shadow-sm">
+      <span className="grid size-10 place-items-center rounded-sm bg-[#111827] text-white">
         <Scale className="size-5" />
       </span>
-      <span>
-        <span className="block text-base font-semibold text-mercy-navy">Mercy</span>
-        <span className="block text-xs text-slate-500">Legal AI</span>
-      </span>
+      <span className="text-lg font-semibold tracking-normal text-[#111827]">Mercy</span>
     </Link>
   );
 }
 
-export function MarketingShell({ children }: MarketingShellProps) {
+export function MarketingShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f7f8fb] text-mercy-navy">
+    <div className="min-h-screen bg-[#f6f4ef] text-[#151515]">
       <MarketingHeader />
       {children}
-      <Footer />
+      <MarketingFooter />
     </div>
   );
 }
 
 function MarketingHeader() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const isActive = (href: string) => (href === routes.home ? pathname === routes.home : pathname.startsWith(href));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const active = (href: string) => {
+    const clean = href.split("#")[0] || "/";
+    return clean === "/" ? pathname === "/" : pathname.startsWith(clean);
+  };
+
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/92 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-black/10 bg-[#f6f4ef]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-4 lg:px-8">
         <LogoMark />
-        <nav className="hidden items-center gap-5 text-sm text-slate-600 xl:flex" aria-label="Marketing navigation">
-          {navItems.map(([label, href]) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isActive(href) ? "page" : undefined}
-              className={cn("rounded-md px-2 py-1 transition hover:text-mercy-navy", isActive(href) && "bg-slate-100 font-semibold text-mercy-navy")}
-            >
-              {label}
-            </Link>
-          ))}
+        <nav className="hidden items-center gap-1 text-sm font-medium text-[#4b4741] lg:flex" aria-label="Marketing navigation">
+          <MegaMenu label="Product" items={productLinks} active={active(routes.howItWorks) || pathname === "/"} />
+          <MegaMenu label="Solutions" items={solutionLinks} active={active(routes.useCases)} />
+          <Link className={navClass(active(routes.useCases))} href={`${routes.useCases}#dc`}>
+            Location
+          </Link>
+          <Link className={navClass(active(routes.security))} href={routes.security}>
+            Security
+          </Link>
+          <MegaMenu label="Resources" items={resourceLinks} active={active(routes.resources) || active(routes.trust) || active(routes.contact)} align="right" />
         </nav>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href={routes.signIn}>Sign in</Link>
+        <div className="hidden items-center gap-3 lg:flex">
+          <Button asChild variant="ghost" size="sm">
+            <Link href={routes.signIn}>Login</Link>
           </Button>
-          <Button asChild variant="gold" size="sm" className="hidden sm:inline-flex">
-            <Link href={routes.getStarted}>Get started</Link>
+          <Button asChild variant="outline" size="sm" className="border-[#111827] bg-transparent">
+            <Link href={routes.contact}>Request Demo</Link>
           </Button>
-          <button
-            type="button"
-            aria-label={open ? "Close marketing menu" : "Open marketing menu"}
-            aria-expanded={open}
-            className="inline-flex size-10 items-center justify-center rounded-md border border-slate-200 bg-white xl:hidden"
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          <Button asChild size="sm">
+            <Link href={routes.getStarted}>Get Started</Link>
+          </Button>
         </div>
+        <button
+          type="button"
+          className="grid size-10 place-items-center rounded-md border border-black/10 bg-white lg:hidden"
+          onClick={() => setMobileOpen((value) => !value)}
+          aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileOpen}
+        >
+          {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+        </button>
       </div>
-      {open ? (
-        <div className="border-t border-slate-200 bg-white px-5 py-4 shadow-lg xl:hidden">
-          <nav className="mx-auto grid max-w-7xl gap-2" aria-label="Mobile marketing navigation">
-            {[...navItems, ["Sign in", routes.signIn], ["Get started", routes.getStarted]].map(([label, href]) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={cn("rounded-md px-3 py-3 text-sm text-slate-700", isActive(href) && "bg-slate-100 font-semibold text-mercy-navy")}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      ) : null}
+      {mobileOpen ? <MobileNav onNavigate={() => setMobileOpen(false)} /> : null}
     </header>
   );
 }
 
-function Footer() {
-  const groups = [
-    ["Product", [["How it Works", routes.howItWorks], ["Use Cases", routes.useCases], ["Pricing", routes.pricing]]],
-    ["Trust", [["Security", routes.security], ["Trust", routes.trust], ["Contact", routes.contact]]],
-    ["Resources", [["Guides", routes.resources], ["Support", routes.contact], ["Updates", routes.resources]]],
-    ["Legal", [["Terms request", routes.contact], ["Privacy request", routes.contact], ["DPA request", routes.contact]]],
-  ] as const;
+function navClass(isActive: boolean) {
+  return cn("rounded-full px-4 py-2 transition hover:bg-black/5 hover:text-black", isActive && "bg-black text-white hover:bg-black hover:text-white");
+}
+
+function MegaMenu({
+  label,
+  items,
+  active,
+  align = "left",
+}: {
+  label: string;
+  items: readonly (readonly [string, string, string])[];
+  active: boolean;
+  align?: "left" | "right";
+}) {
   return (
-    <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 lg:grid-cols-[1.2fr_2fr] lg:px-8">
-        <div>
-          <LogoMark />
-          <p className="mt-5 max-w-sm text-sm leading-6 text-slate-600">
-            Secure legal AI workflows for attorneys who need speed, source visibility, and control across web, Word, and Outlook.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            <TrustBadge>Built for attorney-supervised legal work</TrustBadge>
-            <TrustBadge>Your documents should stay your documents</TrustBadge>
-          </div>
+    <div className="group relative">
+      <button type="button" className={cn(navClass(active), "inline-flex items-center gap-1")}>
+        {label}
+        <ChevronDown className="size-4" />
+      </button>
+      <div
+        className={cn(
+          "invisible absolute top-full pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100",
+          align === "right" ? "right-0" : "left-0",
+        )}
+      >
+        <div className="grid w-[680px] grid-cols-2 gap-2 rounded-lg border border-white/10 bg-[#4b4944]/95 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur">
+          {items.map(([title, href, description]) => (
+            <Link key={title} href={href} className="rounded-md p-4 transition hover:bg-white/10">
+              <span className="text-sm font-semibold">{title}</span>
+              <span className="mt-2 block text-sm leading-5 text-white/70">{description}</span>
+            </Link>
+          ))}
         </div>
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+      </div>
+    </div>
+  );
+}
+
+function MobileNav({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <div className="border-t border-black/10 bg-[#f6f4ef] px-5 py-5 lg:hidden">
+      <nav className="mx-auto grid max-w-7xl gap-3 text-sm" aria-label="Mobile marketing navigation">
+        <MobileGroup title="Product" items={productLinks} onNavigate={onNavigate} />
+        <MobileGroup title="Solutions" items={solutionLinks} onNavigate={onNavigate} />
+        <Link onClick={onNavigate} className="rounded-md border bg-white px-4 py-3 font-medium" href={`${routes.useCases}#dc`}>
+          Location: Washington, DC
+        </Link>
+        <Link onClick={onNavigate} className="rounded-md border bg-white px-4 py-3 font-medium" href={routes.security}>
+          Security
+        </Link>
+        <MobileGroup title="Resources" items={resourceLinks} onNavigate={onNavigate} />
+        <div className="grid gap-2 pt-2 sm:grid-cols-3">
+          <Button asChild variant="outline">
+            <Link onClick={onNavigate} href={routes.signIn}>Login</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link onClick={onNavigate} href={routes.contact}>Request Demo</Link>
+          </Button>
+          <Button asChild>
+            <Link onClick={onNavigate} href={routes.getStarted}>Get Started</Link>
+          </Button>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function MobileGroup({ title, items, onNavigate }: { title: string; items: readonly (readonly [string, string, string])[]; onNavigate: () => void }) {
+  return (
+    <details className="rounded-md border bg-white">
+      <summary className="cursor-pointer px-4 py-3 font-semibold">{title}</summary>
+      <div className="grid gap-1 border-t px-2 py-2">
+        {items.map(([label, href, description]) => (
+          <Link key={label} onClick={onNavigate} href={href} className="rounded-md px-3 py-3 hover:bg-slate-50">
+            <span className="font-medium">{label}</span>
+            <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span>
+          </Link>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function MarketingFooter() {
+  const groups = [
+    ["Product", [["Workspace", `${routes.howItWorks}#workspace`], ["Word Add-in", `${routes.howItWorks}#word-addin`], ["Outlook Add-in", `${routes.howItWorks}#outlook-addin`], ["Reliability Panel", `${routes.howItWorks}#reliability`]]],
+    ["Solutions", [["Solo", `${routes.useCases}#solo`], ["Small Firms", `${routes.useCases}#firms`], ["Drafting", `${routes.useCases}#drafting`], ["Review", `${routes.useCases}#review`], ["D.C.", `${routes.useCases}#dc`]]],
+    ["Trust", [["Security", routes.security], ["About / Trust", routes.trust], ["Contact", routes.contact]]],
+    ["Resources", [["Guides", `${routes.resources}#guides`], ["Blog", `${routes.resources}#blog`], ["Support", routes.contact]]],
+    ["Legal", [["Terms available on request", routes.contact], ["Privacy available on request", routes.contact], ["DPA request", routes.contact]]],
+  ] as const;
+
+  return (
+    <footer className="border-t border-black/10 bg-[#111827] text-white">
+      <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-14 lg:grid-cols-[1.1fr_2.4fr] lg:px-8">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-sm bg-white text-[#111827]">
+              <Scale className="size-5" />
+            </span>
+            <span className="text-lg font-semibold">Mercy</span>
+          </div>
+          <p className="mt-6 max-w-sm text-sm leading-6 text-white/68">
+            Built for attorney-supervised legal work. Your documents should stay your documents. Currently focused on Washington, DC beta.
+          </p>
+        </div>
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
           {groups.map(([title, links]) => (
             <div key={title}>
               <h3 className="text-sm font-semibold">{title}</h3>
-              <ul className="mt-4 space-y-3 text-sm text-slate-600">
+              <ul className="mt-4 space-y-3 text-sm text-white/64">
                 {links.map(([label, href]) => (
                   <li key={label}>
-                    <Link href={href} className="hover:text-mercy-navy">
-                      {label}
-                    </Link>
+                    <Link href={href} className="hover:text-white">{label}</Link>
                   </li>
                 ))}
               </ul>
@@ -193,89 +275,107 @@ function Footer() {
   );
 }
 
-function TrustBadge({ children }: { children: React.ReactNode }) {
+function HeroSection() {
   return (
-    <span className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-      <BadgeCheck className="size-3.5 text-[#a37f12]" />
-      {children}
-    </span>
-  );
-}
-
-function Hero({
-  eyebrow,
-  title,
-  description,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <section className="relative overflow-hidden bg-mercy-navy text-white">
-      <div className="navy-grid absolute inset-0 opacity-60" aria-hidden />
-      <div className="relative mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
+    <section className="bg-[#f6f4ef] px-5 py-20 lg:px-8 lg:py-28">
+      <div className="mx-auto grid max-w-[1440px] gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#f0df9b]">{eyebrow}</p>
-          <h1 className="mt-5 max-w-4xl text-4xl font-semibold leading-tight tracking-normal md:text-6xl">{title}</h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-white/76">{description}</p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="gold" size="lg">
-              <Link href={routes.getStarted}>
-                Get started
-                <ArrowRight />
-              </Link>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Legal AI for attorney control</p>
+          <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.02] tracking-normal text-[#111827] md:text-7xl">
+            Legal AI for attorneys who need speed without losing control.
+          </h1>
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-[#5b564e]">
+            Mercy combines a secure web workspace, Word and Outlook add-ins, matter-centered context, D.C.-focused workflows, and reliability checks designed for attorney review.
+          </p>
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg">
+              <Link href={routes.getStarted}>Get Started <ArrowRight /></Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="border-white/18 bg-white/8 text-white hover:bg-white/14">
-              <Link href={routes.contact}>Request demo</Link>
+            <Button asChild variant="outline" size="lg" className="border-[#111827] bg-transparent">
+              <Link href={routes.contact}>Request Demo</Link>
             </Button>
           </div>
         </div>
-        {children ?? <ProductPreview />}
+        <ProductArchitectureVisual />
       </div>
     </section>
   );
 }
 
-function ProductPreview() {
+function ProductArchitectureVisual() {
   return (
-    <div className="rounded-lg border border-white/12 bg-white/[0.08] p-3 shadow-[0_32px_90px_rgba(0,0,0,0.28)] backdrop-blur">
-      <div className="grid gap-3 rounded-md bg-[#f8fafc] p-3 text-mercy-navy">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+    <div className="relative rounded-xl border border-black/10 bg-[#d8d1c2] p-4 shadow-[0_40px_120px_rgba(17,24,39,0.22)]">
+      <div className="rounded-lg border border-white/60 bg-[#f8f7f3] p-4">
+        <div className="flex items-center justify-between border-b border-black/10 pb-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Matter workspace</p>
-            <h2 className="mt-1 text-xl font-semibold">Smith v. District Agency</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6b16]">Mercy Workspace</p>
+            <h2 className="mt-1 text-xl font-semibold">Matter: Agency response review</h2>
           </div>
-          <span className="rounded-md bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Tenant scoped</span>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">Tenant isolated</span>
         </div>
-        <div className="grid gap-3 md:grid-cols-[1fr_0.8fr]">
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.86fr]">
           <div className="space-y-3">
-            {["Draft first version", "Review selected Word text", "Check citation/source visibility"].map((item) => (
-              <div key={item} className="rounded-md border border-slate-200 bg-white p-4 text-sm shadow-sm">
-                <div className="flex items-center gap-2 font-medium">
-                  <Check className="size-4 text-[#a37f12]" />
-                  {item}
-                </div>
-              </div>
-            ))}
+            <SurfaceMini title="Matter context" meta="Documents, facts, jurisdiction, deadlines" icon={BriefcaseBusiness} />
+            <SurfaceMini title="Word Add-in" meta="Selected-text drafting and review" icon={FileText} />
+            <SurfaceMini title="Outlook Add-in" meta="Email analysis and response drafting" icon={MailCheck} />
           </div>
-          <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <PanelRight className="size-4 text-[#a37f12]" />
-              Reliability Panel
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              {["Citations visible", "D.C. grounding noted", "Attorney review required", "Trace ID attached"].map((item) => (
-                <div key={item} className="flex items-center justify-between gap-3">
-                  <span>{item}</span>
-                  <span className="size-2 rounded-full bg-[#d4af37]" />
-                </div>
-              ))}
-            </div>
-          </div>
+          <ReliabilityPanelPreview compact />
         </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Signal label="D.C. grounding" value="Visible" />
+          <Signal label="Attorney review" value="Required" />
+          <Signal label="Trace ID" value="req_7D4A" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SurfaceMini({ title, meta, icon: Icon }: { title: string; meta: string; icon: LucideIcon }) {
+  return (
+    <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <Icon className="mt-1 size-5 text-[#8a6b16]" />
+        <div>
+          <h3 className="font-semibold">{title}</h3>
+          <p className="mt-1 text-sm leading-5 text-slate-600">{meta}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Signal({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-black/10 bg-white px-4 py-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ReliabilityPanelPreview({ compact = false }: { compact?: boolean }) {
+  const rows = [
+    ["Citations", "3 visible"],
+    ["Confidence", "Review"],
+    ["D.C. grounding", "On"],
+    ["Attorney-review flag", "Required"],
+    ["Unsupported claim warning", "1 item"],
+    ["Trace / request ID", "req_7D4A"],
+  ];
+  return (
+    <div className="rounded-md border border-black/10 bg-[#111827] p-4 text-white shadow-sm">
+      <div className="flex items-center gap-2">
+        <PanelRight className="size-4 text-[#d4af37]" />
+        <h3 className="font-semibold">Reliability Panel</h3>
+      </div>
+      <div className={cn("mt-4 grid gap-2", !compact && "sm:grid-cols-2")}>
+        {rows.map(([label, value]) => (
+          <div key={label} className="rounded-md bg-white/8 p-3">
+            <p className="text-xs text-white/54">{label}</p>
+            <p className="mt-1 text-sm font-semibold">{value}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -284,47 +384,49 @@ function ProductPreview() {
 function SectionIntro({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <div className="mx-auto max-w-3xl text-center">
-      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#a37f12]">{eyebrow}</p>
-      <h2 className="mt-4 text-3xl font-semibold tracking-normal text-mercy-navy md:text-5xl">{title}</h2>
-      <p className="mt-5 text-base leading-7 text-slate-600 md:text-lg">{description}</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
+      <h2 className="mt-4 text-4xl font-semibold tracking-normal text-[#111827] md:text-5xl">{title}</h2>
+      <p className="mt-5 text-base leading-7 text-[#5b564e] md:text-lg">{description}</p>
     </div>
   );
 }
 
-function FeatureGrid({ items, columns = "lg:grid-cols-4" }: { items: FeatureItem[]; columns?: string }) {
+function ProductSurfaceCard({ title, description, icon: Icon, href }: Feature & { href: string }) {
   return (
-    <div className={cn("grid gap-4 md:grid-cols-2", columns)}>
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Card key={item.title} className="rounded-md">
-            <CardContent className="p-6">
-              <Icon className="size-5 text-[#a37f12]" />
-              <h3 className="mt-5 text-lg font-semibold">{item.title}</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{item.description}</p>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <Link href={href} className="rounded-lg border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+      <Icon className="size-5 text-[#8a6b16]" />
+      <h3 className="mt-6 text-xl font-semibold">{title}</h3>
+      <p className="mt-3 text-sm leading-6 text-[#5b564e]">{description}</p>
+      <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">Explore <ArrowRight className="size-4" /></span>
+    </Link>
+  );
+}
+
+function WorkflowCard({ step, title, description }: { step: string; title: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-black/10 bg-white p-6 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6b16]">{step}</p>
+      <h3 className="mt-4 text-lg font-semibold">{title}</h3>
+      <p className="mt-3 text-sm leading-6 text-[#5b564e]">{description}</p>
     </div>
   );
 }
 
-function CtaBand({ title = "Bring Mercy into your legal workflow.", description = "Start with the beta workspace, then connect Word and Outlook for attorney-supervised matter work." }) {
+function CtaBand({ title = "Start building your Mercy workspace.", description = "Create an account, choose Solo or Firm during registration, accept the beta terms, and continue through activation inside the signup flow." }) {
   return (
     <section className="px-5 py-20 lg:px-8">
-      <div className="mx-auto max-w-7xl rounded-lg bg-mercy-navy px-6 py-12 text-white shadow-[0_28px_90px_rgba(10,20,40,0.2)] md:px-10">
+      <div className="mx-auto max-w-[1440px] rounded-xl bg-[#111827] px-6 py-12 text-white shadow-[0_36px_120px_rgba(17,24,39,0.2)] md:px-10">
         <div className="grid gap-8 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <h2 className="text-3xl font-semibold">{title}</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{description}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">{description}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="gold">
-              <Link href={routes.getStarted}>Get started</Link>
+            <Button asChild>
+              <Link href={routes.getStarted}>Get Started</Link>
             </Button>
-            <Button asChild variant="outline" className="border-white/20 bg-white/8 text-white hover:bg-white/14">
-              <Link href={routes.contact}>Request demo</Link>
+            <Button asChild variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10">
+              <Link href={routes.contact}>Request Demo</Link>
             </Button>
           </div>
         </div>
@@ -333,75 +435,82 @@ function CtaBand({ title = "Bring Mercy into your legal workflow.", description 
   );
 }
 
-const problemItems: FeatureItem[] = [
-  { title: "Matter overload", description: "Keep requests tied to a matter instead of scattering context across disconnected chats.", icon: BriefcaseBusiness },
-  { title: "Drafting and review bottlenecks", description: "Move faster on first versions, issue spotting, and document review while preserving attorney judgment.", icon: FileText },
-  { title: "Citation and source trust", description: "Expose citations, source status, D.C. grounding, and review flags instead of hiding uncertainty.", icon: SearchCheck },
-  { title: "Office workflow fragmentation", description: "Use Mercy from the Web Workspace, Microsoft Word, and Microsoft Outlook.", icon: Layers3 },
-];
-
-const workflowSteps = [
-  "Create or select a matter",
-  "Add documents and context",
-  "Work in Web, Word, or Outlook",
-  "Review the Reliability Panel",
-  "Attorney finalizes",
-];
-
 export function HomeMarketingPage() {
   return (
     <MarketingShell>
       <main>
-        <Hero
-          eyebrow="D.C.-focused legal AI beta"
-          title="Legal AI for attorneys who need speed without losing control."
-          description="Mercy combines a secure web workspace with Word and Outlook add-ins, matter-centered context, D.C.-focused legal workflows, and reliability checks designed for attorney review."
-        />
-        <section className="px-5 py-16 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
-            {[
-              ["Web Workspace", "Matter-centered chat, drafting, document review, templates, and reliability metadata."],
-              ["Word Add-in", "Draft and review selected text inside normal Word workflows."],
-              ["Outlook Add-in", "Analyze selected message text and draft attorney-reviewed responses from Outlook."],
-            ].map(([title, description]) => (
-              <Card key={title} className="rounded-md">
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold">{title}</h2>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-        <section className="bg-white px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
+        <HeroSection />
+        <section className="bg-white px-5 py-24 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
             <SectionIntro
-              eyebrow="Why Mercy"
-              title="Built around the points where legal AI usually loses control."
-              description="Mercy keeps the workflow matter-centered, attorney-supervised, and visible across the places lawyers already work."
+              eyebrow="Product"
+              title="One legal AI workspace. Three places attorneys work."
+              description="Mercy is organized around the matter, then brought into the web workspace, Word, and Outlook with reliability signals attached."
             />
-            <div className="mt-12">
-              <FeatureGrid items={problemItems} />
+            <div className="mt-14 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <ProductSurfaceCard title="Mercy Workspace" description="Matter-centered workspace for documents, context, drafting, review, and reliability metadata." icon={Monitor} href={`${routes.howItWorks}#workspace`} />
+              <ProductSurfaceCard title="Word Add-in" description="Draft, revise, and review selected legal text where documents are already being written." icon={FileText} href={`${routes.howItWorks}#word-addin`} />
+              <ProductSurfaceCard title="Outlook Add-in" description="Analyze selected message text and prepare attorney-reviewed responses from Outlook." icon={MailCheck} href={`${routes.howItWorks}#outlook-addin`} />
+              <ProductSurfaceCard title="Reliability Panel" description="Inspect citations, confidence, D.C. grounding, review flags, and request trace details." icon={PanelRight} href={`${routes.howItWorks}#reliability`} />
             </div>
           </div>
         </section>
-        <WorkflowPreview />
-        <ReliabilityPreview />
-        <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-8 rounded-lg border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
+        <section className="px-5 py-24 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
+            <SectionIntro
+              eyebrow="Solutions"
+              title="Built for the workflows where legal AI needs boundaries."
+              description="Mercy supports solo attorneys and small firms across drafting, review, citation checking, intake, and D.C.-focused work."
+            />
+            <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                ["Solo practitioners", "A focused workspace for an attorney who needs speed, organization, and review controls.", `${routes.useCases}#solo`, UserCheck],
+                ["Small firms", "Tenant-isolated workflows for small teams with firm-aware administration.", `${routes.useCases}#firms`, Building2],
+                ["Drafting", "First drafts and revisions that remain subject to attorney review.", `${routes.useCases}#drafting`, Gavel],
+                ["Document review", "Upload and selected-text review with reliability signals visible.", `${routes.useCases}#review`, FileCheck2],
+                ["Citation/source checking", "Surface source visibility and warnings before final use.", `${routes.useCases}#citations`, SearchCheck],
+                ["D.C.-focused workflows", "Focused on Washington, DC for beta, with expansion later.", `${routes.useCases}#dc`, BookOpenCheck],
+              ].map(([title, description, href, Icon]) => (
+                <ProductSurfaceCard key={title as string} title={title as string} description={description as string} href={href as string} icon={Icon as LucideIcon} />
+              ))}
+            </div>
+          </div>
+        </section>
+        <section className="bg-white px-5 py-24 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
+            <SectionIntro
+              eyebrow="Workflow"
+              title="From matter context to attorney finalization."
+              description="Mercy is designed as a controlled workflow, not a blank prompt box."
+            />
+            <div className="mt-14 grid gap-4 md:grid-cols-5">
+              <WorkflowCard step="01" title="Create or select a matter" description="Start with the client and matter boundary." />
+              <WorkflowCard step="02" title="Add documents and context" description="Attach facts, documents, and jurisdiction focus." />
+              <WorkflowCard step="03" title="Work in Web, Word, or Outlook" description="Move through normal attorney surfaces." />
+              <WorkflowCard step="04" title="Review citations and reliability" description="Inspect grounding, warnings, and trace details." />
+              <WorkflowCard step="05" title="Attorney finalizes" description="Counsel verifies, edits, and decides what leaves the firm." />
+            </div>
+          </div>
+        </section>
+        <section className="px-5 py-24 lg:px-8">
+          <div className="mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#a37f12]">Beta pricing</p>
-              <h2 className="mt-3 text-3xl font-semibold">Solo and small-firm plans without checkout on the homepage.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600">
-                Solo practitioners start at $98/month. Small firms use the same attorney-seat price with a two-seat minimum.
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Reliability</p>
+              <h2 className="mt-4 text-4xl font-semibold tracking-normal md:text-5xl">A review layer for legal AI output.</h2>
+              <p className="mt-5 text-base leading-7 text-[#5b564e]">
+                Mercy shows citations, confidence, D.C. grounding, attorney-review flags, unsupported-claim warnings, and trace IDs so legal work remains reviewable.
               </p>
             </div>
-            <Button asChild variant="outline">
-              <Link href={routes.pricing}>
-                View pricing
-                <ArrowRight />
-              </Link>
-            </Button>
+            <ReliabilityPanelPreview />
+          </div>
+        </section>
+        <section className="bg-white px-5 py-24 lg:px-8">
+          <div className="mx-auto max-w-[1440px] rounded-xl border border-black/10 bg-[#f6f4ef] p-8 md:p-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Location</p>
+            <h2 className="mt-4 text-4xl font-semibold tracking-normal">Focused on Washington, DC for beta.</h2>
+            <p className="mt-5 max-w-3xl text-base leading-7 text-[#5b564e]">
+              Mercy is currently focused on D.C. solo attorneys and small firms. That focus keeps the beta honest about jurisdiction, source visibility, and attorney-supervised review before later expansion.
+            </p>
           </div>
         </section>
         <CtaBand />
@@ -410,337 +519,192 @@ export function HomeMarketingPage() {
   );
 }
 
-function WorkflowPreview() {
+function PageHero({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
-    <section className="px-5 py-20 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionIntro
-          eyebrow="How Mercy works"
-          title="A practical workflow from matter setup to attorney approval."
-          description="Mercy is designed to support legal work without removing the final professional decision from counsel."
-        />
-        <div className="mt-12 grid gap-3 md:grid-cols-5">
-          {workflowSteps.map((step, index) => (
-            <Link key={step} href={routes.howItWorks} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#d4af37] hover:shadow-md">
-              <span className="text-xs font-semibold text-[#a37f12]">0{index + 1}</span>
-              <p className="mt-3 text-sm font-semibold leading-6">{step}</p>
-            </Link>
-          ))}
-        </div>
-        <div className="mt-8 text-center">
-          <Button asChild variant="outline">
-            <Link href={routes.howItWorks}>
-              See the full workflow
-              <ArrowRight />
-            </Link>
-          </Button>
-        </div>
+    <section className="px-5 py-20 lg:px-8 lg:py-24">
+      <div className="mx-auto max-w-[1440px]">
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
+        <h1 className="mt-5 max-w-5xl text-5xl font-semibold leading-[1.05] tracking-normal text-[#111827] md:text-7xl">{title}</h1>
+        <p className="mt-7 max-w-3xl text-lg leading-8 text-[#5b564e]">{description}</p>
       </div>
     </section>
   );
 }
 
-function ReliabilityPreview() {
+function AnchorSection({ id, eyebrow, title, description, children }: { id: string; eyebrow: string; title: string; description: string; children?: ReactNode }) {
   return (
-    <section className="bg-white px-5 py-20 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+    <section id={id} className="scroll-mt-28 border-t border-black/10 px-5 py-16 lg:px-8">
+      <div className="mx-auto grid max-w-[1440px] gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#a37f12]">Reliability Panel</p>
-          <h2 className="mt-4 text-3xl font-semibold md:text-5xl">Review signals before client-facing use.</h2>
-          <p className="mt-5 text-base leading-7 text-slate-600">
-            Mercy surfaces reliability details so attorneys can verify output instead of accepting a black-box answer.
-          </p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
+          <h2 className="mt-4 text-3xl font-semibold tracking-normal">{title}</h2>
+          <p className="mt-4 text-sm leading-6 text-[#5b564e]">{description}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {["Citations", "Confidence", "D.C. grounding", "Attorney-review flag", "Trace/request ID", "Source visibility"].map((item) => (
-            <Link key={item} href={routes.security} className="rounded-md border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:border-[#d4af37] hover:bg-white">
-              <p className="text-sm font-semibold">{item}</p>
-            </Link>
-          ))}
-        </div>
-        <div className="lg:col-start-2">
-          <Button asChild variant="outline">
-            <Link href={routes.security}>
-              Review security and reliability posture
-              <ArrowRight />
-            </Link>
-          </Button>
-        </div>
+        <div>{children ?? <ProductArchitectureVisual />}</div>
       </div>
     </section>
   );
 }
 
 export function HowItWorksPage() {
-  const steps: FeatureItem[] = [
-    { title: "1. Create or select a matter", description: "Start from the workspace so requests stay tied to the right tenant, matter, and context.", icon: BriefcaseBusiness },
-    { title: "2. Upload or attach documents", description: "Bring in relevant materials for review, drafting, and source-aware work.", icon: FileCheck2 },
-    { title: "3. Ask Mercy to work", description: "Analyze, draft, cite, review, or organize legal content with attorney review required.", icon: MessageSquareText },
-    { title: "4. Use Office add-ins", description: "Move between Web, Word, and Outlook without abandoning normal attorney workflow.", icon: Monitor },
-    { title: "5. Check reliability", description: "Review citations, grounding, confidence, trace IDs, and flags before relying on output.", icon: PanelRight },
-    { title: "6. Attorney finalizes", description: "Mercy assists. The attorney verifies, edits, and approves.", icon: UserCheck },
-  ];
   return (
     <MarketingShell>
       <main>
-        <Hero
-          eyebrow="Workflow"
-          title="How Mercy keeps legal AI inside attorney-controlled work."
-          description="Mercy connects matter context, documents, Web Workspace actions, Word drafting, Outlook review, and reliability signals into one workflow."
+        <PageHero
+          eyebrow="How it works"
+          title="Matter-centered legal AI across web, Word, and Outlook."
+          description="Mercy keeps context, documents, source visibility, and reliability signals connected as attorneys move through their day."
         />
-        <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <FeatureGrid items={steps} columns="lg:grid-cols-3" />
-          </div>
-        </section>
-        <SurfaceSections />
-        <section className="px-5 py-16 lg:px-8">
-          <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
-            {[
-              ["Explore use cases", routes.useCases],
-              ["Read security posture", routes.security],
-              ["View beta pricing", routes.pricing],
-            ].map(([label, href]) => (
-              <Link key={href} href={href} className="rounded-md border border-slate-200 bg-white p-5 text-sm font-semibold shadow-sm transition hover:-translate-y-0.5 hover:border-[#d4af37] hover:shadow-md">
-                {label}
-                <ArrowRight className="mt-4 size-4 text-[#a37f12]" />
-              </Link>
-            ))}
-          </div>
-        </section>
+        <AnchorSection id="matter-context" eyebrow="Matter intelligence" title="Start with the matter, not a blank prompt." description="Mercy organizes legal work around tenant, matter, documents, facts, jurisdiction, and attorney-selected context.">
+          <FeatureList items={["Tenant and matter boundaries", "Document and fact context", "Jurisdiction focus", "Traceable requests"]} />
+        </AnchorSection>
+        <AnchorSection id="workspace" eyebrow="Web Workspace" title="The central place for matter work." description="Use the web workspace for matter setup, document upload/review, drafting assistance, intake organization, and reliability inspection.">
+          <ProductArchitectureVisual />
+        </AnchorSection>
+        <AnchorSection id="word-addin" eyebrow="Word Add-in" title="Draft and review where legal documents live." description="The Word add-in supports selected-text workflows for drafting, revision, issue spotting, and attorney-supervised edits.">
+          <FeatureList items={["Selected-text review", "Drafting assistance", "Clause and language refinement", "Attorney finalization"]} />
+        </AnchorSection>
+        <AnchorSection id="outlook-addin" eyebrow="Outlook Add-in" title="Bring controlled AI into attorney communications." description="The Outlook add-in supports selected-text analysis and response drafting without moving email work into a separate generic chat surface.">
+          <FeatureList items={["Selected email analysis", "Response drafting", "Matter-aware context", "Attorney review before sending"]} />
+        </AnchorSection>
+        <AnchorSection id="reliability" eyebrow="Reliability Panel" title="Review signals stay attached to the work." description="Mercy surfaces citations, source status, D.C. grounding, confidence, unsupported-claim warnings, attorney-review flags, and trace IDs.">
+          <ReliabilityPanelPreview />
+        </AnchorSection>
+        <AnchorSection id="attorney-review" eyebrow="Final review" title="AI assists. Attorneys decide." description="Mercy is designed for attorney-supervised legal work. Attorneys remain responsible for reviewing outputs before use.">
+          <FeatureList items={["Attorney-review notice", "Source visibility", "Output verification", "Professional judgment preserved"]} />
+        </AnchorSection>
         <CtaBand />
       </main>
     </MarketingShell>
   );
 }
 
-function SurfaceSections() {
-  const surfaces: FeatureItem[] = [
-    { title: "Web Workspace", description: "Create matters, organize context, use templates, chat through legal drafting and review, and inspect reliability metadata.", icon: Monitor },
-    { title: "Word Add-in", description: "Work with selected text in Word for drafting assistance, review, citation checking, and attorney-supervised edits.", icon: FileText },
-    { title: "Outlook Add-in", description: "Use selected email text for analysis, drafting, and review where attorney communications already happen.", icon: MailCheck },
-    { title: "Reliability Panel", description: "View citations, source visibility, D.C. grounding, confidence, review flags, and request trace details.", icon: PanelRight },
-  ];
+function FeatureList({ items }: { items: string[] }) {
   return (
-    <section className="bg-white px-5 py-20 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionIntro
-          eyebrow="Surfaces"
-          title="One product across web, Word, and Outlook."
-          description="Mercy is not a detached chatbot. It is designed around the practical places attorneys read, write, review, and communicate."
-        />
-        <div className="mt-12">
-          <FeatureGrid items={surfaces} columns="lg:grid-cols-4" />
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((item) => (
+        <div key={item} className="flex gap-3 rounded-lg border border-black/10 bg-white p-5 shadow-sm">
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#8a6b16]" />
+          <span className="text-sm font-medium">{item}</span>
         </div>
+      ))}
+    </div>
+  );
+}
+
+export function UseCasesPage() {
+  return (
+    <MarketingShell>
+      <main>
+        <PageHero
+          eyebrow="Solutions"
+          title="Legal workflows where speed matters, but control matters more."
+          description="Mercy supports solo practitioners and small firms across drafting, review, source checking, intake, Office workflows, and D.C.-focused beta use."
+        />
+        <UseCase id="solo" title="Solo practitioners" icon={UserCheck} description="A focused workspace for attorneys who need drafting, review, intake, and source visibility without adding operational complexity." />
+        <UseCase id="firms" title="Small firms" icon={UsersRound} description="Shared tenant workspaces and firm-aware administration for small teams using legal AI under attorney supervision." />
+        <UseCase id="drafting" title="Drafting" icon={Gavel} description="Create first versions, revise selected language, and move faster while preserving attorney review and final judgment." />
+        <UseCase id="review" title="Document review" icon={FileCheck2} description="Review uploaded documents or selected Office text with reliability and source signals visible." />
+        <UseCase id="citations" title="Citation and source checking" icon={SearchCheck} description="Inspect source visibility, D.C. grounding, and unsupported-claim warnings before legal output is used." />
+        <UseCase id="intake" title="Matter intake and organization" icon={BriefcaseBusiness} description="Capture structured context and keep legal work associated with the right matter from the beginning." />
+        <UseCase id="dc" title="Washington, DC" icon={BookOpenCheck} description="Mercy is currently focused on D.C. solo attorneys and small firms for beta, with expansion later." />
+        <CtaBand />
+      </main>
+    </MarketingShell>
+  );
+}
+
+function UseCase({ id, title, description, icon: Icon }: { id: string; title: string; description: string; icon: LucideIcon }) {
+  return (
+    <section id={id} className="scroll-mt-28 border-t border-black/10 px-5 py-14 lg:px-8">
+      <div className="mx-auto grid max-w-[1440px] gap-8 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
+        <div className="flex items-center gap-4">
+          <span className="grid size-12 place-items-center rounded-md bg-white shadow-sm">
+            <Icon className="size-6 text-[#8a6b16]" />
+          </span>
+          <h2 className="text-3xl font-semibold">{title}</h2>
+        </div>
+        <p className="text-base leading-7 text-[#5b564e]">{description}</p>
       </div>
     </section>
   );
 }
 
-export function UseCasesPage() {
-  const useCases: FeatureItem[] = [
-    { title: "Matter intake and organization", description: "Capture structured context and keep work associated with the correct matter.", icon: BriefcaseBusiness },
-    { title: "Document review", description: "Review uploaded or selected documents with attorney-facing reliability signals.", icon: FileCheck2 },
-    { title: "Drafting first versions", description: "Generate starting points that attorneys can edit, verify, and finalize.", icon: FileText },
-    { title: "Citation and source checking", description: "Surface citation/source visibility and review prompts instead of hiding uncertainty.", icon: SearchCheck },
-    { title: "D.C. legal research support", description: "Support D.C.-focused beta workflows with careful grounding language.", icon: BookOpenCheck },
-    { title: "Word drafting assistance", description: "Use Mercy from Microsoft Word when drafting and revising legal language.", icon: Gavel },
-    { title: "Outlook selected-text analysis", description: "Analyze selected email text and draft attorney-reviewed responses.", icon: MailCheck },
-    { title: "Small firm collaboration", description: "Support shared tenant workspaces and firm/admin provisioning for small teams.", icon: UsersRound },
+export function SecurityPage() {
+  const items: Feature[] = [
+    { title: "Backend-enforced authentication", description: "Protected legal and admin workflows rely on server-side auth checks rather than UI-only gates.", icon: LockKeyhole },
+    { title: "Tenant and firm isolation", description: "Matters stay isolated to the tenant, with firm-aware boundaries where relevant.", icon: Fingerprint },
+    { title: "Office auth posture", description: "Microsoft NAA is the primary Office auth approach, with Supabase PKCE fallback where supported.", icon: ShieldCheck },
+    { title: "Admin-controlled provisioning", description: "Admin provisioning stays separate from normal signup and is controlled through dedicated workflows.", icon: UserCheck },
+    { title: "Operational telemetry boundaries", description: "Raw legal text is excluded from System Map and DevOps telemetry.", icon: Layers3 },
+    { title: "Responsible AI", description: "Reliability signals and attorney-review language keep output positioned for supervised legal work.", icon: Scale },
   ];
   return (
     <MarketingShell>
       <main>
-        <Hero
-          eyebrow="Use cases"
-          title="Legal workflows where speed matters, but control matters more."
-          description="Mercy supports the daily work of solo practitioners and small firms without positioning AI as a substitute for counsel."
+        <PageHero
+          eyebrow="Security"
+          title="Security posture for attorney-supervised legal AI."
+          description="Mercy emphasizes authentication, tenant isolation, Office auth, telemetry boundaries, and responsible review signals without claiming certifications that are still on the roadmap."
         />
         <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <FeatureGrid items={useCases} />
+          <div className="mx-auto grid max-w-[1440px] gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {items.map((item) => <InfoCard key={item.title} {...item} />)}
           </div>
         </section>
         <section className="bg-white px-5 py-20 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-2">
-            <AudienceCard title="Solo practitioners" icon={UserCheck} points={["One-seat workspace", "Matter-centered drafting and review", "Word and Outlook support", "Reliability Panel for final review"]} />
-            <AudienceCard title="Small firms" icon={Building2} points={["Shared tenant workspace", "Firm/admin provisioning", "Minimum two attorney seats", "Matter collaboration with tenant isolation"]} />
-          </div>
-          <div className="mx-auto mt-10 flex max-w-7xl flex-col gap-3 sm:flex-row sm:justify-center">
-            <Button asChild variant="gold">
-              <Link href={routes.pricing}>Compare beta pricing</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href={routes.contact}>Request demo</Link>
-            </Button>
+          <div className="mx-auto max-w-[1440px] rounded-xl border border-black/10 bg-[#f6f4ef] p-8 md:p-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Compliance roadmap</p>
+            <h2 className="mt-4 text-3xl font-semibold">SOC 2-ready posture, not certification.</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-[#5b564e]">
+              Mercy’s roadmap includes SOC 2 readiness work, security documentation, and DPA/security packet materials available on request. This page does not claim completed certification.
+            </p>
           </div>
         </section>
-        <CtaBand />
+        <CtaBand title="Request the security packet." description="Ask for Mercy’s current security posture, roadmap notes, and Office auth explanation. Do not submit confidential client information." />
       </main>
     </MarketingShell>
   );
 }
 
-function AudienceCard({ title, icon: Icon, points }: { title: string; icon: IconType; points: string[] }) {
+function InfoCard({ title, description, icon: Icon }: Feature) {
   return (
-    <Card className="rounded-md">
-      <CardContent className="p-8">
-        <Icon className="size-6 text-[#a37f12]" />
-        <h2 className="mt-5 text-2xl font-semibold">{title}</h2>
-        <ul className="mt-6 space-y-3 text-sm text-slate-600">
-          {points.map((point) => (
-            <li key={point} className="flex gap-3">
-              <Check className="mt-0.5 size-4 shrink-0 text-[#a37f12]" />
-              {point}
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
-  );
-}
-
-export function SecurityPage() {
-  const items: FeatureItem[] = [
-    { title: "Backend-enforced auth", description: "Protected legal and admin APIs rely on backend authorization, not UI-only gates.", icon: LockKeyhole },
-    { title: "Tenant and firm isolation", description: "Firm users use firm-specific authorization where appropriate, while tenant ID remains the universal workspace boundary.", icon: Fingerprint },
-    { title: "Office auth posture", description: "Microsoft NAA is the primary Office path, with Supabase PKCE fallback for supported flows.", icon: ShieldCheck },
-    { title: "Admin-controlled provisioning", description: "Beta Microsoft identity provisioning is manual and admin-controlled.", icon: UserCheck },
-    { title: "Telemetry data safety", description: "Operational metadata is separated from raw legal text where applicable, including System Map and DevOps telemetry posture.", icon: Layers3 },
-    { title: "Responsible AI", description: "Attorney review, reliability signals, and source visibility are built into the product posture.", icon: Scale },
-  ];
-  return (
-    <MarketingShell>
-      <main>
-        <Hero
-          eyebrow="Security"
-          title="Security and control for attorney-supervised AI."
-          description="Mercy is built around backend-enforced authentication, tenant isolation, careful Office auth, and review signals for legal work."
-        />
-        <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <FeatureGrid items={items} columns="lg:grid-cols-3" />
-          </div>
-        </section>
-        <CtaBand title="Request a security and demo packet." description="We can walk through Mercy's beta security posture, Office auth model, and admin provisioning approach without asking you to submit client confidential information." />
-      </main>
-    </MarketingShell>
-  );
-}
-
-export function PricingPage() {
-  return (
-    <MarketingShell>
-      <main>
-        <Hero
-          eyebrow="Beta pricing"
-          title="Simple beta pricing for solo attorneys and small firms."
-          description="Pricing is informational here. Payment starts only after choosing a beta signup path."
-        />
-        <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
-            <PricingCard
-              title="Solo Practitioner"
-              price="$98"
-              note="/month"
-              description="For a solo attorney using Mercy across the Web Workspace, Word, and Outlook."
-              features={["1 seat", "Mercy Web Workspace", "Word Add-in", "Outlook Add-in", "Matter-centered AI", "Reliability Panel", "D.C.-focused beta workflows"]}
-            />
-            <PricingCard
-              title="Small Firm"
-              price="$98"
-              note="/attorney seat/month"
-              description="For firms that need a shared tenant workspace and admin-controlled provisioning."
-              features={["Minimum 2 seats", "Starts at $196/month", "Shared tenant workspace", "Firm/admin provisioning", "Word and Outlook add-ins", "Matter collaboration", "Reliability Panel"]}
-              featured
-            />
-          </div>
-          <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-6 text-slate-600">
-            Checkout runs inside signup after account details, seat count, and beta acknowledgments are collected.
-          </p>
-        </section>
-        <CtaBand />
-      </main>
-    </MarketingShell>
-  );
-}
-
-function PricingCard({ title, price, note, description, features, featured = false }: { title: string; price: string; note: string; description: string; features: string[]; featured?: boolean }) {
-  return (
-    <Card className={cn("rounded-md", featured && "border-[#d4af37] ring-1 ring-[#d4af37]/40")}>
-      <CardContent className="p-8">
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        <div className="mt-7 flex flex-wrap items-end gap-2">
-          <span className="text-5xl font-semibold">{price}</span>
-          <span className="pb-2 text-sm text-slate-500">{note}</span>
-        </div>
-        <p className="mt-5 text-sm leading-6 text-slate-600">{description}</p>
-        <ul className="mt-7 space-y-3 text-sm">
-          {features.map((feature) => (
-            <li key={feature} className="flex gap-3">
-              <Check className="mt-0.5 size-4 shrink-0 text-[#a37f12]" />
-              {feature}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button asChild variant={featured ? "gold" : "default"}>
-            <Link href={routes.getStarted}>Get started</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href={routes.contact}>Request demo</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-black/10 bg-white p-6 shadow-sm">
+      <Icon className="size-5 text-[#8a6b16]" />
+      <h3 className="mt-5 text-lg font-semibold">{title}</h3>
+      <p className="mt-3 text-sm leading-6 text-[#5b564e]">{description}</p>
+    </div>
   );
 }
 
 export function ResourcesPage() {
-  const resources = [
-    { title: "Legal AI ethics guide for attorneys", description: "A practical guide to attorney-supervised AI work and review duties.", icon: Scale, href: routes.trust, cta: "Read trust principles" },
-    { title: "D.C. attorney AI checklist", description: "A checklist for using AI carefully in D.C.-focused workflows.", icon: Check, href: routes.security, cta: "Review safety posture" },
-    { title: "Using Mercy in Word", description: "How Mercy supports drafting and selected-text review in Microsoft Word.", icon: FileText, href: routes.howItWorks, cta: "See workflow" },
-    { title: "Using Mercy in Outlook", description: "How selected email text can become an attorney-reviewed workflow.", icon: MailCheck, href: routes.howItWorks, cta: "See workflow" },
-    { title: "Matter-centered AI guide", description: "Why context should start from the matter, not a blank prompt box.", icon: BriefcaseBusiness, href: routes.useCases, cta: "Explore use cases" },
-    { title: "Security overview", description: "How Mercy describes auth, tenant isolation, and admin provisioning.", icon: ShieldCheck, href: routes.security, cta: "Open security" },
-    { title: "Citation and reliability guide", description: "How to read citations, source visibility, confidence, and review flags.", icon: SearchCheck, href: routes.security, cta: "View reliability" },
-  ];
+  const cards = [
+    ["Legal AI ethics guide for attorneys", "Coming soon", routes.trust, Scale],
+    ["D.C. attorney AI checklist", "Coming soon", routes.security, CheckCircle2],
+    ["Using Mercy in Word", "Guide", `${routes.howItWorks}#word-addin`, FileText],
+    ["Using Mercy in Outlook", "Guide", `${routes.howItWorks}#outlook-addin`, MailCheck],
+    ["Matter-centered AI guide", "Guide", `${routes.howItWorks}#matter-context`, BriefcaseBusiness],
+    ["Citation and Reliability Panel guide", "Guide", `${routes.howItWorks}#reliability`, SearchCheck],
+    ["Security overview", "Reference", routes.security, ShieldCheck],
+  ] as const;
   return (
     <MarketingShell>
       <main>
-        <Hero
+        <PageHero
           eyebrow="Resources"
-          title="Guides for attorney-controlled legal AI."
-          description="Mercy's resource library is designed to help attorneys use AI with source awareness, client-data care, and final human review."
+          title="A practical hub for attorney-controlled legal AI."
+          description="Resources focus on legal AI responsibility, product education, D.C. beta notes, and the review habits Mercy is designed to support."
         />
-        <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {resources.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link key={item.title} href={item.href} className="rounded-md border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-[#d4af37] hover:shadow-md">
-                    <Icon className="size-5 text-[#a37f12]" />
-                    <h2 className="mt-5 text-lg font-semibold">{item.title}</h2>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">{item.description}</p>
-                    <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-mercy-navy">
-                      {item.cta}
-                      <ArrowRight className="size-4 text-[#a37f12]" />
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-            <div className="mt-12 rounded-md border border-slate-200 bg-white p-8 text-center shadow-sm">
-              <h2 className="text-2xl font-semibold">Product updates for the beta</h2>
-              <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                Request updates on Word, Outlook, onboarding, and security packet availability. Do not submit confidential client information.
-              </p>
-              <Button asChild variant="gold" className="mt-6">
-                <Link href={routes.contact}>Request updates</Link>
-              </Button>
-            </div>
+        <section id="blog" className="scroll-mt-28 px-5 py-16 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
+            <SectionIntro eyebrow="Blog / updates" title="Product notes for the beta." description="Updates will cover web workspace, Word, Outlook, reliability, and D.C.-focused workflows." />
+          </div>
+        </section>
+        <section id="guides" className="scroll-mt-28 px-5 pb-20 lg:px-8">
+          <div className="mx-auto grid max-w-[1440px] gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {cards.map(([title, tag, href, Icon]) => (
+              <ResourceCard key={title} title={title} tag={tag} href={href} icon={Icon} />
+            ))}
           </div>
         </section>
       </main>
@@ -748,29 +712,39 @@ export function ResourcesPage() {
   );
 }
 
+function ResourceCard({ title, tag, href, icon: Icon }: { title: string; tag: string; href: string; icon: LucideIcon }) {
+  return (
+    <Link href={href} className="rounded-lg border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+      <div className="flex items-center justify-between gap-3">
+        <Icon className="size-5 text-[#8a6b16]" />
+        <span className="rounded-full border bg-[#f6f4ef] px-3 py-1 text-xs font-semibold text-[#5b564e]">{tag}</span>
+      </div>
+      <h2 className="mt-6 text-xl font-semibold">{title}</h2>
+      <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold">Open <ArrowRight className="size-4" /></span>
+    </Link>
+  );
+}
+
 export function TrustPage() {
-  const pillars: FeatureItem[] = [
-    { title: "AI assists, attorney decides", description: "Mercy is designed for supervised work where counsel verifies and finalizes.", icon: UserCheck },
-    { title: "Citations and reliability matter", description: "Source visibility and reliability metadata should be part of the workflow.", icon: SearchCheck },
-    { title: "Client data must stay protected", description: "The product posture emphasizes tenant isolation and careful telemetry boundaries.", icon: LockKeyhole },
-    { title: "Office workflows matter", description: "Word and Outlook are first-class places where legal work already happens.", icon: MailCheck },
-    { title: "Authentication", description: "Mercy uses backend-enforced auth for protected legal and admin workflows.", icon: ShieldCheck },
-    { title: "Admin provisioning", description: "Beta identity provisioning is controlled by admin workflows.", icon: Fingerprint },
-  ];
   return (
     <MarketingShell>
       <main>
-        <Hero
-          eyebrow="Trust"
-          title="Practical, affordable, controlled legal AI for attorneys and small firms."
-          description="Mercy's mission is to make legal AI useful without asking attorneys to give up judgment, verification, or workflow control."
+        <PageHero
+          eyebrow="About / Trust"
+          title="Mercy is built for lawyers who want AI assistance without surrendering professional control."
+          description="The product is grounded in attorney supervision, matter boundaries, source visibility, and careful handling of legal work."
         />
         <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <FeatureGrid items={pillars} columns="lg:grid-cols-3" />
+          <div className="mx-auto grid max-w-[1440px] gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <InfoCard title="Mission" description="Make legal AI useful for solo attorneys and small firms while keeping review, context, and final judgment with counsel." icon={Scale} />
+            <InfoCard title="Attorney-control principles" description="AI assists, attorneys decide. Mercy is designed around verification and final human review." icon={UserCheck} />
+            <InfoCard title="Why D.C. first" description="A focused jurisdiction keeps the beta practical and honest before expansion." icon={BookOpenCheck} />
+            <InfoCard title="Responsible AI" description="Mercy uses reliability signals, source visibility, and careful product language for supervised legal work." icon={ShieldCheck} />
+            <InfoCard title="Data boundaries" description="Your matters stay isolated to your tenant, and your data never trains our models." icon={Fingerprint} />
+            <InfoCard title="Telemetry posture" description="Raw legal text is excluded from operational telemetry." icon={Layers3} />
           </div>
         </section>
-        <CtaBand title="Request the beta trust packet." description="Ask for roadmap notes, security posture details, and a product walkthrough tailored to solo or small-firm practice." />
+        <CtaBand title="Request a trust packet." description="Contact Mercy for security posture notes, roadmap materials, and a product walkthrough." />
       </main>
     </MarketingShell>
   );
@@ -781,82 +755,60 @@ export function ContactPage() {
   return (
     <MarketingShell>
       <main>
-        <Hero
+        <PageHero
           eyebrow="Contact"
           title="Request a Mercy demo."
           description="Tell us how your practice works and which surfaces matter most: Web Workspace, Word, Outlook, or all three."
         />
         <section className="px-5 py-20 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_0.8fr]">
-            <Card className="rounded-md">
-              <CardContent className="p-8">
-                <form
-                  className="grid gap-5"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    setSubmitted(true);
-                  }}
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <MarketingField label="Name" />
-                    <MarketingField label="Work email" type="email" />
-                    <MarketingField label="Firm name" />
-                    <MarketingField label="Solo or firm" placeholder="Solo practitioner or small firm" />
-                    <MarketingField label="Number of attorneys" type="number" />
-                    <MarketingField label="Practice area" />
-                  </div>
-                  <label className="grid gap-2 text-sm font-medium">
-                    Interested in
-                    <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" defaultValue="all">
-                      <option value="web">Web Workspace</option>
-                      <option value="word">Word Add-in</option>
-                      <option value="outlook">Outlook Add-in</option>
-                      <option value="all">All Mercy surfaces</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium">
-                    Message
-                    <textarea className="min-h-32 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" />
-                  </label>
-                  <label className="flex items-center gap-3 text-sm text-slate-700">
-                    <input type="checkbox" className="size-4 rounded border-slate-300" />
-                    Request live demo
-                  </label>
-                  <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    Do not submit confidential client information through this form.
-                  </p>
-                  {submitted ? (
-                    <p role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-                      Demo request captured for the next implementation pass. No message was sent to a backend yet.
-                    </p>
-                  ) : null}
-                  <Button type="submit" variant="gold" className="w-fit">
-                    Submit request
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-            <div className="space-y-4">
-              <Card className="rounded-md">
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold">Support and contact</h2>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    Use this page for demo requests, security packet questions, and beta onboarding interest.
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="rounded-md">
-                <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold">Ready to sign up?</h2>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    Get started routes to the existing sign-up page. Payment and provisioning automation come later.
-                  </p>
-                  <Button asChild variant="outline" className="mt-5">
-                    <Link href={routes.getStarted}>Go to sign up</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+          <div className="mx-auto grid max-w-[1440px] gap-8 lg:grid-cols-[1fr_0.7fr]">
+            <form
+              className="rounded-xl border border-black/10 bg-white p-6 shadow-sm md:p-8"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSubmitted(true);
+              }}
+            >
+              <div className="grid gap-5 md:grid-cols-2">
+                <MarketingField label="Name" />
+                <MarketingField label="Work email" type="email" />
+                <MarketingField label="Firm name" />
+                <MarketingField label="Solo or firm" placeholder="Solo practitioner or small firm" />
+                <MarketingField label="Number of attorneys" type="number" />
+                <MarketingField label="Practice area" />
+              </div>
+              <label className="mt-5 grid gap-2 text-sm font-medium">
+                Interested in
+                <select className="h-11 rounded-md border border-black/10 bg-white px-3 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" defaultValue="all">
+                  <option value="web">Web Workspace</option>
+                  <option value="word">Word Add-in</option>
+                  <option value="outlook">Outlook Add-in</option>
+                  <option value="all">All Mercy surfaces</option>
+                </select>
+              </label>
+              <label className="mt-5 grid gap-2 text-sm font-medium">
+                Message
+                <textarea className="min-h-32 rounded-md border border-black/10 bg-white px-3 py-2 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" />
+              </label>
+              <label className="mt-5 flex items-center gap-3 text-sm text-[#5b564e]">
+                <input type="checkbox" className="size-4 rounded border-slate-300" />
+                Request live demo
+              </label>
+              <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Do not submit confidential client information through this form.
+              </p>
+              {submitted ? (
+                <p role="status" className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+                  Thank you. This local form state is ready for a backend handoff in a later pass.
+                </p>
+              ) : null}
+              <Button type="submit" className="mt-6">Submit request</Button>
+            </form>
+            <aside className="space-y-4">
+              <InfoCard title="Demo requests" description="Use this page for product walkthroughs across web, Word, Outlook, and reliability workflows." icon={Monitor} />
+              <InfoCard title="Trust packet" description="Ask for current security posture, roadmap materials, and DPA/security packet availability." icon={ShieldCheck} />
+              <InfoCard title="Beta focus" description="Mercy is currently focused on Washington, DC solo attorneys and small firms." icon={BookOpenCheck} />
+            </aside>
           </div>
         </section>
       </main>
@@ -868,7 +820,7 @@ function MarketingField({ label, type = "text", placeholder }: { label: string; 
   return (
     <label className="grid gap-2 text-sm font-medium">
       {label}
-      <input type={type} placeholder={placeholder} className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" />
+      <input type={type} placeholder={placeholder} className="h-11 rounded-md border border-black/10 bg-white px-3 text-sm outline-none ring-[#d4af37]/30 focus:ring-2" />
     </label>
   );
 }
