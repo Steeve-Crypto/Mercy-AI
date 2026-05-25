@@ -17,6 +17,7 @@ from uuid import uuid4
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from auth_context import _tenant_user_from_supabase_jwt
 from mercy_storage import reset_storage_for_tests
 
 os.environ.setdefault("MERCY_ENV", "local")
@@ -63,7 +64,7 @@ def _supabase_jwt(
     *,
     secret: str = "unit-supabase-secret",
     user_id: str = "jwt-user-a",
-    tenant_id: str = "jwt-tenant-a",
+    tenant_id: str | None = "jwt-tenant-a",
     firm_id: str | None = None,
     expires_in: int = 3600,
     roles: list[str] | None = None,
@@ -77,9 +78,13 @@ def _supabase_jwt(
         "sub": user_id,
         "iat": now,
         "exp": now + expires_in,
-        "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
+        "app_metadata": {"roles": roles or ["attorney"]},
         "user_metadata": {"name": "JWT User"},
     }
+    if tenant_id:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["tenant_id"] = tenant_id
     if firm_id:
         app_metadata = payload["app_metadata"]
         assert isinstance(app_metadata, dict)
@@ -227,21 +232,81 @@ class AuthTenantGuardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
-    def test_firm_id_takes_precedence_and_tenant_id_supports_solo_accounts(self) -> None:
-        firm_token = _supabase_jwt(user_id="firm-user", tenant_id="solo-tenant-shadow", firm_id="firm-tenant-a")
-        solo_token = _supabase_jwt(user_id="solo-user", tenant_id="solo-tenant-a")
+    def test_solo_practitioner_has_single_tenant_workspace_scope(self) -> None:
+        token = _supabase_jwt(user_id="solo-user", tenant_id="solo-tenant-a")
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
+            client = TestClient(app)  # type: ignore[arg-type]
+            created = client.post("/v1/matters", headers=_jwt_headers(token), json={"name": "Solo matter"})
+
+        self.assertEqual(tenant_user.tenant_id, "solo-tenant-a")
+        self.assertIsNone(tenant_user.firm_id)
+        self.assertFalse(tenant_user.tenant_id_is_firm_fallback)
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.json()["tenant_id"], "solo-tenant-a")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_small_firm_firm_id_only_is_valid_for_account_level_routes(self) -> None:
+        token = _supabase_jwt(user_id="firm-account-user", tenant_id=None, firm_id="firm-alpha", roles=["ops"])
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
+            client = TestClient(app)  # type: ignore[arg-type]
+            response = client.get("/v1/beta/analytics", headers={"Authorization": f"Bearer {token}"})
+
+        self.assertEqual(tenant_user.tenant_id, "firm-alpha")
+        self.assertEqual(tenant_user.firm_id, "firm-alpha")
+        self.assertTrue(tenant_user.tenant_id_is_firm_fallback)
+        self.assertEqual(response.status_code, 200)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_small_firm_preserves_parent_firm_and_child_tenant_scope(self) -> None:
+        token = _supabase_jwt(user_id="firm-user", tenant_id="tenant-alpha", firm_id="firm-alpha")
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
+            client = TestClient(app)  # type: ignore[arg-type]
+            created = client.post("/v1/matters", headers=_jwt_headers(token), json={"name": "Firm matter"})
+
+        self.assertEqual(tenant_user.firm_id, "firm-alpha")
+        self.assertEqual(tenant_user.tenant_id, "tenant-alpha")
+        self.assertFalse(tenant_user.tenant_id_is_firm_fallback)
+        self.assertEqual(tenant_user.to_context()["account_id"], "firm-alpha")
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.json()["tenant_id"], "tenant-alpha")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_small_firm_can_use_multiple_tenant_scopes_under_one_firm(self) -> None:
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            tenant_a = _tenant_user_from_supabase_jwt(f"Bearer {_supabase_jwt(user_id='user-a', tenant_id='tenant-a', firm_id='firm-alpha')}")
+            tenant_b = _tenant_user_from_supabase_jwt(f"Bearer {_supabase_jwt(user_id='user-b', tenant_id='tenant-b', firm_id='firm-alpha')}")
+
+        self.assertEqual(tenant_a.firm_id, "firm-alpha")
+        self.assertEqual(tenant_b.firm_id, "firm-alpha")
+        self.assertEqual(tenant_a.tenant_id, "tenant-a")
+        self.assertEqual(tenant_b.tenant_id, "tenant-b")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_missing_tenant_and_firm_claims_are_rejected(self) -> None:
+        token = _supabase_jwt(user_id="missing-tenant-user", tenant_id=None, firm_id=None)
         with _patched_env(
             os.environ,
             {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
         ):
             client = TestClient(app)  # type: ignore[arg-type]
-            firm_created = client.post("/v1/matters", headers=_jwt_headers(firm_token), json={"name": "Firm matter"})
-            solo_created = client.post("/v1/matters", headers=_jwt_headers(solo_token), json={"name": "Solo matter"})
+            response = client.get("/v1/matters", headers={"Authorization": f"Bearer {token}"})
 
-        self.assertEqual(firm_created.status_code, 200)
-        self.assertEqual(solo_created.status_code, 200)
-        self.assertEqual(firm_created.json()["tenant_id"], "firm-tenant-a")
-        self.assertEqual(solo_created.json()["tenant_id"], "solo-tenant-a")
+        self.assertEqual(response.status_code, 401)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_missing_invalid_and_expired_supabase_jwt_are_rejected(self) -> None:
@@ -380,6 +445,60 @@ class AuthTenantGuardTests(unittest.TestCase):
         self.assertEqual(created.json()["tenant_id"], "jwt-tenant-a")
         self.assertEqual(same_tenant.status_code, 200)
         self.assertEqual(other_tenant.status_code, 404)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_sensitive_ops_endpoints_require_admin_or_ops_role(self) -> None:
+        with _patched_env(os.environ, {"MERCY_ENV": "test", "MERCY_AUTH_MODE": "test", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            attorney_headers = _headers("tenant-a", "user-a") | {"X-Mercy-Roles": "attorney"}
+            invite_forbidden = client.post("/v1/beta/invites", headers=attorney_headers, json={"email": "beta@example.com"})
+            analytics_forbidden = client.get("/v1/beta/analytics", headers=attorney_headers)
+            ingest_forbidden = client.post("/v1/rag/ingest", headers=attorney_headers, json={"source": {}, "chunks": []})
+
+            invite_allowed = client.post(
+                "/v1/beta/invites",
+                headers=_headers("tenant-a", "ops-user") | {"X-Mercy-Roles": "ops"},
+                json={"email": "ops-beta@example.com"},
+            )
+            analytics_allowed = client.get(
+                "/v1/beta/analytics",
+                headers=_headers("tenant-a", "admin-user") | {"X-Mercy-Roles": "admin"},
+            )
+            with patch("main.ingest_dc_sources", return_value={"status": "ok", "sources_registered": 1, "chunks_registered": 0}):
+                ingest_allowed = client.post(
+                    "/v1/rag/ingest",
+                    headers=_headers("tenant-a", "ops-user") | {"X-Mercy-Roles": "ops"},
+                    json={"source": {"source_id": "unit"}, "chunks": []},
+                )
+            firm_only_headers = {
+                "Authorization": "Bearer test-token",
+                "X-Mercy-Firm-Id": "firm-alpha",
+                "X-Mercy-User-Id": "firm-ops-user",
+                "X-Mercy-Roles": "ops",
+            }
+            firm_account_allowed = client.get("/v1/beta/analytics", headers=firm_only_headers)
+            firm_tenant_scoped_denied = client.post("/v1/rag/ingest", headers=firm_only_headers, json={"source": {"source_id": "unit"}, "chunks": []})
+
+        self.assertEqual(invite_forbidden.status_code, 403)
+        self.assertEqual(analytics_forbidden.status_code, 403)
+        self.assertEqual(ingest_forbidden.status_code, 403)
+        self.assertEqual(invite_allowed.status_code, 200)
+        self.assertEqual(analytics_allowed.status_code, 200)
+        self.assertEqual(ingest_allowed.status_code, 200)
+        self.assertEqual(firm_account_allowed.status_code, 200)
+        self.assertEqual(firm_tenant_scoped_denied.status_code, 403)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_sensitive_ops_endpoints_preserve_unauthenticated_behavior(self) -> None:
+        with _patched_env(os.environ, {"MERCY_ENV": "test", "MERCY_AUTH_MODE": "test", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            invite = client.post("/v1/beta/invites", json={"email": "beta@example.com"})
+            analytics = client.get("/v1/beta/analytics")
+            ingest = client.post("/v1/rag/ingest", json={"source": {}, "chunks": []})
+
+        self.assertEqual(invite.status_code, 401)
+        self.assertEqual(analytics.status_code, 401)
+        self.assertEqual(ingest.status_code, 401)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_local_dev_bypass_requires_explicit_env_pair(self) -> None:

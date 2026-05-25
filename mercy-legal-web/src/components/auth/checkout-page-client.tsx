@@ -32,7 +32,7 @@ declare global {
   }
 }
 
-const steps = ["Plan", "Account", "Payment", "Workspace"];
+const steps = ["Plan", "Register", "Payment", "Confirmation"];
 
 function readPendingSignup(): CheckoutPayload | null {
   try {
@@ -134,7 +134,7 @@ export function CheckoutPageClient() {
         <section className="w-full max-w-xl rounded-lg border bg-white p-8 text-center shadow-[0_24px_80px_rgba(10,20,40,0.08)]">
           <Stepper activeStep="Payment" />
           <h1 className="text-2xl font-semibold text-mercy-navy">No pending signup found</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">Return to signup so Mercy can collect account and workspace details before checkout.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">Return to signup so Mercy can collect registration and workspace details before checkout.</p>
           <Button asChild variant="gold" className="mt-6">
             <Link href="/sign-up">Choose a plan</Link>
           </Button>
@@ -150,7 +150,7 @@ export function CheckoutPageClient() {
         <Button asChild variant="ghost" className="mb-6">
           <Link href={accountType === "firm" ? "/sign-up/firm" : "/sign-up/solo"}>
             <ArrowLeft />
-            Back to account details
+            Back to registration details
           </Link>
         </Button>
 
@@ -166,16 +166,24 @@ export function CheckoutPageClient() {
 
             <div className="mt-6 rounded-lg border bg-slate-50 p-5 text-sm text-slate-700">
               <SummaryRow label="Plan" value={accountType === "firm" ? "Mercy Firm" : "Mercy Solo"} />
-              <SummaryRow label="Attorney seats" value={`${seats}${accountType === "firm" ? " minimum 2" : ""}`} />
+              <SummaryRow label="Attorney seats" value={accountType === "firm" ? `${seats} attorney seats` : "1 attorney seat"} />
               <SummaryRow label="Monthly total" value={accountType === "firm" ? `$98 x ${seats} = $${total}/month` : "$98/month"} />
             </div>
 
             <div className="mt-6 space-y-3">
-              {[
-                "Tenant workspace activation after payment confirmation",
-                "Attorney-supervised legal AI workflows",
-                "Word and web workspace access during beta",
-              ].map((item) => (
+              {(accountType === "firm"
+                ? [
+                    "Shared tenant workspace",
+                    "Firm profile",
+                    "Firm admin access after subscription confirmation",
+                    "Minimum 2 attorney seats",
+                  ]
+                : [
+                    "Individual tenant workspace",
+                    "Admin access for your own practice",
+                    "1 attorney seat",
+                    "Attorney-supervised legal AI workflows",
+                  ]).map((item) => (
                 <div key={item} className="flex gap-3 text-sm text-slate-700">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#a37f12]" />
                   {item}
@@ -188,11 +196,11 @@ export function CheckoutPageClient() {
                 <ShieldCheck className="size-4" />
                 Secure payment
               </div>
-              Mercy never stores card numbers. Payment fields are controlled by Stripe.
+              Choose your payment method and enter billing details securely through Stripe. Mercy never stores card numbers.
             </div>
 
             <p className="mt-5 text-xs leading-5 text-slate-500">
-              Questions before subscribing? Contact Mercy support and include the workspace name from this signup.
+              Credit or debit card, supported wallets, PayPal, and bank-based methods may appear when enabled and eligible in Stripe. Available payment methods depend on Stripe configuration and eligibility.
             </p>
           </aside>
 
@@ -200,7 +208,7 @@ export function CheckoutPageClient() {
             <div className="mb-5 flex flex-col justify-between gap-3 border-b pb-5 sm:flex-row sm:items-center">
               <div>
                 <h2 className="text-xl font-semibold text-mercy-navy">Confirm and subscribe</h2>
-                <p className="mt-1 text-sm text-slate-600">Enter payment information below to start the monthly subscription.</p>
+                <p className="mt-1 text-sm text-slate-600">Choose your payment method and enter billing details securely through Stripe.</p>
               </div>
               <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
                 Step 3 of 4
@@ -222,7 +230,7 @@ export function CheckoutPageClient() {
   );
 }
 
-function Stepper({ activeStep }: { activeStep: "Plan" | "Account" | "Payment" | "Workspace" }) {
+function Stepper({ activeStep }: { activeStep: "Plan" | "Register" | "Payment" | "Confirmation" }) {
   const activeIndex = steps.indexOf(activeStep);
   return (
     <ol className="mb-8 grid gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-4">

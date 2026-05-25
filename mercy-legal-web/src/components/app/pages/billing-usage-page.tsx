@@ -78,7 +78,7 @@ export function BillingUsagePage({
       <PageHeader
         eyebrow="Billing"
         title="Billing & Usage"
-        description="Review plan status, Agent X quota, monthly usage, estimated cost, and upgrade options for this tenant."
+        description="Review plan status, Mercy quota, monthly usage, estimated cost, and upgrade options for this tenant."
       >
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
@@ -109,7 +109,7 @@ export function BillingUsagePage({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Strong-model quota</h2>
-                <p className="mt-1 text-sm text-slate-500">{period} quota for drafting and research-heavy Agent X work.</p>
+                <p className="mt-1 text-sm text-slate-500">{period} quota for drafting and research-heavy Mercy work.</p>
               </div>
               <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-semibold text-[#4338CA]">
                 {betaStatus?.quota.strong_model_remaining ?? 0} remaining

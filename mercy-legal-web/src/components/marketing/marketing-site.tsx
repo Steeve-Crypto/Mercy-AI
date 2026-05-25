@@ -61,7 +61,9 @@ const routes = {
   contact: "/contact",
   signIn: "/sign-in",
   getStarted: "/sign-up",
-};
+} as const;
+
+type MarketingRoute = (typeof routes)[keyof typeof routes];
 
 const productLinks = [
   ["How It Works", routes.howItWorks, "Matter setup to attorney review."],
@@ -85,7 +87,7 @@ type Feature = {
   title: string;
   description: string;
   icon: LucideIcon;
-  href?: string;
+  href?: MarketingRoute;
   id?: string;
 };
 
@@ -331,7 +333,7 @@ function MegaMenu({
   align = "left",
 }: {
   label: string;
-  items: readonly (readonly [string, string, string])[];
+  items: readonly (readonly [string, MarketingRoute, string])[];
   active: boolean;
   align?: "left" | "right";
 }) {
@@ -389,7 +391,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-function MobileGroup({ title, items, onNavigate }: { title: string; items: readonly (readonly [string, string, string])[]; onNavigate: () => void }) {
+function MobileGroup({ title, items, onNavigate }: { title: string; items: readonly (readonly [string, MarketingRoute, string])[]; onNavigate: () => void }) {
   return (
     <details className="rounded-md border bg-white">
       <summary className="cursor-pointer px-4 py-3 font-semibold">{title}</summary>
@@ -629,7 +631,7 @@ function SectionIntro({ eyebrow, title, description }: { eyebrow: string; title:
   );
 }
 
-function ProductSurfaceCard({ title, description, icon: Icon, href }: Feature & { href: string }) {
+function ProductSurfaceCard({ title, description, icon: Icon, href }: Feature & { href: MarketingRoute }) {
   return (
     <Link href={href} className="group flex min-h-[230px] flex-col rounded-lg border border-black/10 bg-[#fffdf7] p-6 shadow-[0_14px_45px_rgba(17,24,39,0.06)] transition hover:-translate-y-0.5 hover:border-[#d4af37]/35 hover:shadow-[0_24px_70px_rgba(17,24,39,0.12)]">
       <div className="flex items-center justify-between">
@@ -794,7 +796,7 @@ export function HomeMarketingPage() {
                 ["Transactions", "Contracts, clauses, document review, negotiation prep, redline support, and Word workflows.", routes.solutionTransactions, FileText],
                 ["Research & Compliance", "D.C. source grounding, rule awareness, source checking, compliance review, and attorney judgment.", routes.solutionResearchCompliance, BookOpenCheck],
               ].map(([title, description, href, Icon]) => (
-                <ProductSurfaceCard key={title as string} title={title as string} description={description as string} href={href as string} icon={Icon as LucideIcon} />
+                <ProductSurfaceCard key={title as string} title={title as string} description={description as string} href={href as MarketingRoute} icon={Icon as LucideIcon} />
               ))}
             </div>
           </div>
@@ -966,7 +968,7 @@ export function SecurityPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Compliance roadmap</p>
             <h2 className="mt-4 text-3xl font-semibold">SOC 2-ready posture, not certification.</h2>
             <p className="mt-4 max-w-3xl text-sm leading-6 text-[#5b564e]">
-              Mercy's roadmap includes SOC 2 readiness work, security documentation, retention/deletion controls, and DPA/security packet materials available on request. This page does not claim completed certification.
+              Mercy&apos;s roadmap includes SOC 2 readiness work, security documentation, retention/deletion controls, and DPA/security packet materials available on request. This page does not claim completed certification.
             </p>
           </div>
         </section>
@@ -1446,7 +1448,7 @@ export function BlogPage() {
   );
 }
 
-function ResourceCard({ title, tag, href, icon: Icon }: { title: string; tag: string; href: string; icon: LucideIcon }) {
+function ResourceCard({ title, tag, href, icon: Icon }: { title: string; tag: string; href: MarketingRoute; icon: LucideIcon }) {
   return (
     <Link href={href} className="rounded-lg border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
       <div className="flex items-center justify-between gap-3">

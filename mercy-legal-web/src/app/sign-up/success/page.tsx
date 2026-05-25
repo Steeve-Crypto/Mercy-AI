@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
-const steps = ["Plan", "Account", "Payment", "Workspace"];
+const steps = ["Plan", "Register", "Payment", "Confirmation"];
 
 async function hasActiveWorkspace() {
   if (!supabaseServerConfigured()) return false;
@@ -46,12 +46,12 @@ export default async function SignupSuccessPage({
           {hasCheckoutSession ? <CheckCircle2 className="size-7" /> : <AlertCircle className="size-7" />}
         </div>
         <h1 className="mt-6 text-3xl font-semibold text-mercy-navy">
-          {hasCheckoutSession ? "Subscription processing" : "We could not confirm a checkout session."}
+          {hasCheckoutSession ? "Payment received" : "We could not confirm a checkout session."}
         </h1>
         <p className="mt-4 text-sm leading-6 text-slate-600">
           {hasCheckoutSession
-            ? "Mercy is confirming your subscription. This can take a few moments."
-            : "Please return to signup and complete Stripe Checkout before opening the workspace."}
+            ? "Mercy is confirming your subscription and preparing your workspace. This can take a few moments."
+            : "Please return to signup and complete Stripe Checkout before continuing."}
         </p>
         {hasCheckoutSession ? (
           <div className="mt-6 flex items-center justify-center gap-2 rounded-md bg-slate-50 p-3 text-sm text-slate-600">
@@ -62,7 +62,7 @@ export default async function SignupSuccessPage({
         <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
           {activeWorkspace ? (
             <Button asChild variant="gold">
-              <Link href="/dashboard">Go to workspace</Link>
+              <Link href="/dashboard">Enter Mercy</Link>
             </Button>
           ) : null}
           <Button asChild variant={activeWorkspace ? "outline" : "gold"}>

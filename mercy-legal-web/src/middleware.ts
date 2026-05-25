@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/chat", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
+const PROTECTED_PREFIXES = ["/mercy", "/dashboard", "/chat", "/history", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
 const ADMIN_ROLES = new Set(["admin", "superadmin", "platform_admin", "ops"]);
 const PLATFORM_BYPASS_ROLES = new Set(["superadmin", "platform_admin", "ops"]);
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);

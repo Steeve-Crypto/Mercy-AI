@@ -48,6 +48,7 @@ class BetaLaunchTests(unittest.TestCase):
         WAITLIST.clear()
         INVITES.clear()
         FEEDBACK.clear()
+        os.environ.pop("MERCY_BETA_STRONG_MONTHLY_QUOTA", None)
 
     def test_beta_status_reports_quota_and_docs(self) -> None:
         status = beta_status({"tenant_id": "tenant-a", "user_id": "user-a"})
@@ -115,7 +116,7 @@ class BetaLaunchTests(unittest.TestCase):
             waitlist = client.post("/v1/beta/waitlist", headers=_headers(), json={"email": "beta@example.com"})
             feedback = client.post("/v1/beta/feedback", headers=_headers(), json={"rating": "down", "action": "test"})
             doc = client.get("/v1/beta/legal/terms", headers=_headers())
-            analytics = client.get("/v1/beta/analytics", headers=_headers())
+            analytics = client.get("/v1/beta/analytics", headers=_headers() | {"X-Mercy-Roles": "ops"})
 
         self.assertEqual(status.status_code, 200)
         self.assertEqual(waitlist.status_code, 200)

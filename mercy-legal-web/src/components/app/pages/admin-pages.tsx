@@ -321,7 +321,7 @@ export function SecurityAdminPage({ metrics }: { metrics: CoreMonitoringMetrics 
 export function SystemHealthAdminPage({ metrics }: { metrics: CoreMonitoringMetrics | null }) {
   return (
     <>
-      <PageHeader title="System health" description="Core health, RAGAS health, Agent X execution posture, and backend status." />
+      <PageHeader title="System health" description="Core health, RAGAS health, Mercy execution posture, and backend status." />
       <div className="p-5 lg:p-8">
         <JsonCard title="System metrics" data={metrics} />
       </div>

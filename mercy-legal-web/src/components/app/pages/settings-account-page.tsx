@@ -286,7 +286,7 @@ export function SettingsAccountPage() {
                 Help & Support
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                For beta support, include your tenant ID, matter ID if relevant, and whether Agent X produced a trace link.
+                For beta support, include your tenant ID, matter ID if relevant, and whether Mercy produced a trace link.
               </p>
               <a className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="mailto:support@mercy.ai">
                 Email support

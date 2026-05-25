@@ -19,11 +19,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
   Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
-import { PageHeader } from "@/components/app/page-header";
+import type { LucideIcon } from "lucide-react";
 import {
   deleteMatterDocument,
   listMatterDocuments,
@@ -134,7 +135,7 @@ function timeline(matter: CoreMatter, research: CoreRagEnvelope | null, discover
     ...(matter.drafts ?? []).map((draft, index) => ({
       id: `draft-${index}`,
       label: "Draft generated",
-      detail: asText(draft.draft_type ?? draft.title ?? draft.summary, "Agent X draft saved."),
+      detail: asText(draft.draft_type ?? draft.title ?? draft.summary, "Mercy draft saved."),
       time: asText(draft.created_at ?? draft.timestamp, "Draft event"),
     })),
   ];
@@ -178,6 +179,11 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const activities = useMemo(() => timeline(matter, researchResult, discoveryResult), [discoveryResult, matter, researchResult]);
   const chatHref = `/chat?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
   const intakeHref = `/intake?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
+  const documentsReady = documents.filter((document) => document.status === "Ready").length;
+  const openInputs = matter.missing_information?.length ?? 0;
+  const latestRoute = matter.route_history?.[matter.route_history.length - 1] ?? null;
+  const latestConfidence = latestRoute ? Math.round(latestRoute.confidence * 100) : null;
+  const reliabilityItems = openInputs + (latestRoute?.missing_inputs?.length ?? 0);
 
   function addToast(tone: Toast["tone"], message: string) {
     const toast = { id: crypto.randomUUID(), tone, message };
@@ -322,23 +328,33 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   }
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Matter workspace"
-        title={matter.name}
-        description={`${matter.client_name ?? "Client"} · ${matter.matter_type ?? "General matter"} · ${matter.jurisdiction ?? "District of Columbia"}`}
-      >
-        <div className="flex flex-wrap gap-2">
-          <Link href={chatHref} className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
-            Ask Agent X
-          </Link>
-          <Link href={intakeHref} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            New Intake
-          </Link>
+    <div className="p-5 lg:p-8">
+      <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
+                Matter workspace
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                {matter.jurisdiction ?? "District of Columbia"}
+              </span>
+            </div>
+            <h1 className="mt-3 text-2xl font-semibold tracking-normal text-slate-950">{matter.name}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              {matter.client_name ?? "Client"} · {matter.matter_type ?? "General matter"} · Keep documents, research, Agent X work, and reliability review tied to this matter.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href={chatHref} className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
+              Ask Agent X
+            </Link>
+            <Link href={intakeHref} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              New Intake
+            </Link>
+          </div>
         </div>
-      </PageHeader>
-
-      <div className="p-5 lg:p-8">
+      </section>
         {toasts.length ? (
           <div className="fixed right-5 top-5 z-50 w-80 space-y-2">
             {toasts.map((toast) => (
@@ -389,57 +405,147 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         </div>
 
         {activeTab === "overview" ? (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-950">Matter summary</h2>
-              <dl className="mt-5 grid gap-4 md:grid-cols-2">
-                <Info label="Client" value={matter.client_name ?? matter.client_id} />
-                <Info label="Matter type" value={matter.matter_type} />
-                <Info label="Client role" value={matter.client_role} />
-                <Info label="Requested relief" value={matter.requested_relief} />
-                <Info label="Opposing parties" value={matter.opposing_parties?.join(", ")} />
-                <Info label="Sensitivity" value={matter.sensitivity_flags?.join(", ")} />
-              </dl>
-              <div className="mt-5 rounded-xl bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-950">Key facts</p>
-                <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                  {Object.keys(matter.key_facts ?? matter.facts ?? {}).length
-                    ? JSON.stringify(matter.key_facts ?? matter.facts, null, 2)
-                    : "No structured facts saved yet. Use Intake to add facts before drafting."}
-                </pre>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
+                      Matter command center
+                    </span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                      {matter.jurisdiction ?? "District of Columbia"}
+                    </span>
+                  </div>
+                  <h2 className="mt-4 text-2xl font-semibold tracking-normal text-slate-950">{matter.name}</h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                    Keep facts, documents, assistant work, source review, and attorney-control checks tied to this matter before using output in client work.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <CommandMetric label="Documents" value={`${documentsReady}/${documents.length}`} />
+                  <CommandMetric label="Open inputs" value={openInputs} />
+                  <CommandMetric label="Reliability" value={latestConfidence ? `${latestConfidence}%` : "Pending"} />
+                </div>
               </div>
             </section>
 
-            <aside className="space-y-5">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <CommandAction
+                icon={UploadCloud}
+                label="Documents"
+                detail="Upload, preview, attach, or remove matter documents."
+                onClick={openDocumentUpload}
+                tone="default"
+              />
+              <Link href={chatHref} className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-5 shadow-sm transition hover:border-[#A5B4FC] hover:bg-[#E0E7FF]">
+                <div className="flex items-center gap-3">
+                  <span className="flex size-10 items-center justify-center rounded-lg bg-white text-[#4F46E5]">
+                    <Bot className="size-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-950">Assistant</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">Ask, draft, analyze, or cite-check with this matter loaded.</p>
+                  </div>
+                </div>
+              </Link>
+              <CommandAction
+                icon={Search}
+                label="Research"
+                detail="Run D.C.-focused source retrieval against this matter."
+                onClick={() => setActiveTab("research")}
+                tone="default"
+              />
+              <CommandAction
+                icon={MessageSquareText}
+                label="Drafting"
+                detail="Open drafting guidance and move into Assistant work."
+                onClick={() => setActiveTab("drafting")}
+                tone="default"
+              />
+            </section>
+
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-950">Quick actions</h2>
-                <div className="mt-4 grid gap-3">
-                  <Link href={chatHref} className="flex items-center gap-3 rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] p-3 text-sm font-semibold text-[#4338CA]">
-                    <Bot className="size-4" />
-                    Ask Agent X about this matter
-                  </Link>
-                  <button onClick={() => setActiveTab("research")} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                    <Search className="size-4 text-[#4F46E5]" />
-                    Run matter research
-                  </button>
-                  <button onClick={openDocumentUpload} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                    <UploadCloud className="size-4 text-[#4F46E5]" />
-                    New Document
-                  </button>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-950">Matter record</h2>
+                    <p className="mt-1 text-sm text-slate-500">Core matter fields that inform Mercy Assistant, research, and drafting requests.</p>
+                  </div>
+                  {reliabilityItems ? (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                      {reliabilityItems} review item{reliabilityItems === 1 ? "" : "s"}
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                      Ready for review
+                    </span>
+                  )}
+                </div>
+                <dl className="mt-5 grid gap-4 md:grid-cols-2">
+                  <Info label="Client" value={matter.client_name ?? matter.client_id} />
+                  <Info label="Matter type" value={matter.matter_type} />
+                  <Info label="Client role" value={matter.client_role} />
+                  <Info label="Requested relief" value={matter.requested_relief} />
+                  <Info label="Opposing parties" value={matter.opposing_parties?.join(", ")} />
+                  <Info label="Sensitivity" value={matter.sensitivity_flags?.join(", ")} />
+                </dl>
+                <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-950">Key facts</p>
+                  <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                    {Object.keys(matter.key_facts ?? matter.facts ?? {}).length
+                      ? JSON.stringify(matter.key_facts ?? matter.facts, null, 2)
+                      : "No structured facts saved yet. Use Intake to add facts before drafting."}
+                  </pre>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-950">Deadlines</h2>
-                <div className="mt-4 space-y-3">
-                  {deadlines.length ? deadlines.map((deadline, index) => (
-                    <div key={index} className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-sm font-semibold text-slate-950">{asText(deadline.title ?? deadline.name ?? deadline.type, `Deadline ${index + 1}`)}</p>
-                      <p className="mt-1 text-xs text-slate-500">{asText(deadline.date ?? deadline.due_date ?? deadline.deadline)}</p>
-                    </div>
-                  )) : <EmptyState text="No deadlines recorded yet." />}
+
+              <aside className="space-y-5">
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 text-lg font-semibold text-slate-950">
+                    <ShieldCheck className="size-5 text-[#4F46E5]" />
+                    Reliability status
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <ReliabilityRow label="Latest route" value={latestRoute ? `${latestRoute.expert_label} / ${latestRoute.route_mode}` : "No route yet"} />
+                    <ReliabilityRow label="Confidence" value={latestConfidence ? `${latestConfidence}%` : "Pending"} />
+                    <ReliabilityRow label="Open inputs" value={reliabilityItems ? `${reliabilityItems} item${reliabilityItems === 1 ? "" : "s"}` : "None recorded"} />
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-slate-500">
+                    Attorney review remains required. Use the Reliability Panel after Assistant or research output before relying on citations or conclusions.
+                  </p>
                 </div>
-              </div>
-            </aside>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-950">Office workflow</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Use this matter as the source of truth before continuing drafting or selected-text review in Word and Outlook.
+                  </p>
+                  <div className="mt-4 grid gap-2">
+                    <Link href={chatHref} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      <FileText className="size-4 text-[#4F46E5]" />
+                      Prepare work for Word
+                    </Link>
+                    <Link href={chatHref} className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      <MessageSquareText className="size-4 text-[#4F46E5]" />
+                      Review selected email context
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-950">Deadlines</h2>
+                  <div className="mt-4 space-y-3">
+                    {deadlines.length ? deadlines.map((deadline, index) => (
+                      <div key={index} className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-sm font-semibold text-slate-950">{asText(deadline.title ?? deadline.name ?? deadline.type, `Deadline ${index + 1}`)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{asText(deadline.date ?? deadline.due_date ?? deadline.deadline)}</p>
+                      </div>
+                    )) : <EmptyState text="No deadlines recorded yet." />}
+                  </div>
+                </div>
+              </aside>
+            </section>
           </div>
         ) : null}
 
@@ -566,7 +672,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                       {document.status === "Ready" ? (
                         <Link
                           href={`/chat?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}&attached=1` as Route}
-                          onClick={() => addToast("success", `${document.filename} attached to Ask Agent X.`)}
+                          onClick={() => addToast("success", `${document.filename} attached to Mercy.`)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
                         >
                           <Paperclip className="size-3.5" />
@@ -602,7 +708,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                 </div>
                 <h3 className="mt-4 text-base font-semibold text-slate-950">No documents yet</h3>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  Drag and drop approved PDFs above. Ready documents can be previewed, attached to Agent X, or removed from the matter.
+                  Drag and drop approved PDFs above. Ready documents can be previewed, attached to Mercy, or removed from the matter.
                 </p>
               </div>
             )}
@@ -642,13 +748,13 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
 
         {activeTab === "drafting" ? (
           <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Drafting with Agent X</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Drafting with Mercy</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Open Ask Agent X with this matter preloaded. Agent X will receive matter ID, D.C. jurisdiction, facts, documents, requested relief, and source toggles.
+              Open Mercy with this matter preloaded. Mercy will receive matter ID, D.C. jurisdiction, facts, documents, requested relief, and source toggles.
             </p>
             <Link href={chatHref} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-5 py-3 text-sm font-semibold text-white hover:bg-[#4338CA]">
               <Bot className="size-4" />
-              Open in Ask Agent X
+              Open in Mercy
             </Link>
           </section>
         ) : null}
@@ -687,7 +793,6 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
           </section>
         ) : null}
       </div>
-    </>
   );
 }
 
@@ -735,6 +840,55 @@ function UsageCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-3 text-3xl font-semibold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function CommandMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function CommandAction({
+  icon: Icon,
+  label,
+  detail,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  detail: string;
+  onClick: () => void;
+  tone: "default";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-[#A5B4FC] hover:bg-[#F8FAFF]"
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-lg bg-slate-100 text-[#4F46E5]">
+          <Icon className="size-5" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ReliabilityRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

@@ -8,6 +8,7 @@ export type MercySessionUser = {
   email: string | null;
   name: string;
   tenantId: string;
+  firmId: string | null;
   roles: string[];
   firm?: string | null;
   dcBarNumber?: string | null;
@@ -28,18 +29,39 @@ function rolesFromUser(user: User): string[] {
   return ["attorney"];
 }
 
-function tenantFromUser(user: User): string {
-  return String(
-    user.app_metadata?.firm_id ??
-      user.app_metadata?.firmId ??
-      user.user_metadata?.firm_id ??
-      user.user_metadata?.firmId ??
-      user.app_metadata?.tenant_id ??
-      user.app_metadata?.tenantId ??
-      user.user_metadata?.tenant_id ??
-      user.user_metadata?.tenantId ??
-      user.id,
+function stringFromMetadata(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function firmFromUser(user: User): string | null {
+  return stringFromMetadata(
+    user.app_metadata?.firm_id,
+    user.app_metadata?.firmId,
+    user.user_metadata?.firm_id,
+    user.user_metadata?.firmId,
   );
+}
+
+function tenantFromUser(user: User): string {
+  const tenantId = stringFromMetadata(
+    user.app_metadata?.tenant_id,
+    user.app_metadata?.tenantId,
+    user.user_metadata?.tenant_id,
+    user.user_metadata?.tenantId,
+  );
+  const firmId = firmFromUser(user);
+  // Firm/customer context is valid for account-level flows. Tenant ID is the
+  // child workspace/data scope when present; firm ID remains the firm boundary.
+  return tenantId ?? firmId ?? user.id;
+}
+
+function accountNameFromUser(user: User): string | null {
+  return String(
+    user.user_metadata?.firm_name ?? user.user_metadata?.firmName ?? "",
+  ).trim() || null;
 }
 
 export function mercyUserFromSupabaseUser(user: User): MercySessionUser {
@@ -48,8 +70,9 @@ export function mercyUserFromSupabaseUser(user: User): MercySessionUser {
     email: user.email ?? null,
     name: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Mercy Attorney"),
     tenantId: tenantFromUser(user),
+    firmId: firmFromUser(user),
     roles: rolesFromUser(user),
-    firm: typeof user.user_metadata?.firm_name === "string" ? user.user_metadata.firm_name : null,
+    firm: accountNameFromUser(user),
     dcBarNumber:
       typeof user.user_metadata?.dc_bar_number === "string"
         ? user.user_metadata.dc_bar_number
@@ -67,6 +90,7 @@ export async function getServerMercyAuthContext(): Promise<CoreAuthContext> {
     return {
       token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
       tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
+      firmId: process.env.MERCY_FIRM_ID || process.env.NEXT_PUBLIC_MERCY_FIRM_ID,
       userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
       roles: process.env.MERCY_ROLES || "attorney",
     };
@@ -98,6 +122,7 @@ export async function getServerMercyAuthContext(): Promise<CoreAuthContext> {
   return {
     token: session.access_token,
     tenantId: mercyUser.tenantId,
+    firmId: mercyUser.firmId,
     userId: mercyUser.id,
     roles: mercyUser.roles.join(","),
   };

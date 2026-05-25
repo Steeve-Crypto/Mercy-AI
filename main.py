@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from agent_network import execute_agent_task, mcp_skill_manifest
 from client_intake_flow import run_full_intake_flow
@@ -548,19 +547,32 @@ def _tenant_context(tenant_user: TenantUser) -> dict[str, Any]:
 
 
 def _auth_metadata(tenant_user: TenantUser) -> dict[str, Any]:
-    return {
+    metadata = {
         "tenant_id": tenant_user.tenant_id,
         "user_id": tenant_user.user_id,
         "auth_mode": tenant_user.auth_mode,
+        "account_id": tenant_user.firm_id or tenant_user.tenant_id,
     }
+    if tenant_user.firm_id:
+        metadata["firm_id"] = tenant_user.firm_id
+    return metadata
+
+
+def _require_admin_or_ops(tenant_user: TenantUser, detail: str) -> None:
+    if tenant_user.auth_mode == "local_dev":
+        return
+    if any(role in {"admin", "ops", "superadmin"} for role in tenant_user.roles):
+        return
+    raise HTTPException(status_code=403, detail=detail)
 
 
 def _require_monitoring_admin(tenant_user: TenantUser) -> None:
-    if tenant_user.auth_mode == "local_dev":
-        return
-    if "admin" in tenant_user.roles or "ops" in tenant_user.roles:
-        return
-    raise HTTPException(status_code=403, detail="Monitoring endpoints require an admin or ops role.")
+    _require_admin_or_ops(tenant_user, "Monitoring endpoints require an admin or ops role.")
+
+
+def _require_tenant_scope(tenant_user: TenantUser, detail: str) -> None:
+    if tenant_user.tenant_id_is_firm_fallback:
+        raise HTTPException(status_code=403, detail=detail)
 
 
 def _require_provisioning_admin(tenant_user: TenantUser) -> None:
@@ -745,6 +757,7 @@ async def beta_invites(
     request: BetaInviteRequest,
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
+    _require_admin_or_ops(tenant_user, "Beta invite operations require an admin or ops role.")
     return create_invite(request.email, _tenant_context(tenant_user), invited_by=request.invited_by)
 
 
@@ -793,6 +806,7 @@ async def beta_analytics_endpoint(
     limit: int = Query(100, ge=1, le=500),
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
+    _require_admin_or_ops(tenant_user, "Beta analytics require an admin or ops role.")
     trace_event(name="beta_analytics_view", surface_context="beta_admin", category="beta", metadata=_auth_metadata(tenant_user))
     return beta_analytics(limit=limit)
 
@@ -1267,6 +1281,8 @@ async def rag_ingest(
     request: RagIngestRequest,
     tenant_user: TenantUser = Depends(get_current_tenant_user),
 ) -> dict[str, Any]:
+    _require_admin_or_ops(tenant_user, "RAG ingestion requires an admin or ops role.")
+    _require_tenant_scope(tenant_user, "RAG ingestion requires a tenant/workspace scope.")
     context = _scoped_matter_context(
         tenant_user,
         matter_id=request.matter_id,

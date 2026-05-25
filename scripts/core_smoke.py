@@ -25,7 +25,7 @@ def _b64url(payload: dict[str, object]) -> str:
     return base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")).rstrip(b"=").decode("ascii")
 
 
-def _jwt(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a") -> str:
+def _jwt(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a", roles: list[str] | None = None) -> str:
     now = int(time.time())
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
@@ -33,16 +33,16 @@ def _jwt(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a") -> 
         "sub": user_id,
         "iat": now,
         "exp": now + 3600,
-        "app_metadata": {"tenant_id": tenant_id, "roles": ["attorney"]},
+        "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
     }
     signing_input = f"{_b64url(header)}.{_b64url(payload)}"
     signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256).digest()
     return f"{signing_input}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode('ascii')}"
 
 
-def _headers(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a") -> dict[str, str]:
+def _headers(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a", roles: list[str] | None = None) -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {_jwt(tenant_id, user_id)}",
+        "Authorization": f"Bearer {_jwt(tenant_id, user_id, roles)}",
     }
 
 
@@ -85,7 +85,7 @@ def main() -> int:
             raise AssertionError("agent skills response did not include discoverable MCP skills")
 
         invite = _assert_status(
-            client.post("/v1/beta/invites", json={"email": "verify@example.com"}, headers=_headers()),
+            client.post("/v1/beta/invites", json={"email": "verify@example.com"}, headers=_headers(roles=["ops"])),
             200,
             "create beta invite for smoke tenant",
         )

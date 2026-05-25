@@ -26,6 +26,7 @@ export type CoreHealth = {
 export type CoreAuthContext = {
   token?: string | null;
   tenantId?: string | null;
+  firmId?: string | null;
   userId?: string | null;
   roles?: string | null;
 };
@@ -614,6 +615,9 @@ function browserAuthContext(): CoreAuthContext {
     tenantId:
       window.localStorage.getItem("mercy.auth.tenantId") ||
       (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant" : undefined),
+    firmId:
+      window.localStorage.getItem("mercy.auth.firmId") ||
+      (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_FIRM_ID : undefined),
     userId:
       window.localStorage.getItem("mercy.auth.userId") ||
       (localDevDefaults ? process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-user" : undefined),
@@ -634,6 +638,7 @@ function serverAuthContext(): CoreAuthContext {
   return {
     token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
     tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || (localDevDefaults ? "local-dev-tenant" : undefined),
+    firmId: process.env.MERCY_FIRM_ID || process.env.NEXT_PUBLIC_MERCY_FIRM_ID,
     userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || (localDevDefaults ? "local-web-server" : undefined),
     roles: process.env.MERCY_ROLES || (localDevDefaults ? "attorney" : undefined),
   };
@@ -650,6 +655,9 @@ function authHeaders(auth?: CoreAuthContext): HeadersInit {
   }
   if (context.tenantId) {
     headers["X-Mercy-Tenant-Id"] = context.tenantId;
+  }
+  if (context.firmId) {
+    headers["X-Mercy-Firm-Id"] = context.firmId;
   }
   if (context.userId) {
     headers["X-Mercy-User-Id"] = context.userId;

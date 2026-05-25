@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
 from auth_context import _tenant_user_from_supabase_jwt
-from microsoft_auth import exchange_microsoft_token_for_mercy_session
+from microsoft_auth import MercyIdentityMapping, MicrosoftIdentity, exchange_microsoft_token_for_mercy_session, issue_mercy_session_token
 from mercy_storage import (
     get_microsoft_identity_mapping,
     reset_storage_for_tests,
@@ -144,7 +144,8 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
 
         self.assertEqual(exchange["token_type"], "bearer")
         self.assertEqual(exchange["auth_mode"], "microsoft_naa")
-        self.assertEqual(tenant_user.tenant_id, "firm-alpha")
+        self.assertEqual(tenant_user.tenant_id, "tenant-alpha")
+        self.assertEqual(tenant_user.firm_id, "firm-alpha")
         self.assertEqual(tenant_user.user_id, "mercy-user-a")
         self.assertIn("firm_admin", tenant_user.roles)
         self.assertIsNotNone(stored)
@@ -187,7 +188,7 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
         self.assertEqual(tenant_user.tenant_id, "solo-alpha")
         self.assertEqual(tenant_user.user_id, "mercy-user-a")
 
-    def test_firm_scope_takes_priority_when_firm_and_tenant_exist(self) -> None:
+    def test_exchange_preserves_firm_account_and_child_tenant_scope(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with _patched_env(self._db_env(temp_dir)), _patched_jwks():
                 self._provision(firm_id="firm-alpha", tenant_id="tenant-alpha")
@@ -195,9 +196,26 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
                 tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
                 stored = get_microsoft_identity_mapping(TENANT_ID, "user-oid")
 
-        self.assertEqual(tenant_user.tenant_id, "firm-alpha")
+        self.assertEqual(tenant_user.tenant_id, "tenant-alpha")
+        self.assertEqual(tenant_user.firm_id, "firm-alpha")
         self.assertEqual(stored["effective_scope_type"], "firm")
         self.assertEqual(stored["effective_scope_id"], "firm-alpha")
+
+    def test_microsoft_firm_account_token_without_tenant_scope_remains_valid(self) -> None:
+        identity = MicrosoftIdentity(tid=TENANT_ID, oid="user-oid", subject="subject", email="attorney@example.test")
+        mapping = MercyIdentityMapping(
+            user_id="mercy-user-a",
+            tenant_id=None,
+            firm_id="firm-alpha",
+            roles=("ops",),
+        )
+        with _patched_env({"SUPABASE_JWT_SECRET": SUPABASE_SECRET, "SUPABASE_URL": ""}):
+            access_token = issue_mercy_session_token(identity, mapping)
+            tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {access_token}")
+
+        self.assertEqual(tenant_user.firm_id, "firm-alpha")
+        self.assertEqual(tenant_user.tenant_id, "firm-alpha")
+        self.assertTrue(tenant_user.tenant_id_is_firm_fallback)
 
     def test_disabled_and_pending_mappings_fail_closed(self) -> None:
         for status in ("disabled", "pending"):

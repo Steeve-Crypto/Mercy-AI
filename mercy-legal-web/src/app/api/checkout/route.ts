@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { normalizeSignup, signupMetadata, validatePendingSignup } from "@/lib/signup/provisioning";
 
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
   }
 
   const session = await stripe.checkout.sessions.create({
-    ui_mode: "embedded",
+    ui_mode: "embedded" as Stripe.Checkout.SessionCreateParams["ui_mode"],
     mode: "subscription",
     payment_method_types: ["card"],
     customer_email: signup.email,

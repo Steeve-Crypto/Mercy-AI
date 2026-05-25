@@ -17,6 +17,7 @@ SAFE_ROUTE_PREFIXES = (
     "/devops",
     "/admin/devops",
     "/v1",
+    "/api/core",
 )
 
 OBSERVED_NODE_LABELS: dict[str, dict[str, str]] = {
@@ -103,6 +104,9 @@ def safe_route_family(path: str) -> str:
         return "/devops/*"
     if path.startswith("/admin/devops"):
         return "/admin/devops"
+    if path.startswith("/api/core/"):
+        parts = path.strip("/").split("/")
+        return "/" + "/".join(parts[:3]) + "/*" if len(parts) >= 3 else "/api/core/*"
     if path.startswith("/v1/"):
         parts = path.strip("/").split("/")
         return "/" + "/".join(parts[:2]) + "/*" if len(parts) >= 2 else "/v1/*"
@@ -325,16 +329,14 @@ def configure_fastapi_otel(app: FastAPI, *, service_name: str = "mercy-backend")
     current provider; otherwise the middleware remains a safe no-op timer.
     """
 
-    if not otel_enabled():
-        return {"enabled": False, "service_name": service_name}
-
     tracer = None
-    try:
-        from opentelemetry import trace  # type: ignore
+    if otel_enabled():
+        try:
+            from opentelemetry import trace  # type: ignore
 
-        tracer = trace.get_tracer("mercy.fastapi")
-    except Exception:
-        tracer = None
+            tracer = trace.get_tracer("mercy.fastapi")
+        except Exception:
+            tracer = None
 
     @app.middleware("http")
     async def mercy_otel_middleware(request: Request, call_next: Any) -> Response:
@@ -386,4 +388,4 @@ def configure_fastapi_otel(app: FastAPI, *, service_name: str = "mercy-backend")
             response.headers.setdefault("X-Mercy-Trace-Id", trace_id)
             return response
 
-    return {"enabled": True, "service_name": service_name, "exporter": "current-provider-or-none"}
+    return {"enabled": otel_enabled(), "service_name": service_name, "exporter": "current-provider-or-none"}

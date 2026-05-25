@@ -6,7 +6,7 @@ export default function AttorneyAppLayout({ children }: Readonly<{ children: Rea
     <SessionProvider>
       <div className="min-h-screen bg-slate-50 text-slate-950">
         <AppSidebar />
-        <main className="lg:pl-72">{children}</main>
+        <main className="lg:pl-64">{children}</main>
       </div>
     </SessionProvider>
   );

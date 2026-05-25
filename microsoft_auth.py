@@ -30,7 +30,7 @@ class MicrosoftIdentity:
 @dataclass(frozen=True)
 class MercyIdentityMapping:
     user_id: str
-    tenant_id: str
+    tenant_id: str | None
     firm_id: str | None
     roles: tuple[str, ...]
     status: str = "active"
@@ -67,19 +67,20 @@ def _roles(value: Any) -> tuple[str, ...]:
 def _safe_mapping(record: dict[str, Any], identity: MicrosoftIdentity) -> MercyIdentityMapping:
     firm_id = str(record.get("firm_id") or "").strip() or None
     raw_tenant_id = str(record.get("tenant_id") or "").strip() or None
-    try:
-        scope_type, scope_id = validate_microsoft_identity_mapping_scope(
-            firm_id=firm_id,
-            tenant_id=raw_tenant_id,
-            effective_scope_type=str(record.get("effective_scope_type") or "").strip() or None,
-            effective_scope_id=str(record.get("effective_scope_id") or "").strip() or None,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
-    if not raw_tenant_id:
-        raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
+    if raw_tenant_id:
+        try:
+            validate_microsoft_identity_mapping_scope(
+                firm_id=firm_id,
+                tenant_id=raw_tenant_id,
+                effective_scope_type=str(record.get("effective_scope_type") or "").strip() or None,
+                effective_scope_id=str(record.get("effective_scope_id") or "").strip() or None,
+            )
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing tenant scope.")
+    elif not firm_id:
+        raise HTTPException(status_code=403, detail="Microsoft identity mapping is missing firm or tenant scope.")
     user_id = str(record.get("user_id") or f"ms:{identity.tid}:{identity.oid}").strip()
-    return MercyIdentityMapping(user_id=user_id, tenant_id=scope_id, firm_id=firm_id, roles=_roles(record.get("roles")), status="active")
+    return MercyIdentityMapping(user_id=user_id, tenant_id=raw_tenant_id, firm_id=firm_id, roles=_roles(record.get("roles")), status="active")
 
 
 def _safe_db_mapping(record: dict[str, Any]) -> MercyIdentityMapping:
@@ -106,7 +107,7 @@ def _safe_db_mapping(record: dict[str, Any]) -> MercyIdentityMapping:
     user_id = str(record.get("mercy_user_id") or "").strip()
     if not user_id:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is invalid.")
-    return MercyIdentityMapping(user_id=user_id, tenant_id=scope_id, firm_id=firm_id, roles=_roles(record.get("roles")), status=status)
+    return MercyIdentityMapping(user_id=user_id, tenant_id=tenant_id, firm_id=firm_id, roles=_roles(record.get("roles")), status=status)
 
 
 def map_microsoft_identity(identity: MicrosoftIdentity) -> MercyIdentityMapping:
@@ -177,10 +178,10 @@ def issue_mercy_session_token(identity: MicrosoftIdentity, mapping: MercyIdentit
     now = datetime.now(UTC)
     exp = now + timedelta(minutes=15)
     app_metadata: dict[str, Any] = {"roles": list(mapping.roles)}
+    if mapping.tenant_id:
+        app_metadata["tenant_id"] = mapping.tenant_id
     if mapping.firm_id:
         app_metadata["firm_id"] = mapping.firm_id
-    else:
-        app_metadata["tenant_id"] = mapping.tenant_id
     payload = {
         "aud": "authenticated",
         "sub": mapping.user_id,

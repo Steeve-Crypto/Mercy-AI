@@ -36,6 +36,7 @@ function forwardedRequestHeaders(request: NextRequest, auth: Awaited<ReturnType<
   if (auth.token) headers.set("Authorization", `Bearer ${auth.token}`);
   if (localDevAuthDefaultsEnabled()) {
     if (auth.tenantId) headers.set("X-Mercy-Tenant-Id", auth.tenantId);
+    if (auth.firmId) headers.set("X-Mercy-Firm-Id", auth.firmId);
     if (auth.userId) headers.set("X-Mercy-User-Id", auth.userId);
     if (auth.roles) headers.set("X-Mercy-Roles", auth.roles);
   }

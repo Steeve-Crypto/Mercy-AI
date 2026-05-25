@@ -13,6 +13,7 @@ export default defineConfig(async ({ command }) => {
 
   return {
     configFile: false,
+    root: __dirname,
     plugins: [react()],
     server: {
       ...(httpsOptions ? { https: httpsOptions } : {}),

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -146,7 +145,7 @@ GROUPS: list[tuple[str, list[EnvSpec]]] = [
         [
             EnvSpec("MERCY_DAILY_TENANT_COST_CAP_USD", "Daily tenant cost cap USD", "5"),
             EnvSpec("MERCY_MONTHLY_TENANT_COST_CAP_USD", "Monthly tenant cost cap USD", "100"),
-            EnvSpec("MERCY_BETA_STRONG_MONTHLY_QUOTA", "Beta strong-model monthly quota", "50"),
+            EnvSpec("MERCY_BETA_STRONG_MONTHLY_QUOTA", "Beta strong-model monthly quota", "300"),
             EnvSpec("MERCY_RATE_LIMIT_PER_MINUTE", "Rate limit per minute", "120"),
             EnvSpec("MERCY_MAX_UPLOAD_MB", "Max upload MB", "25"),
             EnvSpec("MERCY_MAX_CONTEXT_CHARS", "Max context chars", "120000"),

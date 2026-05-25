@@ -22,6 +22,7 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
 
         self.assertIn("getServerMercyAuthContext", source)
         self.assertIn('headers.set("Authorization", `Bearer ${auth.token}`)', source)
+        self.assertIn('headers.set("X-Mercy-Firm-Id", auth.firmId)', source)
         self.assertIn("Mercy session is required.", source)
 
     def test_supabase_session_provider_does_not_persist_access_token_outside_local_dev(self) -> None:
@@ -30,11 +31,13 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
         self.assertIn("persistMercyContext(nextSession, false)", source)
         self.assertIn("persistMercyContext(LOCAL_DEV_SESSION, true)", source)
 
-    def test_web_session_prefers_firm_id_before_solo_tenant_id(self) -> None:
+    def test_web_session_preserves_firm_and_tenant_context(self) -> None:
         source = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "session.ts").read_text(encoding="utf-8")
 
-        self.assertLess(source.find("user.app_metadata?.firm_id"), source.find("user.app_metadata?.tenant_id"))
-        self.assertLess(source.find("user.user_metadata?.firm_id"), source.find("user.user_metadata?.tenant_id"))
+        self.assertIn("firmId: string | null", source)
+        self.assertIn("function firmFromUser", source)
+        self.assertIn("firmId: firmFromUser(user)", source)
+        self.assertIn("Firm/customer context is valid for account-level flows", source)
 
 
 if __name__ == "__main__":

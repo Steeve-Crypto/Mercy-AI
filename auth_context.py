@@ -4,7 +4,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -26,14 +25,20 @@ class TenantUser:
     user_id: str
     auth_mode: str
     roles: tuple[str, ...] = ()
+    firm_id: str | None = None
+    tenant_id_is_firm_fallback: bool = False
 
     def to_context(self) -> dict[str, Any]:
-        return {
+        context = {
             "tenant_id": self.tenant_id,
             "user_id": self.user_id,
             "auth_mode": self.auth_mode,
             "roles": list(self.roles),
+            "account_id": self.firm_id or self.tenant_id,
         }
+        if self.firm_id:
+            context["firm_id"] = self.firm_id
+        return context
 
     def to_metadata(self) -> dict[str, Any]:
         return asdict(self) | {"roles": list(self.roles)}
@@ -230,12 +235,6 @@ def _tenant_from_claims(payload: dict[str, Any]) -> str | None:
     app_metadata = _claim_metadata(payload, "app_metadata")
     user_metadata = _claim_metadata(payload, "user_metadata")
     return _claim_string(
-        app_metadata.get("firm_id"),
-        app_metadata.get("firmId"),
-        user_metadata.get("firm_id"),
-        user_metadata.get("firmId"),
-        payload.get("firm_id"),
-        payload.get("firmId"),
         app_metadata.get("tenant_id"),
         app_metadata.get("tenantId"),
         user_metadata.get("tenant_id"),
@@ -245,19 +244,35 @@ def _tenant_from_claims(payload: dict[str, Any]) -> str | None:
     )
 
 
+def _firm_from_claims(payload: dict[str, Any]) -> str | None:
+    app_metadata = _claim_metadata(payload, "app_metadata")
+    user_metadata = _claim_metadata(payload, "user_metadata")
+    return _claim_string(
+        app_metadata.get("firm_id"),
+        app_metadata.get("firmId"),
+        user_metadata.get("firm_id"),
+        user_metadata.get("firmId"),
+        payload.get("firm_id"),
+        payload.get("firmId"),
+    )
+
+
 def _tenant_user_from_supabase_jwt(authorization: str | None) -> TenantUser:
     payload = _jwt_payload(_bearer_token(authorization))
     user_id = _claim_string(payload.get("sub"), payload.get("user_id"))
-    tenant_id = _tenant_from_claims(payload)
+    tenant_id_claim = _tenant_from_claims(payload)
+    firm_id = _firm_from_claims(payload)
     if not user_id:
         raise HTTPException(status_code=401, detail="JWT subject is required.")
-    if not tenant_id:
+    if not tenant_id_claim and not firm_id:
         raise HTTPException(status_code=401, detail="JWT tenant or firm claim is required.")
     return TenantUser(
-        tenant_id=tenant_id,
+        tenant_id=tenant_id_claim or firm_id or "",
         user_id=user_id,
         auth_mode="supabase_jwt",
         roles=_roles_from_claims(payload),
+        firm_id=firm_id,
+        tenant_id_is_firm_fallback=tenant_id_claim is None and firm_id is not None,
     )
 
 
@@ -265,6 +280,7 @@ async def get_current_tenant_user(
     request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
     tenant_id: str | None = Header(default=None, alias="X-Mercy-Tenant-Id"),
+    firm_id: str | None = Header(default=None, alias="X-Mercy-Firm-Id"),
     user_id: str | None = Header(default=None, alias="X-Mercy-User-Id"),
     roles: str | None = Header(default=None, alias="X-Mercy-Roles"),
 ) -> TenantUser:
@@ -272,10 +288,12 @@ async def get_current_tenant_user(
 
     if local_dev_auth_bypass_enabled():
         tenant_user = TenantUser(
-            tenant_id=tenant_id or LOCAL_DEV_TENANT_ID,
+            tenant_id=tenant_id or firm_id or LOCAL_DEV_TENANT_ID,
             user_id=user_id or LOCAL_DEV_USER_ID,
             auth_mode="local_dev",
             roles=_parse_roles(roles),
+            firm_id=firm_id,
+            tenant_id_is_firm_fallback=tenant_id is None and firm_id is not None,
         )
     else:
         config = get_config()
@@ -286,23 +304,27 @@ async def get_current_tenant_user(
             if config.mercy_env not in {"test", "verify"}:
                 raise HTTPException(status_code=500, detail="Mercy test auth is not enabled for this environment.")
             _validate_bearer_token(authorization)
-            if not tenant_id or not user_id:
+            if not (tenant_id or firm_id) or not user_id:
                 raise HTTPException(status_code=401, detail="Missing tenant or user context for Mercy legal endpoint.")
             tenant_user = TenantUser(
-                tenant_id=tenant_id,
+                tenant_id=tenant_id or firm_id or "",
                 user_id=user_id,
                 auth_mode="test",
                 roles=_parse_roles(roles),
+                firm_id=firm_id,
+                tenant_id_is_firm_fallback=tenant_id is None and firm_id is not None,
             )
         elif auth_mode == "token" and config.is_local:
             _validate_bearer_token(authorization)
-            if not tenant_id or not user_id:
+            if not (tenant_id or firm_id) or not user_id:
                 raise HTTPException(status_code=401, detail="Missing tenant or user context for Mercy legal endpoint.")
             tenant_user = TenantUser(
-                tenant_id=tenant_id,
+                tenant_id=tenant_id or firm_id or "",
                 user_id=user_id,
                 auth_mode="bearer",
                 roles=_parse_roles(roles),
+                firm_id=firm_id,
+                tenant_id_is_firm_fallback=tenant_id is None and firm_id is not None,
             )
         else:
             raise HTTPException(status_code=500, detail="Mercy production auth is not configured.")
@@ -315,6 +337,7 @@ async def get_current_tenant_user(
             "path": request.url.path,
             "method": request.method,
             "tenant_id": tenant_user.tenant_id,
+            "firm_id": tenant_user.firm_id,
             "user_id": tenant_user.user_id,
             "auth_mode": tenant_user.auth_mode,
         },

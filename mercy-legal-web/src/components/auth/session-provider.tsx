@@ -9,6 +9,7 @@ type MercySession = {
   email: string | null;
   name: string;
   tenantId: string;
+  firmId?: string | null;
   roles: string[];
   firm?: string | null;
   dcBarNumber?: string | null;
@@ -31,6 +32,7 @@ const LOCAL_DEV_SESSION: MercySession = {
   email: null,
   name: "Mercy Attorney",
   tenantId: process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
+  firmId: process.env.NEXT_PUBLIC_MERCY_FIRM_ID || null,
   roles: ["attorney"],
   firm: "Mercy Legal AI Demo Firm",
   dcBarNumber: null,
@@ -51,12 +53,30 @@ function rolesFromUser(user: User): string[] {
   return ["attorney"];
 }
 
+function stringFromMetadata(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function firmFromUser(user: User): string | null {
+  return stringFromMetadata(
+    user.app_metadata?.firm_id,
+    user.app_metadata?.firmId,
+    user.user_metadata?.firm_id,
+    user.user_metadata?.firmId,
+  );
+}
+
 function sessionFromSupabase(user: User, accessToken: string | null): MercySession {
+  const firmId = firmFromUser(user);
   const tenantId = String(
     user.app_metadata?.tenant_id ??
       user.app_metadata?.tenantId ??
       user.user_metadata?.tenant_id ??
       user.user_metadata?.tenantId ??
+      firmId ??
       user.id,
   );
   return {
@@ -64,6 +84,7 @@ function sessionFromSupabase(user: User, accessToken: string | null): MercySessi
     email: user.email ?? null,
     name: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Mercy Attorney"),
     tenantId,
+    firmId,
     roles: rolesFromUser(user),
     firm: typeof user.user_metadata?.firm_name === "string" ? user.user_metadata.firm_name : null,
     dcBarNumber:
@@ -78,6 +99,11 @@ function sessionFromSupabase(user: User, accessToken: string | null): MercySessi
 
 function persistMercyContext(session: MercySession, persistToken: boolean) {
   window.localStorage.setItem("mercy.auth.tenantId", session.tenantId);
+  if (session.firmId) {
+    window.localStorage.setItem("mercy.auth.firmId", session.firmId);
+  } else {
+    window.localStorage.removeItem("mercy.auth.firmId");
+  }
   window.localStorage.setItem("mercy.auth.userId", session.userId);
   window.localStorage.setItem("mercy.auth.roles", session.roles.join(","));
   if (persistToken && session.accessToken) {
@@ -142,6 +168,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         await supabase?.auth.signOut();
         window.localStorage.removeItem("mercy.auth.token");
         window.localStorage.removeItem("mercy.auth.tenantId");
+        window.localStorage.removeItem("mercy.auth.firmId");
         window.localStorage.removeItem("mercy.auth.userId");
         window.localStorage.removeItem("mercy.auth.roles");
         window.location.href = "/sign-in";

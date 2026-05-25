@@ -260,6 +260,33 @@ class DevOpsXrayConsoleTests(unittest.TestCase):
         self.assertEqual(merged_edges["edge_matters_store"]["status"], "observed")
         self.assert_no_known_secret_like_values(json.dumps(observed))
 
+    def test_route_traffic_populates_observed_system_map(self) -> None:
+        with patch.dict(os.environ, {"MERCY_DEV_TOOLS": "true", "MERCY_OTEL_ENABLED": "true"}):
+            client = self._client()
+            health = client.get("/health")
+            observed = client.get("/devops/observed-system-map.json").json()
+            merged = client.get("/devops/system-map-merged.json").json()
+
+        self.assertEqual(health.status_code, 200)
+        observed_node_ids = {node["id"] for node in observed["nodes"]}
+        observed_edges = {edge["id"]: edge for edge in observed["edges"]}
+        self.assertIn("fastapi_core", observed_node_ids)
+        self.assertIn("health_route", observed_node_ids)
+        self.assertIn("edge_core_health", observed_edges)
+        self.assertTrue(observed_edges["edge_core_health"]["observed"])
+        self.assertGreaterEqual(observed_edges["edge_core_health"]["callCount"], 1)
+        self.assertIsNotNone(observed_edges["edge_core_health"]["avgLatencyMs"])
+        self.assertIsNotNone(observed_edges["edge_core_health"]["lastSeen"])
+        self.assertGreaterEqual(len(observed["recentSpans"]), 1)
+
+        merged_nodes = {node["id"]: node for node in merged["nodes"]}
+        merged_edges = {edge["id"]: edge for edge in merged["edges"]}
+        self.assertTrue(merged_nodes["fastapi_core"]["observed"])
+        self.assertTrue(merged_nodes["health_route"]["observed"])
+        self.assertTrue(merged_edges["edge_core_health"]["observed"])
+        self.assertEqual(merged_edges["edge_core_health"]["status"], "observed")
+        self.assert_no_known_secret_like_values(json.dumps(observed))
+
     def test_observed_source_classification_is_truthful(self) -> None:
         self.assertEqual(classify_request_source("/devops/system-map-merged.json", {"user-agent": "Mozilla/5.0"}), "devops_console")  # type: ignore[misc]
         self.assertEqual(classify_request_source("/health", {"user-agent": "PowerShell/7.4"}), "manual_client")  # type: ignore[misc]

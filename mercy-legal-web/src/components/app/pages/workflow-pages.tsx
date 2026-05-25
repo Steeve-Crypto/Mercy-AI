@@ -3,10 +3,9 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, FileText, Loader2, Search, UploadCloud } from "lucide-react";
-import { PageHeader } from "@/components/app/page-header";
+import { Bot, BriefcaseBusiness, FileText, Loader2, Search, ShieldCheck, UploadCloud } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
-  createMatter,
   getTemplateGallery,
   retrieveRag,
   submitFullMatterIntake,
@@ -24,51 +23,23 @@ type IntakePageProps = { matters: CoreMatter[] };
 type VaultPageProps = { matters: CoreMatter[] };
 
 export function MattersPage({ matters, coreOnline }: MattersPageProps) {
-  const [items, setItems] = useState(matters);
-  const [name, setName] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [matterType, setMatterType] = useState("contract review");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    const response = await createMatter({ name, client_name: clientName, matter_type: matterType, tier: "free" });
-    setBusy(false);
-    if (!response.ok || !response.data) {
-      setError(response.error ?? "Matter creation failed.");
-      return;
-    }
-    setItems((current) => [response.data!, ...current]);
-    setName("");
-    setClientName("");
-  }
-
   return (
-    <>
-      <PageHeader title="Matters" description="Create and select tenant-scoped D.C. matters for Agent X workflows.">
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
-          Core {coreOnline ? "online" : "unavailable"}
-        </span>
-      </PageHeader>
-      <div className="grid gap-5 p-5 lg:grid-cols-[380px_minmax(0,1fr)] lg:p-8">
-        <form onSubmit={submit} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-950">New matter</h2>
-          <div className="mt-4 space-y-3">
-            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="Matter name" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm" />
-            <input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Client name" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm" />
-            <input value={matterType} onChange={(event) => setMatterType(event.target.value)} placeholder="Matter type" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm" />
-            {error ? <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{error}</p> : null}
-            <button disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#4F46E5] text-sm font-semibold text-white">
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <BriefcaseBusiness className="size-4" />}
-              Create matter
-            </button>
+    <div className="space-y-5 p-5 lg:p-8">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-slate-950">Matters</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Matters organize client context. Vault stores documents. Agent X uses selected matter context.
+              </p>
+            </div>
+            <span className="w-fit shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+              Core {coreOnline ? "online" : "unavailable"}
+            </span>
           </div>
-        </form>
+        </section>
         <section className="space-y-3">
-          {items.length ? items.map((matter) => (
+          {matters.length ? matters.map((matter) => (
             <Link
               key={matter.matter_id}
               href={`/matters/${encodeURIComponent(matter.matter_id)}` as Route}
@@ -84,11 +55,21 @@ export function MattersPage({ matters, coreOnline }: MattersPageProps) {
               <p className="mt-3 text-sm text-slate-600">{matter.missing_information?.length ?? 0} open intake item(s), {matter.documents?.length ?? 0} document(s).</p>
             </Link>
           )) : (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No matters returned.</div>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
+                <BriefcaseBusiness className="size-6" />
+              </div>
+              <h2 className="mt-4 text-lg font-semibold text-slate-950">Create your first matter</h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                Create a matter to connect documents, Assistant threads, research, and reliability review.
+              </p>
+              <Link href="/intake" className="mt-5 inline-flex rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
+                Create your first matter
+              </Link>
+            </div>
           )}
         </section>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -125,10 +106,14 @@ export function IntakePage({ matters }: IntakePageProps) {
   }
 
   return (
-    <>
-      <PageHeader title="Intake" description="Capture the minimum matter facts Agent X needs before research, drafting, or document review." />
-      <div className="p-5 lg:p-8">
+    <div className="p-5 lg:p-8">
         <form onSubmit={submit} className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5">
+            <h1 className="text-lg font-semibold text-slate-950">Intake</h1>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Capture the minimum matter facts Agent X needs before research, drafting, or document review.
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">Matter<select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"><option value="">Create from intake</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select></label>
             <label className="text-sm font-medium text-slate-700">Requested relief<input value={requestedRelief} onChange={(event) => setRequestedRelief(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" /></label>
@@ -139,8 +124,7 @@ export function IntakePage({ matters }: IntakePageProps) {
           {result ? <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{result}</p> : null}
           <button disabled={busy} className="mt-5 flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}Save intake</button>
         </form>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -164,10 +148,14 @@ export function ResearchPage({ matters }: ResearchPageProps) {
   }
 
   return (
-    <>
-      <PageHeader title="Research" description="Run D.C.-focused retrieval with official-source metadata and citation summaries." />
-      <div className="p-5 lg:p-8">
+    <div className="p-5 lg:p-8">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5">
+            <h1 className="text-lg font-semibold text-slate-950">Research</h1>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Run D.C.-focused retrieval with source metadata, matter context when selected, and attorney review before relying on any legal conclusion.
+            </p>
+          </div>
           <div className="grid gap-3 md:grid-cols-[0.45fr_1fr_auto]">
             <select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm"><option value="">No matter</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="What are the D.C. requirements..." className="h-11 rounded-lg border border-slate-300 px-3 text-sm" />
@@ -180,10 +168,42 @@ export function ResearchPage({ matters }: ResearchPageProps) {
                 <p className="text-sm font-semibold text-slate-950">Retrieval summary</p>
                 <p className="mt-1 text-sm text-slate-600">
                   {result.results.length} result(s), verification status {result.verification.status}, guardrails {result.guardrail_status}.
-                  Agent X was not invoked on this page; use Ask Agent X for full Hermes-powered MoE reliability.
+                  Mercy was not invoked on this page; use Mercy Assistant for full reliability review.
                 </p>
               </div>
-            ) : null}
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                    <Search className="size-4 text-[#4F46E5]" />
+                    Start with a D.C. source question
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Select a matter when available so research can stay connected to facts, documents, and the later Reliability Panel review.
+                  </p>
+                  <div className="mt-4 space-y-2 text-sm text-slate-600">
+                    <button type="button" onClick={() => setQuery("What are the D.C. requirements for")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
+                      What are the D.C. requirements for...
+                    </button>
+                    <button type="button" onClick={() => setQuery("Summarize D.C. Superior Court rule considerations for")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
+                      Summarize D.C. Superior Court rule considerations for...
+                    </button>
+                    <button type="button" onClick={() => setQuery("Find source support for this matter issue:")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
+                      Find source support for this matter issue...
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                    <ShieldCheck className="size-4 text-[#4F46E5]" />
+                    Research history
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Recent research will appear here when persistence is connected. For now, run a query and review returned source metadata before using the output.
+                  </p>
+                </div>
+              </div>
+            )}
             {result?.results.map((item) => (
               <div key={item.chunk_id} className="rounded-xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-slate-950">{item.citation?.label ?? item.source_id}</p>
@@ -193,8 +213,7 @@ export function ResearchPage({ matters }: ResearchPageProps) {
             ))}
           </div>
         </section>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -233,17 +252,19 @@ export function TemplatesPage({ initialTemplates }: TemplatesPageProps) {
   }, [difficulty, popularity, practiceArea, search, templates]);
 
   return (
-    <>
-      <PageHeader
-        title="Templates"
-        description="Browse 26 D.C.-specific templates, then open the selected workflow directly in Ask Agent X."
-      >
-        <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-          {templates.length} templates
-        </span>
-      </PageHeader>
-      <div className="p-5 lg:p-8">
+    <div className="p-5 lg:p-8">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-slate-950">Templates</h1>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Browse D.C.-specific templates, then open the selected workflow directly in Agent X.
+              </p>
+            </div>
+            <span className="w-fit rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
+              {templates.length} templates
+            </span>
+          </div>
           <div className="grid gap-3 xl:grid-cols-[1fr_0.5fr_0.45fr_0.45fr]">
             <input
               value={search}
@@ -307,8 +328,7 @@ export function TemplatesPage({ initialTemplates }: TemplatesPageProps) {
             ))}
           </div>
         </section>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -335,20 +355,52 @@ export function VaultPage({ matters }: VaultPageProps) {
   const facts = useMemo(() => result?.facts ? JSON.stringify(result.facts, null, 2) : "Upload a PDF to run discovery/document analysis.", [result]);
 
   return (
-    <>
-      <PageHeader title="Vault" description="Upload approved test documents for discovery analysis. Production document-vault retention remains a beta gate." />
-      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
+    <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5">
+            <h1 className="text-lg font-semibold text-slate-950">Vault</h1>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Document repository and review layer for uploaded files, matter attachments, and Assistant or Research workflows.
+            </p>
+          </div>
+          <div className="mb-5 grid gap-3 md:grid-cols-3">
+            <VaultCue icon={FileText} label="Repository" text="Keep uploaded files tied to matter context." />
+            <VaultCue icon={Bot} label="Assistant" text="Use documents in drafting, review, or citation checks." />
+            <VaultCue icon={ShieldCheck} label="Review" text="Verify source and reliability signals before use." />
+          </div>
           <div className="grid gap-3 md:grid-cols-[0.45fr_1fr_auto]">
             <select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm"><option value="">No matter</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select>
             <input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
             <button onClick={upload} disabled={busy || !file} className="flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}Upload</button>
           </div>
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
-          <pre className="mt-5 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-700">{facts}</pre>
+          {result ? (
+            <pre className="mt-5 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-700">{facts}</pre>
+          ) : (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <UploadCloud className="size-4 text-[#4F46E5]" />
+                Upload documents into the Vault
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Upload documents, attach them to matters, and use them in Assistant or research workflows. Attorney review remains required.
+              </p>
+            </div>
+          )}
         </section>
+    </div>
+  );
+}
+
+function VaultCue({ icon: Icon, label, text }: { icon: LucideIcon; label: string; text: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <Icon className="size-4 text-[#4F46E5]" />
+        {label}
       </div>
-    </>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
+    </div>
   );
 }
 

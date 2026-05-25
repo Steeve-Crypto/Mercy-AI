@@ -1,8 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, FileText, Loader2, Paperclip, Send, SlidersHorizontal, Sparkles, X } from "lucide-react";
-import { PageHeader } from "@/components/app/page-header";
+import Link from "next/link";
+import {
+  BookOpenText,
+  Bot,
+  Clock3,
+  FileText,
+  FolderOpen,
+  Loader2,
+  Paperclip,
+  Plus,
+  Send,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
 import { executeAgent, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
 
@@ -11,6 +24,15 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   result?: CoreAgentEnvelope;
+};
+
+type AssistantHistoryItem = {
+  id: string;
+  matterName: string;
+  workflow: string;
+  summary: string;
+  reliability: string;
+  createdAt: string;
 };
 
 type AgentXChatPageProps = {
@@ -81,6 +103,7 @@ export function AgentXChatPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [history, setHistory] = useState<AssistantHistoryItem[]>([]);
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
   const attachedDocuments = useMemo(() => {
@@ -141,34 +164,54 @@ export function AgentXChatPage({
       return;
     }
     const data = response.data;
+    const output = agentOutput(data);
     setMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), role: "assistant", content: agentOutput(data), result: data },
+      { id: crypto.randomUUID(), role: "assistant", content: output, result: data },
     ]);
+    setHistory((current) => [
+      {
+        id: crypto.randomUUID(),
+        matterName: activeMatter?.name ?? "No matter",
+        workflow: mode.replace(/_/g, " "),
+        summary: output.split(/\s+/).slice(0, 18).join(" "),
+        reliability: data.guardrail_status ?? data.grounding_policy?.status ?? "review required",
+        createdAt: "Just now",
+      },
+      ...current,
+    ].slice(0, 6));
   }
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Ask Agent X"
-        title="Ask Agent X"
-        description="Mercy's Hermes-powered MoE legal agent network for D.C. drafting, analysis, research support, citation checks, and matter-aware workflows."
-      >
-        <div className="flex flex-wrap gap-2">
-          {activeMatter ? (
-            <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-              {activeMatter.name}
-            </span>
-          ) : null}
-          <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-            Core {coreOnline ? "online" : "offline"}
-          </span>
-        </div>
-      </PageHeader>
-
-      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-8">
+    <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-6">
         <section className="flex min-h-[calc(100vh-12rem)] flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
+            <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#4338CA]">
+                  <Bot className="size-3.5" />
+                  Mercy workbench
+                </div>
+                <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">What are you working on?</h1>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                  Select a matter, attach Vault context, choose a workflow, and keep reliability review visible while Agent X drafts, analyzes, researches, or verifies.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activeMatter ? (
+                  <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
+                    {activeMatter.name}
+                  </span>
+                ) : null}
+                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                  Core {coreOnline ? "online" : "offline"}
+                </span>
+                <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                  <Clock3 className="size-3.5" />
+                  Open History
+                </Link>
+              </div>
+            </div>
             {selectedTemplate ? (
               <div className="mb-4 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
                 <div className="flex items-start gap-3">
@@ -187,7 +230,7 @@ export function AgentXChatPage({
               <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
                 {showAttachConfirmation ? (
                   <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
-                    <span>Document attached to Ask Agent X. It will be included with this request context.</span>
+                    <span>Document attached to Agent X. It will be included with this request context.</span>
                     <button type="button" onClick={() => setShowAttachConfirmation(false)} aria-label="Dismiss attachment confirmation">
                       <X className="size-3.5" />
                     </button>
@@ -274,6 +317,23 @@ export function AgentXChatPage({
               </div>
             </div>
 
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Matter</p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-950">{activeMatter?.name ?? "No matter selected"}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vault context</p>
+                <p className="mt-1 text-sm font-medium text-slate-950">
+                  {attachedDocIds.length ? `${attachedDocIds.length} attached document${attachedDocIds.length === 1 ? "" : "s"}` : "No documents attached"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review posture</p>
+                <p className="mt-1 text-sm font-medium text-slate-950">Attorney review required</p>
+              </div>
+            </div>
+
             {templates.length ? (
               <div className="mt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended template workflows</p>
@@ -321,10 +381,28 @@ export function AgentXChatPage({
                   <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
                     <Bot className="size-6" />
                   </div>
-                  <h2 className="mt-4 text-lg font-semibold text-slate-950">Ask Agent X</h2>
+                  <h2 className="mt-4 text-lg font-semibold text-slate-950">What are you working on?</h2>
                   <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                    Try drafting a D.C. demand letter from matter context, or analyzing enforceability risks in a clause under D.C. law.
+                    Select or create a matter before relying on context-heavy legal output. Agent X can draft general scaffolds, but matter context improves review, citations, and D.C. grounding.
                   </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Link href="/matters" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <FolderOpen className="size-3.5" />
+                      Select matter
+                    </Link>
+                    <Link href="/intake" className="inline-flex items-center gap-2 rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#E0E7FF]">
+                      <Plus className="size-3.5" />
+                      Create new matter
+                    </Link>
+                    <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <BookOpenText className="size-3.5" />
+                      Use template
+                    </Link>
+                    <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <FileText className="size-3.5" />
+                      Run D.C. research
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -366,8 +444,21 @@ export function AgentXChatPage({
               {attachedDocIds.length === 1 ? "" : "s"}, and jurisdiction controls are sent with every Agent X request.
             </p>
           </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 font-semibold text-slate-950">
+                <Clock3 className="size-4 text-[#4F46E5]" />
+                Recent work
+              </div>
+              <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
+                Open History
+              </Link>
+            </div>
+            <p className="mt-2 text-xs">
+              {history.length ? `${history.length} current-session item${history.length === 1 ? "" : "s"} available here until persistence is connected.` : "History appears on the dedicated History page after persisted threads are connected."}
+            </p>
+          </div>
         </div>
       </div>
-    </>
   );
 }

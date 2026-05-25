@@ -6,7 +6,6 @@ import type { Route } from "next";
 import type { ReactNode } from "react";
 import { FormEvent, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CheckCircle2, Loader2, Scale, UserRound } from "lucide-react";
-import { PageHeader } from "@/components/app/page-header";
 import { submitFullMatterIntake, type CoreFullMatterIntakeEnvelope } from "@/lib/core-client";
 
 type IntakeWizardPageProps = {
@@ -177,24 +176,28 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
   }
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Client intake"
-        title="Guided D.C. matter intake"
-        description="Create a tenant-scoped matter with the context Agent X needs for safe research, drafting, and document review."
-      >
-        {initialMatterId ? (
-          <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-            Updating existing matter
-          </span>
-        ) : (
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-            New matter
-          </span>
-        )}
-      </PageHeader>
-
       <div className="p-5 lg:p-8">
+        <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4338CA]">Client intake</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">Guided D.C. matter intake</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Create a tenant-scoped matter with the context Agent X needs for research, drafting, document review, and attorney final review.
+              </p>
+            </div>
+            {initialMatterId ? (
+              <span className="w-fit rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
+                Updating existing matter
+              </span>
+            ) : (
+              <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                New matter
+              </span>
+            )}
+          </div>
+        </section>
+
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-2">
@@ -224,7 +227,7 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
               })}
             </div>
             <div className="mt-5 rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-              Intake is saved through the shared Mercy core and returned as a matter context for Agent X.
+              Intake is saved through the shared Mercy core and returned as a matter context for Mercy.
             </div>
           </aside>
 
@@ -275,7 +278,6 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
           </form>
         </div>
       </div>
-    </>
   );
 }
 
@@ -295,7 +297,7 @@ function ClientStep({ form, update }: { form: IntakeState; update: <K extends ke
 function MatterStep({ form, update }: { form: IntakeState; update: <K extends keyof IntakeState>(key: K, value: IntakeState[K]) => void }) {
   return (
     <section>
-      <StepHeading icon={<Scale className="size-5" />} title="Matter details" description="Define the matter, parties, deadlines, and D.C. context Agent X should use." />
+      <StepHeading icon={<Scale className="size-5" />} title="Matter details" description="Define the matter, parties, deadlines, and D.C. context Mercy should use." />
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Field label="Matter title" required value={form.matterTitle} onChange={(value) => update("matterTitle", value)} />
         <Field label="Practice area" required value={form.practiceArea} onChange={(value) => update("practiceArea", value)} placeholder="contract review, landlord-tenant, civil litigation..." />
@@ -332,7 +334,7 @@ function ScopeStep({ form, update }: { form: IntakeState; update: <K extends key
         <CheckField checked={form.conflictChecked} onChange={(value) => update("conflictChecked", value)} label="I have started a conflict check for this matter." />
         <CheckField checked={form.noKnownConflict} onChange={(value) => update("noKnownConflict", value)} label="No known conflict has been identified from the information currently available." />
         <CheckField checked={form.scopeReviewed} onChange={(value) => update("scopeReviewed", value)} label="The expected scope of work has been reviewed or will be reviewed by an attorney." />
-        <CheckField checked={form.attorneyReviewAcknowledged} onChange={(value) => update("attorneyReviewAcknowledged", value)} label="I understand all Agent X output requires attorney review and citation/source verification." />
+        <CheckField checked={form.attorneyReviewAcknowledged} onChange={(value) => update("attorneyReviewAcknowledged", value)} label="I understand all Mercy output requires attorney review and citation/source verification." />
         <CheckField checked={form.confidentialMatter} onChange={(value) => update("confidentialMatter", value)} label="Treat this as a confidential client matter." />
       </div>
       <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
@@ -376,7 +378,7 @@ function ReviewStep({
               Open matter
             </Link>
             <Link href={chatHref} className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800">
-              Open in Ask Agent X
+              Open in Mercy
             </Link>
           </div>
         </div>

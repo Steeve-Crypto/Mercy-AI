@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type AccountType = "solo" | "firm";
+type SignupPlanRoute = "/sign-up/solo" | "/sign-up/firm";
 
 type SignupFormProps = {
   accountType: AccountType;
@@ -93,7 +94,7 @@ function PlanCard({
   points,
   cta,
 }: {
-  href: string;
+  href: SignupPlanRoute;
   icon: ReactNode;
   title: string;
   price: string;
