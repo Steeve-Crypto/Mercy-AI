@@ -121,31 +121,33 @@ export function AppSidebar() {
         {!collapsed ? "New Matter" : null}
       </Link>
 
-      <nav className="mt-5 space-y-1">
-        {navItems.map((item) => {
-          const routes = [item.href, ...item.aliases];
-          const active = routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={item.label}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                collapsed ? "justify-center px-2" : "",
-                active
-                  ? "bg-[#EEF2FF] text-[#4338CA]"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-              )}
-            >
-              <item.icon className="size-4" />
-              {!collapsed ? item.label : null}
-            </Link>
-          );
-        })}
-      </nav>
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const routes = [item.href, ...item.aliases];
+            const active = routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
+                  collapsed ? "justify-center px-2" : "",
+                  active
+                    ? "bg-[#EEF2FF] text-[#4338CA]"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                )}
+              >
+                <item.icon className="size-4" />
+                {!collapsed ? item.label : null}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
 
-      <div className={cn("mt-auto rounded-xl border border-slate-200 bg-white p-3", collapsed ? "p-2" : "")}>
+      <div className={cn("mt-3 shrink-0 rounded-xl border border-slate-200 bg-white p-3", collapsed ? "p-2" : "")}>
         <button
           type="button"
           onClick={() => setUserMenuOpen((open) => !open)}
@@ -153,21 +155,21 @@ export function AppSidebar() {
           className={cn("flex w-full items-center justify-between gap-3 rounded-lg text-left", collapsed ? "justify-center" : "")}
           title={`${session.name} · ${session.tenantId}`}
         >
-          <span className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
               {initials || "MA"}
             </span>
             {!collapsed ? (
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-slate-950">{session.name}</span>
-                <span className="block max-w-36 truncate text-xs text-slate-500">{session.tenantId}</span>
+                <span className="block truncate text-sm font-semibold text-slate-950">{session.name}</span>
+                <span className="block truncate text-xs text-slate-500">{session.tenantId}</span>
               </span>
             ) : null}
           </span>
-          {!collapsed ? <ChevronDown className={cn("size-4 text-slate-400 transition", userMenuOpen ? "rotate-180" : "")} /> : null}
+          {!collapsed ? <ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition", userMenuOpen ? "rotate-180" : "")} /> : null}
         </button>
-        {userMenuOpen && !collapsed ? (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-1">
+        {userMenuOpen ? (
+          <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-sm">
             {settingsItems.map((item) => {
               const active = pathname === item.href || (item.href !== "/settings" && pathname.startsWith(item.href));
               return (

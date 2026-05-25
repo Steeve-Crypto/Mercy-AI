@@ -7,11 +7,12 @@ import {
   Bot,
   Clock3,
   FileText,
-  FolderOpen,
   Loader2,
   Paperclip,
   Plus,
+  Search,
   Send,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   X,
@@ -76,6 +77,13 @@ function documentId(document: Record<string, unknown>, index: number): string {
 function documentName(document: Record<string, unknown>, index: number): string {
   const raw = document.title ?? document.name ?? document.filename ?? document.document_id ?? `Document ${index + 1}`;
   return String(raw);
+}
+
+function workflowLabel(value: string): string {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function AgentXChatPage({
@@ -183,41 +191,77 @@ export function AgentXChatPage({
   }
 
   return (
-    <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-6">
-        <section className="flex min-h-[calc(100vh-12rem)] flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-4">
-            <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#4338CA]">
-                  <Bot className="size-3.5" />
-                  Mercy workbench
-                </div>
-                <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">What are you working on?</h1>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                  Select a matter, attach Vault context, choose a workflow, and keep reliability review visible while Agent X drafts, analyzes, researches, or verifies.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activeMatter ? (
-                  <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-                    {activeMatter.name}
-                  </span>
-                ) : null}
-                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                  Core {coreOnline ? "online" : "offline"}
-                </span>
-                <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                  <Clock3 className="size-3.5" />
-                  Open History
-                </Link>
-              </div>
+    <div className="grid min-h-screen gap-5 bg-[#F8FAFC] p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-6">
+      <main className="flex min-w-0 flex-col items-center">
+        <section className="w-full max-w-5xl">
+          <div className="pt-8 text-center lg:pt-14">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#4F46E5] text-white shadow-sm">
+              <Bot className="size-6" />
             </div>
+            <h1 className="mt-5 text-4xl font-semibold tracking-normal text-slate-950">Mercy</h1>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Draft, review, research, and verify legal work with matter context.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                Core {coreOnline ? "online" : "offline"}
+              </span>
+              <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                <Clock3 className="size-3.5" />
+                History
+              </Link>
+            </div>
+          </div>
+
+          <div className="mx-auto mt-8 max-w-4xl rounded-[1.25rem] border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+              <label className="sr-only" htmlFor="mercy-matter">
+                Matter context
+              </label>
+              <select
+                id="mercy-matter"
+                value={matterId}
+                onChange={(event) => setMatterId(event.target.value)}
+                className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-[#A5B4FC] focus:bg-white focus:ring-2 focus:ring-[#E0E7FF]"
+              >
+                <option value="">No matter selected</option>
+                {initialMatters.map((matter) => (
+                  <option key={matter.matter_id} value={matter.matter_id}>
+                    {matter.name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
+                <Paperclip className="size-4 text-[#4F46E5]" />
+                <span className="truncate">
+                  {attachedDocIds.length ? `${attachedDocIds.length} Vault file${attachedDocIds.length === 1 ? "" : "s"}` : "Vault context"}
+                </span>
+              </div>
+
+              <label className="sr-only" htmlFor="mercy-workflow">
+                Workflow
+              </label>
+              <select
+                id="mercy-workflow"
+                value={mode}
+                onChange={(event) => setMode(event.target.value)}
+                className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-[#A5B4FC] focus:bg-white focus:ring-2 focus:ring-[#E0E7FF]"
+              >
+                <option value="template_generation">Template generation</option>
+                <option value="drafting">Drafting</option>
+                <option value="analysis">Document analysis</option>
+                <option value="dc_research">D.C. research support</option>
+                <option value="citation_verification">Citation verification</option>
+                <option value="compliance">Compliance check</option>
+                <option value="intake">Intake support</option>
+              </select>
+            </div>
+
             {selectedTemplate ? (
-              <div className="mb-4 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
+              <div className="mt-3 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-[#4F46E5]">
-                    <Sparkles className="size-4" />
-                  </div>
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-[#4F46E5]" />
                   <div>
                     <p className="text-sm font-semibold text-slate-950">{selectedTemplate.title}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-600">{selectedTemplate.description}</p>
@@ -227,24 +271,20 @@ export function AgentXChatPage({
             ) : null}
 
             {attachedDocuments.length ? (
-              <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 {showAttachConfirmation ? (
-                  <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                  <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
                     <span>Document attached to Agent X. It will be included with this request context.</span>
                     <button type="button" onClick={() => setShowAttachConfirmation(false)} aria-label="Dismiss attachment confirmation">
                       <X className="size-3.5" />
                     </button>
                   </div>
                 ) : null}
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <Paperclip className="size-3.5 text-[#4F46E5]" />
-                  Attached vault documents
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   {attachedDocuments.map((document) => (
                     <span
                       key={document.id}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]"
+                      className="inline-flex items-center gap-2 rounded-full border border-[#C7D2FE] bg-white px-3 py-1 text-xs font-medium text-[#4338CA]"
                     >
                       <FileText className="size-3.5" />
                       {document.name}
@@ -261,204 +301,191 @@ export function AgentXChatPage({
               </div>
             ) : null}
 
-            <div className="grid gap-3 xl:grid-cols-[1fr_0.62fr_0.78fr]">
-              <label className="text-xs font-medium text-slate-600">
-                Matter context
-                <select
-                  value={matterId}
-                  onChange={(event) => setMatterId(event.target.value)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                >
-                  <option value="">No matter selected</option>
-                  {initialMatters.map((matter) => (
-                    <option key={matter.matter_id} value={matter.matter_id}>
-                      {matter.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-medium text-slate-600">
-                Workflow
-                <select
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                >
-                  <option value="template_generation">Template generation</option>
-                  <option value="drafting">Drafting</option>
-                  <option value="analysis">Document analysis</option>
-                  <option value="dc_research">D.C. research support</option>
-                  <option value="citation_verification">Citation verification</option>
-                  <option value="compliance">Compliance check</option>
-                  <option value="intake">Intake support</option>
-                </select>
-              </label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                  <SlidersHorizontal className="size-3.5 text-[#4F46E5]" />
-                  Context controls
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white">
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Ask Mercy about this matter, draft a document, review language, or check sources..."
+                className="min-h-40 w-full resize-none rounded-t-2xl border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
+              />
+              <div className="flex flex-col gap-3 border-t border-slate-200 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <Paperclip className="size-3.5" />
+                    Files and sources
+                  </button>
+                  <Link href="/templates" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <BookOpenText className="size-3.5" />
+                    Templates
+                  </Link>
+                  <Link href="/research" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <Search className="size-3.5" />
+                    D.C. research
+                  </Link>
+                  <button type="button" onClick={() => setMode("citation_verification")} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <ShieldCheck className="size-3.5" />
+                    Citation check
+                  </button>
+                  <button type="button" onClick={() => setMode("analysis")} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <Sparkles className="size-3.5" />
+                    Improve / Review
+                  </button>
+                  <details className="relative">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                      <SlidersHorizontal className="size-3.5" />
+                      Context controls
+                    </summary>
+                    <div className="absolute left-0 top-9 z-10 w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={useDcSources} onChange={(event) => setUseDcSources(event.target.checked)} />
+                        Use D.C. source retrieval
+                      </label>
+                      <label className="mt-2 flex items-center gap-2">
+                        <input type="checkbox" checked={useMatterContext} onChange={(event) => setUseMatterContext(event.target.checked)} />
+                        Include matter context
+                      </label>
+                      <label className="mt-2 flex items-center gap-2">
+                        <input type="checkbox" checked={includeVaultDocuments} onChange={(event) => setIncludeVaultDocuments(event.target.checked)} />
+                        Include vault documents
+                      </label>
+                      <label className="mt-2 flex items-center gap-2">
+                        <input type="checkbox" checked={strictDcJurisdiction} onChange={(event) => setStrictDcJurisdiction(event.target.checked)} />
+                        Jurisdiction: D.C.
+                      </label>
+                    </div>
+                  </details>
                 </div>
-                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-                  <input type="checkbox" checked={useDcSources} onChange={(event) => setUseDcSources(event.target.checked)} />
-                  Use D.C. source retrieval
-                </label>
-                <label className="mt-1 flex items-center gap-2 text-xs text-slate-600">
-                  <input type="checkbox" checked={useMatterContext} onChange={(event) => setUseMatterContext(event.target.checked)} />
-                  Include matter context
-                </label>
-                <label className="mt-1 flex items-center gap-2 text-xs text-slate-600">
-                  <input type="checkbox" checked={includeVaultDocuments} onChange={(event) => setIncludeVaultDocuments(event.target.checked)} />
-                  Include vault documents
-                </label>
-                <label className="mt-1 flex items-center gap-2 text-xs text-slate-600">
-                  <input type="checkbox" checked={strictDcJurisdiction} onChange={(event) => setStrictDcJurisdiction(event.target.checked)} />
-                  Jurisdiction: D.C.
-                </label>
+                <button
+                  onClick={send}
+                  disabled={busy}
+                  className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#4338CA] disabled:opacity-60"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  Run Mercy
+                </button>
               </div>
             </div>
 
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Matter</p>
-                <p className="mt-1 truncate text-sm font-medium text-slate-950">{activeMatter?.name ?? "No matter selected"}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vault context</p>
-                <p className="mt-1 text-sm font-medium text-slate-950">
-                  {attachedDocIds.length ? `${attachedDocIds.length} attached document${attachedDocIds.length === 1 ? "" : "s"}` : "No documents attached"}
+            {error ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{error}</div> : null}
+            {!activeMatter ? (
+              <div className="mt-3 flex flex-col gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+                <p>
+                  Select or create a matter to use matter-specific context. Mercy can draft general scaffolds, but matter context improves review, citations, and D.C. grounding.
                 </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review posture</p>
-                <p className="mt-1 text-sm font-medium text-slate-950">Attorney review required</p>
-              </div>
-            </div>
-
-            {templates.length ? (
-              <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended template workflows</p>
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {templates.slice(0, 6).map((template) => (
-                    <button
-                      key={template.template_id}
-                      onClick={() => {
-                        setMode("template_generation");
-                        setPrompt(promptFromTemplate(template));
-                      }}
-                      className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-[#A5B4FC] hover:bg-[#EEF2FF] hover:text-[#4338CA]"
-                    >
-                      {template.title}
-                    </button>
-                  ))}
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Link href="/matters" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                    Select matter
+                  </Link>
+                  <Link href="/intake" className="rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#E0E7FF]">
+                    Create new matter
+                  </Link>
                 </div>
               </div>
             ) : null}
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.length ? (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`max-w-3xl rounded-2xl p-4 text-sm leading-6 ${
-                    message.role === "user"
-                      ? "ml-auto bg-[#4F46E5] text-white"
-                      : "border border-slate-200 bg-slate-50 text-slate-800"
-                  }`}
-                >
-                  {message.role === "assistant" ? (
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#4F46E5]">
-                      <Bot className="size-3.5" />
-                      Agent X
-                    </div>
-                  ) : null}
-                  <pre className="whitespace-pre-wrap font-sans">{message.content}</pre>
-                </div>
-              ))
-            ) : (
-              <div className="flex h-full min-h-80 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                <div>
-                  <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
-                    <Bot className="size-6" />
-                  </div>
-                  <h2 className="mt-4 text-lg font-semibold text-slate-950">What are you working on?</h2>
-                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                    Select or create a matter before relying on context-heavy legal output. Agent X can draft general scaffolds, but matter context improves review, citations, and D.C. grounding.
-                  </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    <Link href="/matters" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                      <FolderOpen className="size-3.5" />
-                      Select matter
-                    </Link>
-                    <Link href="/intake" className="inline-flex items-center gap-2 rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#E0E7FF]">
-                      <Plus className="size-3.5" />
-                      Create new matter
-                    </Link>
-                    <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                      <BookOpenText className="size-3.5" />
-                      Use template
-                    </Link>
-                    <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                      <FileText className="size-3.5" />
-                      Run D.C. research
-                    </Link>
-                  </div>
-                </div>
+          {templates.length ? (
+            <div className="mx-auto mt-5 max-w-4xl">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended workflows</p>
+                <span className="text-xs text-slate-400">{workflowLabel(mode)}</span>
               </div>
-            )}
-          </div>
-
-          <div className="border-t border-slate-200 p-4">
-            {error ? <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{error}</div> : null}
-            <div className="flex gap-3">
-              <textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Ask Agent X to research, draft, analyze, verify, or explain..."
-                className="min-h-28 flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
-              />
-              <button
-                onClick={send}
-                disabled={busy}
-                className="flex w-28 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#4338CA] disabled:opacity-60"
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                Send
-              </button>
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {templates.slice(0, 6).map((template) => (
+                  <button
+                    key={template.template_id}
+                    onClick={() => {
+                      setMode("template_generation");
+                      setPrompt(promptFromTemplate(template));
+                    }}
+                    className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-[#A5B4FC] hover:bg-[#EEF2FF] hover:text-[#4338CA]"
+                  >
+                    {template.title}
+                  </button>
+                ))}
+              </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {templates.length} templates available. Agent X output requires attorney review and source verification.
-            </p>
+          ) : null}
+
+          <div className="mx-auto mt-5 grid max-w-4xl gap-3 lg:grid-cols-[minmax(0,1fr)_240px]">
+            {messages.length ? (
+              <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`rounded-2xl p-4 text-sm leading-6 ${
+                      message.role === "user"
+                        ? "ml-auto max-w-3xl bg-[#4F46E5] text-white"
+                        : "max-w-3xl border border-slate-200 bg-slate-50 text-slate-800"
+                    }`}
+                  >
+                    {message.role === "assistant" ? (
+                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#4F46E5]">
+                        <Bot className="size-3.5" />
+                        Agent X
+                      </div>
+                    ) : null}
+                    <pre className="whitespace-pre-wrap font-sans">{message.content}</pre>
+                  </div>
+                ))}
+              </section>
+            ) : (
+              <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
+                    <Bot className="size-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-950">Start with the work, then verify.</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      Ask for drafting, review, research support, or citation checking. Attorney review and source verification remain required before use.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        <BookOpenText className="size-3.5" />
+                        Open templates
+                      </Link>
+                      <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        <FileText className="size-3.5" />
+                        Run D.C. research
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 font-semibold text-slate-950">
+                  <Clock3 className="size-4 text-[#4F46E5]" />
+                  Recent work
+                </div>
+                <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
+                  History
+                </Link>
+              </div>
+              <p className="mt-2 text-xs">
+                {history.length ? `${history.length} current-session item${history.length === 1 ? "" : "s"} available until persistence is connected.` : "Saved threads will appear in History once persistence is connected."}
+              </p>
+            </section>
           </div>
         </section>
+      </main>
 
-        <div className="space-y-4">
-          <ReliabilityPanel agent={lastResult} />
-          <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
-            <div className="flex items-center gap-2 font-semibold text-slate-950">
-              <FileText className="size-4 text-[#4F46E5]" />
-              Source toggles
-            </div>
-            <p className="mt-2 text-xs">
-              D.C. sources, matter context, {attachedDocIds.length} attached vault document
-              {attachedDocIds.length === 1 ? "" : "s"}, and jurisdiction controls are sent with every Agent X request.
-            </p>
+      <aside className="space-y-4">
+        <ReliabilityPanel agent={lastResult} />
+        <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600 shadow-sm">
+          <div className="flex items-center gap-2 font-semibold text-slate-950">
+            <SlidersHorizontal className="size-4 text-[#4F46E5]" />
+            Context sent with request
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 font-semibold text-slate-950">
-                <Clock3 className="size-4 text-[#4F46E5]" />
-                Recent work
-              </div>
-              <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
-                Open History
-              </Link>
-            </div>
-            <p className="mt-2 text-xs">
-              {history.length ? `${history.length} current-session item${history.length === 1 ? "" : "s"} available here until persistence is connected.` : "History appears on the dedicated History page after persisted threads are connected."}
-            </p>
-          </div>
-        </div>
-      </div>
+          <p className="mt-2">
+            {useDcSources ? "D.C. sources" : "D.C. sources off"}, {useMatterContext ? "matter context" : "matter context off"}, {attachedDocIds.length} Vault file
+            {attachedDocIds.length === 1 ? "" : "s"}, {strictDcJurisdiction ? "D.C. jurisdiction" : "open jurisdiction"}.
+          </p>
+        </section>
+      </aside>
+    </div>
   );
 }
