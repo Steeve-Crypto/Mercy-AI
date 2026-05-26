@@ -192,6 +192,7 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
       workspace_name: signup.tenantName,
       account_type: signup.accountType,
       firm_id: firmId,
+      parent_firm_id: firmId,
       attorney_seat_limit: signup.seats,
       subscription_status: subscriptionStatus,
       stripe_customer_id: customerId,

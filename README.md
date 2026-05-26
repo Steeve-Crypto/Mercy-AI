@@ -107,8 +107,13 @@ Set a database URL when testing persistent storage:
 
 ```text
 POSTGRES_URL=
-SUPABASE_URL=
+DATABASE_URL=
+SUPABASE_DB_URL=
 ```
+
+`SUPABASE_URL` remains the Supabase project API URL, for example
+`https://your-project.supabase.co`; it is not a PostgreSQL/pgvector connection
+string.
 
 ## Local Quick Start
 
@@ -238,4 +243,3 @@ See `docs/beta-readiness-checklist.md`.
 - Keep `mercy-legal-plugin/` as the primary Office add-in candidate.
 - Treat `standalone_platform/` and `word_plugin/` as legacy smoke/demo surfaces.
 - Preserve response envelope, guardrails, citation metadata, source status, attorney-review language, tenant context, and data posture in all legal outputs.
-

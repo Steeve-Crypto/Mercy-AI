@@ -4,6 +4,7 @@ from functools import lru_cache
 import os
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from pydantic import AliasChoices, Field, SecretStr, field_validator
@@ -19,13 +20,27 @@ def _placeholder_value(value: str) -> bool:
     return any(marker in normalized for marker in ("USER:PASSWORD@HOST:PORT", "YOUR_TENANT_ID", "your-project.supabase.co"))
 
 
+def _database_connection_url(value: str | None) -> str | None:
+    if not value or _placeholder_value(value):
+        return None
+    try:
+        parsed = urlparse(value.strip())
+    except ValueError:
+        return None
+    if parsed.scheme in {"postgres", "postgresql", "postgresql+psycopg", "postgresql+psycopg2", "sqlite", "sqlite+pysqlite"}:
+        return value.strip()
+    return None
+
+
 class MercyConfig(BaseSettings):
     """Production configuration contract for Mercy Legal AI.
 
     Settings are loaded from process environment and `.env`. New Mercy-owned
     variables use the `MERCY_` prefix, while several deployment-standard aliases
-    such as `POSTGRES_URL`, `SUPABASE_URL`, `OPENAI_API_KEY`, and `STRIPE_*` are
-    accepted for compatibility with hosting providers and existing code.
+    such as `POSTGRES_URL`, `DATABASE_URL`, `SUPABASE_URL`, `OPENAI_API_KEY`,
+    and `STRIPE_*` are accepted for compatibility with hosting providers and
+    existing code. `SUPABASE_URL` is the Supabase API URL; it is not a Postgres
+    DSN fallback.
     """
 
     model_config = SettingsConfigDict(
@@ -99,6 +114,7 @@ class MercyConfig(BaseSettings):
 
     # Databases and retrieval backends. PostgreSQL + pgvector is primary.
     postgres_url: SecretStr | None = Field(default=None, validation_alias=AliasChoices("POSTGRES_URL", "MERCY_POSTGRES_URL"))
+    database_url_standard: SecretStr | None = Field(default=None, validation_alias=AliasChoices("DATABASE_URL"))
     database_url_override: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_DATABASE_URL"))
     pgvector_dsn: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_PGVECTOR_DSN"))
     pgvector_table: str = Field(default="mercy_dc_chunks", validation_alias=AliasChoices("MERCY_PGVECTOR_TABLE"))
@@ -194,18 +210,17 @@ class MercyConfig(BaseSettings):
 
     @property
     def database_url(self) -> str | None:
-        supabase_database_url = None
-        if self.supabase_url and self.supabase_url.startswith(("postgres://", "postgresql://")):
-            supabase_database_url = self.supabase_url
         supabase_db_url = self.supabase_db_url
         if self.is_local and not (os.environ.get("SUPABASE_DB_URL") or os.environ.get("MERCY_SUPABASE_DB_URL")):
             supabase_db_url = None
-        return first_secret(
+        configured = first_secret(
             self.postgres_url,
+            self.database_url_standard,
             self.database_url_override,
             supabase_db_url,
             self.pgvector_dsn,
-        ) or supabase_database_url
+        )
+        return _database_connection_url(configured) or _database_connection_url(self.supabase_url)
 
     @property
     def effective_api_token(self) -> str | None:
@@ -295,7 +310,10 @@ class MercyConfig(BaseSettings):
         if production_like and not self.mercy_require_https:
             issues.append("MERCY_REQUIRE_HTTPS=true is required for production.")
         if production_like and not self.database_url:
-            issues.append("POSTGRES_URL or SUPABASE_DB_URL is required for persistent PostgreSQL + pgvector storage.")
+            issues.append(
+                "POSTGRES_URL, DATABASE_URL, MERCY_DATABASE_URL, SUPABASE_DB_URL, or MERCY_PGVECTOR_DSN "
+                "is required for persistent PostgreSQL + pgvector storage."
+            )
         if production_like and self.mercy_auth_mode in {"token", ""}:
             issues.append("Production auth must use MERCY_AUTH_MODE=supabase.")
         if not production_like and not self.effective_api_token and self.mercy_auth_mode in {"test", "token"}:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BookOpenText,
@@ -9,7 +9,6 @@ import {
   FileText,
   Loader2,
   Paperclip,
-  Plus,
   Search,
   Send,
   ShieldCheck,
@@ -19,21 +18,14 @@ import {
 } from "lucide-react";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
 import { executeAgent, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
+import type { WorkHistoryRecord } from "@/lib/work-history-types";
+import { createWorkHistoryClient, listWorkHistoryClient, sourceTypeForRun, workflowTypeFromMode } from "@/lib/work-history-client";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   result?: CoreAgentEnvelope;
-};
-
-type AssistantHistoryItem = {
-  id: string;
-  matterName: string;
-  workflow: string;
-  summary: string;
-  reliability: string;
-  createdAt: string;
 };
 
 type AgentXChatPageProps = {
@@ -86,6 +78,17 @@ function workflowLabel(value: string): string {
     .join(" ");
 }
 
+function shortText(value: string, words = 32): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return parts.length > words ? `${parts.slice(0, words).join(" ")}...` : parts.join(" ");
+}
+
+function historyReliability(record: WorkHistoryRecord): string {
+  const snapshot = record.reliabilitySnapshot ?? {};
+  const status = snapshot.guardrail_status ?? snapshot.status ?? snapshot.grounding_status;
+  return typeof status === "string" && status.trim() ? status : "review required";
+}
+
 export function AgentXChatPage({
   initialMatters,
   templates,
@@ -111,7 +114,7 @@ export function AgentXChatPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [history, setHistory] = useState<AssistantHistoryItem[]>([]);
+  const [workHistory, setWorkHistory] = useState<WorkHistoryRecord[]>([]);
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
   const attachedDocuments = useMemo(() => {
@@ -126,6 +129,20 @@ export function AgentXChatPage({
     });
   }, [activeMatter?.documents, attachedDocIds]);
   const lastResult = [...messages].reverse().find((message) => message.result)?.result ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    listWorkHistoryClient({ limit: 5 })
+      .then((result) => {
+        if (!cancelled) setWorkHistory(result.records);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function send() {
     if (!prompt.trim()) {
@@ -173,21 +190,42 @@ export function AgentXChatPage({
     }
     const data = response.data;
     const output = agentOutput(data);
+    let savedRecord: WorkHistoryRecord | null = null;
+    try {
+      const saveResult = await createWorkHistoryClient({
+        matterId: matterId || null,
+        documentId: attachedDocIds[0] ?? null,
+        sourceType: sourceTypeForRun(mode, matterId, attachedDocIds[0]),
+        workflowType: workflowTypeFromMode(mode),
+        title: `${workflowLabel(mode)}${activeMatter?.name ? ` - ${activeMatter.name}` : ""}`,
+        inputSummary: shortText(prompt, 36),
+        requestText: prompt,
+        outputSummary: shortText(output, 44),
+        outputText: output,
+        reliabilitySnapshot: {
+          response_envelope: data.response_envelope,
+          route: data.route,
+          guardrail_status: data.guardrail_status,
+          confidence_score: data.confidence_score,
+          grounding_policy: data.grounding_policy,
+          human_review_required: data.human_review_required,
+        },
+        citationsSnapshot: data.citations ?? [],
+        missingInputs: data.route?.missing_inputs ?? [],
+        traceId: data.trace_id ?? null,
+        langsmithUrl: data.langsmith_project_url ?? null,
+        moeRoute: data.route ?? null,
+        expertName: data.selected_expert ?? data.expert ?? data.selected_agent ?? null,
+      });
+      savedRecord = saveResult.record;
+    } catch {
+      savedRecord = null;
+    }
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: "assistant", content: output, result: data },
     ]);
-    setHistory((current) => [
-      {
-        id: crypto.randomUUID(),
-        matterName: activeMatter?.name ?? "No matter",
-        workflow: mode.replace(/_/g, " "),
-        summary: output.split(/\s+/).slice(0, 18).join(" "),
-        reliability: data.guardrail_status ?? data.grounding_policy?.status ?? "review required",
-        createdAt: "Just now",
-      },
-      ...current,
-    ].slice(0, 6));
+    if (savedRecord) setWorkHistory((current) => [savedRecord!, ...current].slice(0, 6));
   }
 
   return (
@@ -465,9 +503,25 @@ export function AgentXChatPage({
                   History
                 </Link>
               </div>
-              <p className="mt-2 text-xs">
-                {history.length ? `${history.length} current-session item${history.length === 1 ? "" : "s"} available until persistence is connected.` : "Saved threads will appear in History once persistence is connected."}
-              </p>
+              <div className="mt-3 space-y-2">
+                {workHistory.length ? (
+                  workHistory.slice(0, 4).map((record) => (
+                    <Link key={record.id} href="/history" className="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-white">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-semibold text-slate-900">{record.title}</p>
+                        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          {historyReliability(record)}
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                        {record.matterId ? "Matter-linked" : "General"} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
+                      </p>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="mt-2 text-xs">Recent Mercy work will appear here after drafting, research, review, or citation-checking runs are saved.</p>
+                )}
+              </div>
             </section>
           </div>
         </section>

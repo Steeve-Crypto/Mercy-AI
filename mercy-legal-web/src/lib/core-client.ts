@@ -243,6 +243,10 @@ export type CoreRagEnvelope = {
   };
   metadata_filters?: Record<string, unknown>;
   answer_policy?: Record<string, unknown>;
+  persistence?: {
+    retrieval_run_id?: string | null;
+    reliability_snapshot_id?: string | null;
+  };
   response_envelope: CoreResponseEnvelope;
   route: CoreRouteDecision;
   expert: string;

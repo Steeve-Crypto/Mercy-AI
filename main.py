@@ -57,6 +57,7 @@ from response_envelope import attach_response_envelope, build_response_envelope
 from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
 from mercy_storage import (
     list_microsoft_identity_mappings,
+    record_vault_document,
     set_microsoft_identity_mapping_status,
     upsert_microsoft_identity_mapping,
 )
@@ -632,6 +633,31 @@ def _sanitize_client_matter_context(
     return {key: value for key, value in sanitized.items() if key not in blocked}
 
 
+def _verified_document_scope(client_context: dict[str, Any] | None, stored_context: dict[str, Any], matter_id: str | None) -> dict[str, Any]:
+    if not matter_id or not isinstance(client_context, dict):
+        return {}
+    documents = stored_context.get("documents") if isinstance(stored_context.get("documents"), list) else []
+    allowed_ids = {
+        str(document.get("document_id") or document.get("id") or "")
+        for document in documents
+        if isinstance(document, dict)
+    }
+    requested: list[str] = []
+    attached = client_context.get("attached_document_ids")
+    if isinstance(attached, list):
+        requested.extend(str(item) for item in attached if item)
+    document_id = client_context.get("document_id")
+    if document_id:
+        requested.append(str(document_id))
+    verified = sorted({item for item in requested if item in allowed_ids})
+    if not verified:
+        return {}
+    return {
+        "attached_document_ids": verified,
+        "document_id": verified[0] if len(verified) == 1 else None,
+    }
+
+
 def _scoped_matter_context(
     tenant_user: TenantUser,
     *,
@@ -641,9 +667,11 @@ def _scoped_matter_context(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stored_context = _matter_context(matter_id, tenant_user)
+    verified_document_scope = _verified_document_scope(client_context, stored_context, matter_id)
     context = {
         **_sanitize_client_matter_context(client_context, matter_id=matter_id),
         **stored_context,
+        **verified_document_scope,
         **(extra or {}),
         "surface_context": surface_context,
         "auth_context": _tenant_context(tenant_user),
@@ -1562,7 +1590,8 @@ async def workspace_discovery_upload(
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     content = await file.read()
-    document_id = f"doc_{sha256(content or file.filename.encode()).hexdigest()[:24]}"
+    content_digest = sha256(content or file.filename.encode()).hexdigest()
+    document_id = f"doc_{sha256(f'{tenant_user.tenant_id}:{content_digest}'.encode()).hexdigest()[:24]}"
     safe_name = Path(file.filename).name
     destination = UPLOAD_DIR / f"{document_id}_{safe_name}"
     destination.write_bytes(content)
@@ -1594,22 +1623,39 @@ async def workspace_discovery_upload(
 
     if matter_id:
         result["matter_id"] = matter_id
-        document_metadata = {
-            "document_id": document_id,
-            "filename": safe_name,
-            "uploaded_at": datetime.now(UTC).isoformat(),
-            "size": len(content),
-            "mime_type": file.content_type or "application/pdf",
-            "type": "PDF",
-            "status": "Ready",
-            "extraction_status": "Ready",
-            "extraction_progress": 100,
-            "storage_path": str(destination),
-            "facts_extracted": len(result.get("facts") or {}),
-            "citation_count": len(result.get("citations") or []),
-            "surface_context": "core_discovery_upload",
-            "source": "workspace_discovery_upload",
-        }
+    document_metadata = {
+        "document_id": document_id,
+        "matter_id": matter_id,
+        "filename": safe_name,
+        "uploaded_at": datetime.now(UTC).isoformat(),
+        "size": len(content),
+        "mime_type": file.content_type or "application/pdf",
+        "type": "PDF",
+        "status": "ready",
+        "extraction_status": "ready",
+        "extraction_progress": 100,
+        "storage_path": str(destination),
+        "storage_provider": "local_upload_dir",
+        "sha256": content_digest,
+        "facts_extracted": len(result.get("facts") or {}),
+        "citation_count": len(result.get("citations") or []),
+        "surface_context": "core_discovery_upload",
+        "source": "workspace_discovery_upload",
+    }
+    persistent_storage = record_vault_document(
+        document_metadata,
+        tenant_context=_tenant_context(tenant_user),
+        document_text=document_text,
+    )
+    document_metadata["persistent_storage"] = persistent_storage
+    if persistent_storage.get("document_status"):
+        document_metadata["status"] = persistent_storage["document_status"]
+    if persistent_storage.get("extraction_status"):
+        document_metadata["extraction_status"] = persistent_storage["extraction_status"]
+    if document_metadata["extraction_status"] != "ready":
+        document_metadata["extraction_progress"] = 0
+    result["document"] = document_metadata
+    if matter_id:
         result["document"] = document_metadata
         attach_matter_document(matter_id, document_metadata, tenant_context=_tenant_context(tenant_user))
         MATTERS.attach_facts(matter_id, result.get("facts", {}), tenant_context=_tenant_context(tenant_user))

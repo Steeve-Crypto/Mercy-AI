@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   Activity,
@@ -36,6 +36,17 @@ import {
   type CoreMatterDocument,
   type CoreRagEnvelope,
 } from "@/lib/core-client";
+import {
+  formatActivityDetail,
+  formatActivityEvent,
+  formatTimestamp,
+  safeList,
+  safeObjectEntries,
+  safeText,
+  titleCase,
+} from "@/lib/display-safety";
+import type { WorkHistoryRecord } from "@/lib/work-history-types";
+import { createWorkHistoryClient, listWorkHistoryClient } from "@/lib/work-history-client";
 
 type MatterDetailWorkspaceProps = {
   matter: CoreMatter;
@@ -75,7 +86,7 @@ const tabs: Array<{ id: MatterTab; label: string; icon: typeof FolderOpen }> = [
 ];
 
 function asText(value: unknown, fallback = "Pending"): string {
-  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "string" && value.trim()) return safeText(value, fallback);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
 }
@@ -122,29 +133,29 @@ function timeline(matter: CoreMatter, research: CoreRagEnvelope | null, discover
   const rows = [
     ...(matter.history ?? []).map((item, index) => ({
       id: `history-${index}`,
-      label: asText(item.action ?? item.event ?? item.type, "Matter event"),
-      detail: asText(item.detail ?? item.summary ?? item.note, "Matter history updated."),
-      time: asText(item.created_at ?? item.timestamp ?? item.time, "Recorded"),
+      label: formatActivityEvent(item.action ?? item.event ?? item.type),
+      detail: formatActivityDetail(item.action ?? item.event ?? item.type, item.detail ?? item.summary ?? item.note),
+      time: formatTimestamp(item.created_at ?? item.timestamp ?? item.time),
     })),
     ...(matter.route_history ?? []).map((route, index) => ({
       id: `route-${index}`,
-      label: `${route.expert_label} route`,
-      detail: `${route.route_mode}, ${Math.round(route.confidence * 100)}% confidence`,
-      time: "Route history",
+      label: "Reliability route attached",
+      detail: "Reliability route was prepared for this workflow.",
+      time: "Recorded",
     })),
     ...(matter.drafts ?? []).map((draft, index) => ({
       id: `draft-${index}`,
       label: "Draft generated",
       detail: asText(draft.draft_type ?? draft.title ?? draft.summary, "Mercy draft saved."),
-      time: asText(draft.created_at ?? draft.timestamp, "Draft event"),
+      time: formatTimestamp(draft.created_at ?? draft.timestamp),
     })),
   ];
 
   if (research) {
     rows.unshift({
       id: "live-research",
-      label: "Research run",
-      detail: `${research.results.length} D.C. source result(s), ${research.verification.status} verification.`,
+      label: "Research run completed",
+      detail: "Research results were added to this matter.",
       time: "Just now",
     });
   }
@@ -152,11 +163,27 @@ function timeline(matter: CoreMatter, research: CoreRagEnvelope | null, discover
     rows.unshift({
       id: "live-discovery",
       label: "Document uploaded",
-      detail: `${discovery.engine} returned facts and citation metadata.`,
+      detail: "Document was uploaded and queued for extraction review.",
       time: "Just now",
     });
   }
   return rows;
+}
+
+function historyActivity(records: WorkHistoryRecord[]) {
+  return records.slice(0, 12).map((record) => ({
+    id: `work-history-${record.id}`,
+    label:
+      record.workflowType === "research"
+        ? "Research run completed"
+        : record.workflowType === "citation_check"
+          ? "Citation check completed"
+          : record.status === "saved"
+            ? "Saved output added"
+            : "Mercy request completed",
+    detail: record.outputSummary ?? record.inputSummary ?? "Saved Mercy work was added to this matter.",
+    time: formatTimestamp(record.createdAt),
+  }));
 }
 
 export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWorkspaceProps) {
@@ -174,9 +201,13 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [matterHistory, setMatterHistory] = useState<WorkHistoryRecord[]>([]);
 
   const deadlines = matter.deadlines ?? [];
-  const activities = useMemo(() => timeline(matter, researchResult, discoveryResult), [discoveryResult, matter, researchResult]);
+  const activities = useMemo(
+    () => [...historyActivity(matterHistory), ...timeline(matter, researchResult, discoveryResult)],
+    [discoveryResult, matter, matterHistory, researchResult],
+  );
   const chatHref = `/chat?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
   const intakeHref = `/intake?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
   const documentsReady = documents.filter((document) => document.status === "Ready").length;
@@ -184,6 +215,22 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const latestRoute = matter.route_history?.[matter.route_history.length - 1] ?? null;
   const latestConfidence = latestRoute ? Math.round(latestRoute.confidence * 100) : null;
   const reliabilityItems = openInputs + (latestRoute?.missing_inputs?.length ?? 0);
+  const safeFactEntries = safeObjectEntries(matter.key_facts ?? matter.facts);
+  const keyFactList = safeList((matter.key_facts as Record<string, unknown> | undefined)?.key_facts ?? (matter.facts as Record<string, unknown> | undefined)?.key_facts);
+
+  useEffect(() => {
+    let cancelled = false;
+    listWorkHistoryClient({ matterId: matter.matter_id, limit: 12 })
+      .then((result) => {
+        if (!cancelled) setMatterHistory(result.records);
+      })
+      .catch(() => {
+        if (!cancelled) setMatterHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [matter.matter_id]);
 
   function addToast(tone: Toast["tone"], message: string) {
     const toast = { id: crypto.randomUUID(), tone, message };
@@ -325,6 +372,35 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
       return;
     }
     setResearchResult(response.data);
+    try {
+      const saved = await createWorkHistoryClient({
+        matterId: matter.matter_id,
+        sourceType: "matter",
+        workflowType: "research",
+        title: `D.C. research - ${query.trim().slice(0, 90)}`,
+        inputSummary: query.trim(),
+        requestText: query.trim(),
+        outputSummary: `Research returned ${response.data.results.length} source result${response.data.results.length === 1 ? "" : "s"} for attorney review.`,
+        outputText: response.data.results
+          .slice(0, 5)
+          .map((item) => `${item.citation?.label ?? item.source_id}: ${safeText(item.summary || item.text, "Summary unavailable.")}`)
+          .join("\n\n"),
+        reliabilitySnapshot: {
+          verification: response.data.verification,
+          guardrail_status: response.data.guardrail_status,
+          response_envelope: response.data.response_envelope,
+          route: response.data.route,
+          persistence: response.data.persistence,
+        },
+        citationsSnapshot: response.data.citations ?? [],
+        retrievalRunId: response.data.persistence?.retrieval_run_id ?? null,
+        reliabilitySnapshotId: response.data.persistence?.reliability_snapshot_id ?? null,
+        moeRoute: response.data.route ?? null,
+      });
+      if (saved.record) setMatterHistory((current) => [saved.record!, ...current].slice(0, 12));
+    } catch {
+      // Matter research remains usable even when history persistence is unavailable.
+    }
   }
 
   return (
@@ -487,16 +563,30 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                   <Info label="Matter type" value={matter.matter_type} />
                   <Info label="Client role" value={matter.client_role} />
                   <Info label="Requested relief" value={matter.requested_relief} />
-                  <Info label="Opposing parties" value={matter.opposing_parties?.join(", ")} />
-                  <Info label="Sensitivity" value={matter.sensitivity_flags?.join(", ")} />
+                  <Info label="Opposing parties" value={matter.opposing_parties?.map((party) => safeText(party, "")).filter(Boolean).join(", ")} />
+                  <Info label="Sensitivity" value={matter.sensitivity_flags?.map((flag) => titleCase(safeText(flag, ""))).filter(Boolean).join(", ")} />
                 </dl>
                 <div className="mt-5 rounded-xl bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-950">Key facts</p>
-                  <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                    {Object.keys(matter.key_facts ?? matter.facts ?? {}).length
-                      ? JSON.stringify(matter.key_facts ?? matter.facts, null, 2)
-                      : "No structured facts saved yet. Use Intake to add facts before drafting."}
-                  </pre>
+                  {safeFactEntries.length || keyFactList.length ? (
+                    <div className="mt-3 space-y-3">
+                      {keyFactList.length ? (
+                        <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
+                          {keyFactList.map((fact) => <li key={fact}>{fact}</li>)}
+                        </ul>
+                      ) : null}
+                      {safeFactEntries.map((entry) => (
+                        <div key={entry.label}>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.label}</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-700">{entry.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Key facts are still being prepared from intake and documents. Review source documents before relying on extracted facts.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -731,15 +821,15 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                 <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
                   <p className="text-sm font-semibold text-slate-950">Reliability summary</p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {researchResult.results.length} result(s), verification {researchResult.verification.status}, guardrails {researchResult.guardrail_status}.
+                    Retrieval completed with review warnings. {researchResult.results.length} source result{researchResult.results.length === 1 ? "" : "s"} returned. Use Mercy Assistant for full reliability review before relying on these results.
                   </p>
                 </div>
               ) : <EmptyState text="Run research to retrieve D.C. source metadata for this matter." />}
               {researchResult?.results.map((item) => (
                 <div key={item.chunk_id} className="rounded-xl border border-slate-200 p-4">
                   <p className="font-semibold text-slate-950">{item.citation?.label ?? item.source_id}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{item.summary || item.text}</p>
-                  <p className="mt-2 text-xs text-slate-500">Score {Math.round(item.combined_score * 100)} / {item.verification_status}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{safeText(item.summary || item.text, "Summary unavailable. Review the source before use.")}</p>
+                  <p className="mt-2 text-xs text-slate-500">Source relevance {Math.round(item.combined_score * 100)}%. Attorney review required before use.</p>
                 </div>
               ))}
             </div>
@@ -800,7 +890,7 @@ function Info({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="rounded-xl bg-slate-50 p-4">
       <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold text-slate-950">{asText(value)}</dd>
+      <dd className="mt-1 text-sm font-semibold text-slate-950">{asText(value, "Not provided yet")}</dd>
     </div>
   );
 }
@@ -816,7 +906,7 @@ function StatusBadge({ status, progress }: { status: DocumentStatus; progress?: 
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${styles}`}>
       <Icon className={`size-3.5 ${status === "Processing..." ? "animate-spin" : ""}`} />
-      {status}
+      {status === "Failed" ? "Extraction limited" : status}
       {typeof progress === "number" && status !== "Ready" ? ` ${progress}%` : ""}
     </span>
   );

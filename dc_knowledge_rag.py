@@ -15,8 +15,15 @@ from llm_providers import generate_research_answer
 from mercy_storage import (
     DCRagChunkRecord,
     DCRagSourceRecord,
+    DocumentChunkRecord,
+    LegalSourceChunkRecord,
+    LegalSourceRecord,
+    configured_database_url,
+    get_engine,
     init_storage,
     persistent_storage_configured,
+    record_reliability_snapshot,
+    record_retrieval_run,
     session_scope,
     trace_storage_event,
 )
@@ -34,6 +41,10 @@ SUPPORTED_SOURCE_TYPES = {"official_source", "statute", "rule", "case", "regulat
 SUPPORTED_AUTHORITY_TYPES = {"statute", "rule", "case", "regulation", "ethics_opinion", "court_rule", "administrative_order"}
 SUPPORTED_VERIFICATION_STATUSES = {"official_verified", "official_metadata_unquoted", "official_registered"}
 SOURCE_CONTRACT_VERSION = "dc-official-source-contract-1.0"
+
+
+def _is_postgres_database_url(database_url: str | None) -> bool:
+    return bool(database_url and database_url.startswith(("postgresql://", "postgresql+", "postgres://")))
 
 
 class RetrievalBackendError(RuntimeError):
@@ -181,6 +192,8 @@ class KnowledgeChunk:
     practice_area: str = "professional_responsibility"
     source_date: str | None = None
     tenant_id: str | None = None
+    matter_id: str | None = None
+    document_id: str | None = None
 
     def to_result(
         self,
@@ -226,6 +239,8 @@ class KnowledgeChunk:
             "relationships": self.relationships,
             "practice_area": self.practice_area,
             "source_date": self.source_date,
+            "matter_id": self.matter_id,
+            "document_id": self.document_id,
         }
 
 
@@ -310,12 +325,13 @@ def _persistent_source_records(tenant_id: str | None) -> list[SourceRecord]:
     try:
         init_storage()
         with session_scope() as session:
-            records = (
+            legal_records = session.query(LegalSourceRecord).filter(LegalSourceRecord.active.is_(True)).all()
+            legacy_records = (
                 session.query(DCRagSourceRecord)
                 .filter(DCRagSourceRecord.tenant_id.in_([tenant_id, "public"]), DCRagSourceRecord.active.is_(True))
                 .all()
             )
-            return [
+            records = [
                 SourceRecord(
                     source_id=record.source_id,
                     title=record.title,
@@ -332,8 +348,30 @@ def _persistent_source_records(tenant_id: str | None) -> list[SourceRecord]:
                     local_demo=bool(record.local_demo),
                     active=bool(record.active),
                 )
-                for record in records
+                for record in legal_records
             ]
+            seen = {record.source_id for record in records}
+            records.extend(
+                SourceRecord(
+                    source_id=record.source_id,
+                    title=record.title,
+                    source_type=record.source_type,
+                    authority_type=record.authority_type,
+                    jurisdiction=record.jurisdiction,
+                    citation_label=record.citation_label,
+                    official_locator=record.official_locator,
+                    url=record.url,
+                    file_anchor=record.file_anchor,
+                    last_checked=record.last_checked,
+                    verification_status=record.verification_status,
+                    refresh_cadence=record.refresh_cadence,
+                    local_demo=bool(record.local_demo),
+                    active=bool(record.active),
+                )
+                for record in legacy_records
+                if record.source_id not in seen
+            )
+            return records
     except Exception as exc:
         trace_storage_event("rag_source_load_failed", "rag_source_read", tenant_id=tenant_id, metadata={"error": str(exc)})
         return []
@@ -345,8 +383,34 @@ def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
     try:
         init_storage()
         with session_scope() as session:
-            records = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id.in_([tenant_id, "public"])).all()
+            legal_records = session.query(LegalSourceChunkRecord).all()
             chunks = [
+                KnowledgeChunk(
+                    chunk_id=record.chunk_id,
+                    source_id=record.source_id,
+                    text=record.text,
+                    summary=record.summary,
+                    source_title=record.source_title,
+                    citation_label=record.citation_label,
+                    source_type=record.source_type,
+                    authority_type=record.authority_type,
+                    jurisdiction=record.jurisdiction,
+                    official_locator=record.official_locator,
+                    url=record.url,
+                    entities=[str(entity) for entity in record.entities or []],
+                    relationships=[relation for relation in record.relationships or [] if isinstance(relation, dict)],
+                    verification_status=record.verification_status,
+                    citation_required=bool(record.citation_required),
+                    last_checked=record.last_checked,
+                    practice_area=record.practice_area,
+                    source_date=record.source_date,
+                    tenant_id="public",
+                )
+                for record in legal_records
+            ]
+            seen = {chunk.chunk_id for chunk in chunks}
+            records = session.query(DCRagChunkRecord).filter(DCRagChunkRecord.tenant_id.in_([tenant_id, "public"])).all()
+            chunks.extend(
                 KnowledgeChunk(
                     chunk_id=record.chunk_id,
                     source_id=record.source_id,
@@ -369,7 +433,38 @@ def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
                     tenant_id=record.tenant_id,
                 )
                 for record in records
-            ]
+                if record.chunk_id not in seen
+            )
+            document_records = session.query(DocumentChunkRecord).filter(DocumentChunkRecord.tenant_id == tenant_id).all()
+            chunks.extend(
+                KnowledgeChunk(
+                    chunk_id=record.chunk_id,
+                    source_id=f"document:{record.document_id}",
+                    text=record.text,
+                    summary=record.summary or record.text[:500],
+                    source_title=f"Vault document {record.document_id}",
+                    citation_label=f"Vault document {record.document_id}",
+                    source_type="tenant_document",
+                    authority_type="record",
+                    jurisdiction="Tenant private document",
+                    official_locator=f"tenant:{record.tenant_id}/document:{record.document_id}/chunk:{record.chunk_index}",
+                    entities=[],
+                    relationships=[
+                        {"type": "matter_document", "from": str(record.matter_id or ""), "to": record.document_id},
+                        {"type": "document_chunk", "from": record.document_id, "to": record.chunk_id},
+                    ],
+                    verification_status="tenant_document_unverified",
+                    citation_required=True,
+                    last_checked=record.created_at.date().isoformat() if getattr(record, "created_at", None) else "2026-05-26",
+                    practice_area="tenant_document",
+                    source_date=None,
+                    tenant_id=record.tenant_id,
+                    matter_id=record.matter_id,
+                    document_id=record.document_id,
+                )
+                for record in document_records
+                if record.chunk_id not in seen
+            )
         trace_storage_event("rag_chunks_loaded", "rag_chunk_read", tenant_id=tenant_id, metadata={"chunk_count": len(chunks)})
         return chunks
     except Exception as exc:
@@ -381,6 +476,43 @@ def _persist_ingested_source(source: SourceRecord, chunks: list[KnowledgeChunk],
     init_storage()
     now = datetime.now(UTC)
     with session_scope() as session:
+        legal_source_record = session.get(LegalSourceRecord, source.source_id)
+        if legal_source_record is None:
+            legal_source_record = LegalSourceRecord(
+                source_id=source.source_id,
+                title=source.title,
+                source_type=source.source_type,
+                authority_type=source.authority_type,
+                jurisdiction=source.jurisdiction,
+                citation_label=source.citation_label,
+                official_locator=source.official_locator,
+                url=source.url,
+                file_anchor=source.file_anchor,
+                last_checked=source.last_checked,
+                verification_status=source.verification_status,
+                refresh_cadence=source.refresh_cadence,
+                local_demo=source.local_demo,
+                active=source.active,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(legal_source_record)
+        else:
+            legal_source_record.title = source.title
+            legal_source_record.source_type = source.source_type
+            legal_source_record.authority_type = source.authority_type
+            legal_source_record.jurisdiction = source.jurisdiction
+            legal_source_record.citation_label = source.citation_label
+            legal_source_record.official_locator = source.official_locator
+            legal_source_record.url = source.url
+            legal_source_record.file_anchor = source.file_anchor
+            legal_source_record.last_checked = source.last_checked
+            legal_source_record.verification_status = source.verification_status
+            legal_source_record.refresh_cadence = source.refresh_cadence
+            legal_source_record.local_demo = source.local_demo
+            legal_source_record.active = source.active
+            legal_source_record.updated_at = now
+
         source_record = session.get(DCRagSourceRecord, {"tenant_id": tenant_id, "source_id": source.source_id})
         if source_record is None:
             source_record = DCRagSourceRecord(
@@ -421,8 +553,55 @@ def _persist_ingested_source(source: SourceRecord, chunks: list[KnowledgeChunk],
 
         for chunk in chunks:
             chunk.tenant_id = tenant_id
-            chunk_record = session.get(DCRagChunkRecord, {"tenant_id": tenant_id, "chunk_id": chunk.chunk_id})
             embedding = _stable_embedding(_chunk_text(chunk))
+            legal_chunk_record = session.get(LegalSourceChunkRecord, chunk.chunk_id)
+            if legal_chunk_record is None:
+                legal_chunk_record = LegalSourceChunkRecord(
+                    chunk_id=chunk.chunk_id,
+                    source_id=chunk.source_id,
+                    text=chunk.text,
+                    summary=chunk.summary,
+                    source_title=chunk.source_title,
+                    citation_label=chunk.citation_label,
+                    source_type=chunk.source_type,
+                    authority_type=chunk.authority_type,
+                    jurisdiction=chunk.jurisdiction,
+                    official_locator=chunk.official_locator,
+                    url=chunk.url,
+                    entities=chunk.entities,
+                    relationships=chunk.relationships,
+                    verification_status=chunk.verification_status,
+                    citation_required=chunk.citation_required,
+                    last_checked=chunk.last_checked,
+                    practice_area=chunk.practice_area,
+                    source_date=chunk.source_date,
+                    embedding_model="mercy-hash-embedding-384",
+                    embedding_vector=embedding,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(legal_chunk_record)
+            else:
+                legal_chunk_record.source_id = chunk.source_id
+                legal_chunk_record.text = chunk.text
+                legal_chunk_record.summary = chunk.summary
+                legal_chunk_record.source_title = chunk.source_title
+                legal_chunk_record.citation_label = chunk.citation_label
+                legal_chunk_record.source_type = chunk.source_type
+                legal_chunk_record.authority_type = chunk.authority_type
+                legal_chunk_record.jurisdiction = chunk.jurisdiction
+                legal_chunk_record.official_locator = chunk.official_locator
+                legal_chunk_record.url = chunk.url
+                legal_chunk_record.entities = chunk.entities
+                legal_chunk_record.relationships = chunk.relationships
+                legal_chunk_record.verification_status = chunk.verification_status
+                legal_chunk_record.citation_required = chunk.citation_required
+                legal_chunk_record.last_checked = chunk.last_checked
+                legal_chunk_record.practice_area = chunk.practice_area
+                legal_chunk_record.source_date = chunk.source_date
+                legal_chunk_record.embedding_vector = embedding
+                legal_chunk_record.updated_at = now
+            chunk_record = session.get(DCRagChunkRecord, {"tenant_id": tenant_id, "chunk_id": chunk.chunk_id})
             if chunk_record is None:
                 chunk_record = DCRagChunkRecord(
                     tenant_id=tenant_id,
@@ -445,6 +624,7 @@ def _persist_ingested_source(source: SourceRecord, chunks: list[KnowledgeChunk],
                     practice_area=chunk.practice_area,
                     source_date=chunk.source_date,
                     embedding=embedding,
+                    embedding_vector=embedding,
                     created_at=now,
                     updated_at=now,
                 )
@@ -468,6 +648,7 @@ def _persist_ingested_source(source: SourceRecord, chunks: list[KnowledgeChunk],
                 chunk_record.practice_area = chunk.practice_area
                 chunk_record.source_date = chunk.source_date
                 chunk_record.embedding = embedding
+                chunk_record.embedding_vector = embedding
                 chunk_record.updated_at = now
     trace_storage_event(
         "rag_ingestion_persisted",
@@ -494,15 +675,16 @@ class RetrievalConfig:
     def from_env(cls) -> "RetrievalConfig":
         vector_backend = os.getenv("MERCY_RAG_VECTOR_BACKEND", "").lower()
         graph_backend = os.getenv("MERCY_RAG_GRAPH_BACKEND", "").lower()
-        if not vector_backend:
+        database_url = configured_database_url()
+        if not vector_backend or vector_backend == "auto":
             vector_backend = (
                 "qdrant"
                 if os.getenv("MERCY_QDRANT_URL")
                 else "pgvector"
-                if os.getenv("MERCY_PGVECTOR_DSN") or os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL")
+                if _is_postgres_database_url(database_url)
                 else "local"
             )
-        if not graph_backend:
+        if not graph_backend or graph_backend == "auto":
             graph_backend = "neo4j" if os.getenv("MERCY_NEO4J_URI") else "local"
         if vector_backend not in SUPPORTED_VECTOR_BACKENDS:
             vector_backend = "local"
@@ -513,7 +695,7 @@ class RetrievalConfig:
             graph_backend=graph_backend,
             qdrant_url=os.getenv("MERCY_QDRANT_URL"),
             qdrant_collection=os.getenv("MERCY_QDRANT_COLLECTION", "dc_legal_knowledge"),
-            pgvector_dsn=os.getenv("MERCY_PGVECTOR_DSN") or os.getenv("POSTGRES_URL") or os.getenv("SUPABASE_URL"),
+            pgvector_dsn=database_url,
             pgvector_table=os.getenv("MERCY_PGVECTOR_TABLE", "mercy_dc_chunks"),
             neo4j_uri=os.getenv("MERCY_NEO4J_URI"),
             neo4j_database=os.getenv("MERCY_NEO4J_DATABASE"),
@@ -883,6 +1065,30 @@ class QdrantVectorAdapter(VectorRetrievalAdapter):
             for point in points
         ]
 
+    def upsert_chunks(self, chunks: list[KnowledgeChunk]) -> int:
+        try:
+            from qdrant_client.models import PointStruct  # type: ignore
+        except Exception as exc:
+            raise RetrievalBackendError("qdrant-client models are unavailable.") from exc
+        points = [
+            PointStruct(
+                id=_qdrant_point_id(chunk.chunk_id),
+                vector=_stable_embedding(_chunk_text(chunk)),
+                payload=_qdrant_payload(chunk),
+            )
+            for chunk in chunks
+        ]
+        if not points:
+            return 0
+        try:
+            self.client.upsert(
+                collection_name=self.config.qdrant_collection or "dc_legal_knowledge",
+                points=points,
+            )
+        except Exception as exc:
+            raise RetrievalBackendError(f"Qdrant indexing failed: {exc}") from exc
+        return len(points)
+
     def status(self) -> dict[str, Any]:
         return {
             "backend": self.name,
@@ -895,34 +1101,184 @@ class QdrantVectorAdapter(VectorRetrievalAdapter):
         }
 
 
+class FallbackVectorAdapter(VectorRetrievalAdapter):
+    name = "qdrant_with_pgvector_fallback"
+
+    def __init__(self, primary: VectorRetrievalAdapter, fallback: VectorRetrievalAdapter) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self._last_backend: str | None = None
+        self._last_error: str | None = None
+
+    def search(self, query: str, matter_context: dict[str, Any], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
+        try:
+            hits = self.primary.search(query, matter_context, filters, limit)
+            self._last_backend = self.primary.name
+            self._last_error = None
+            return hits
+        except RetrievalBackendError as exc:
+            self._last_backend = self.fallback.name
+            self._last_error = str(exc).splitlines()[0][:300]
+            return self.fallback.search(query, matter_context, filters, limit)
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "backend": self.name,
+            "connected": True,
+            "mode": "primary_with_fallback",
+            "fallback": self._last_backend == self.fallback.name,
+            "primary": self.primary.status(),
+            "fallback_backend": self.fallback.status(),
+            "last_backend": self._last_backend,
+            "last_error": self._last_error,
+        }
+
+
 class PgVectorAdapter(VectorRetrievalAdapter):
     name = "pgvector"
 
     def __init__(self, config: RetrievalConfig) -> None:
         if not config.pgvector_dsn and not persistent_storage_configured():
-            raise RetrievalBackendError("POSTGRES_URL, SUPABASE_URL, or MERCY_PGVECTOR_DSN is required for pgvector retrieval.")
+            raise RetrievalBackendError("POSTGRES_URL, SUPABASE_DB_URL, MERCY_DATABASE_URL, or MERCY_PGVECTOR_DSN is required for pgvector retrieval.")
         self.config = config
 
     def search(self, query: str, matter_context: dict[str, Any], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
         tenant_id = str(filters.get("tenant_id") or "")
         if not tenant_id:
             raise RetrievalBackendError("tenant_id is required for pgvector retrieval.")
-        chunks = _apply_metadata_filters(_persistent_chunks(tenant_id), filters)
-        local_adapter = LocalVectorAdapter(chunks)
-        return [
-            RetrievalHit(hit.chunk, hit.score, self.name, hit.matched_terms)
-            for hit in local_adapter.search(query, matter_context, filters, limit)
-        ]
+        engine = get_engine()
+        if not engine.dialect.name.startswith("postgres"):
+            raise RetrievalBackendError("PostgreSQL/Supabase Postgres is required for pgvector SQL retrieval.")
+        query_embedding = _stable_embedding(f"{query} {_context_text(matter_context)}")
+        try:
+            with session_scope() as session:
+                hits = [
+                    *_search_legal_source_vectors(session, query_embedding, filters, limit),
+                    *_search_document_vectors(session, query_embedding, filters, limit),
+                ]
+        except Exception as exc:
+            raise RetrievalBackendError(f"pgvector SQL retrieval failed: {exc}") from exc
+        hits.sort(key=lambda item: item.score, reverse=True)
+        return hits[:limit]
 
     def status(self) -> dict[str, Any]:
         return {
             "backend": self.name,
             "connected": persistent_storage_configured(),
-            "mode": "postgres_pgvector_persistent_store",
+            "mode": "postgres_sql_pgvector_similarity",
             "fallback": False,
             "table": self.config.pgvector_table,
-            "note": "Uses tenant-scoped PostgreSQL storage with pgvector-ready embedding rows; Qdrant remains optional.",
+            "note": "Uses SQL pgvector similarity for public D.C. sources and tenant-scoped private document chunks; Qdrant remains optional.",
         }
+
+
+def _authority_values(filters: dict[str, Any]) -> list[str]:
+    authority_type = filters.get("authority_type")
+    values = authority_type if isinstance(authority_type, list) else [authority_type]
+    return [str(item) for item in values if item]
+
+
+def _search_legal_source_vectors(session: Any, query_embedding: list[float], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
+    distance = LegalSourceChunkRecord.embedding_vector.cosine_distance(query_embedding).label("distance")
+    query_obj = session.query(LegalSourceChunkRecord, distance).filter(LegalSourceChunkRecord.embedding_vector.is_not(None))
+    jurisdiction = str(filters.get("jurisdiction") or "District of Columbia")
+    query_obj = query_obj.filter(LegalSourceChunkRecord.jurisdiction == jurisdiction)
+    if filters.get("practice_area"):
+        query_obj = query_obj.filter(LegalSourceChunkRecord.practice_area == str(filters["practice_area"]))
+    authority_values = _authority_values(filters)
+    if authority_values:
+        query_obj = query_obj.filter(LegalSourceChunkRecord.authority_type.in_(authority_values))
+    if filters.get("date_from"):
+        query_obj = query_obj.filter(LegalSourceChunkRecord.source_date >= str(filters["date_from"]))
+    if filters.get("date_to"):
+        query_obj = query_obj.filter(LegalSourceChunkRecord.source_date <= str(filters["date_to"]))
+    rows = query_obj.order_by(distance).limit(limit).all()
+    hits: list[RetrievalHit] = []
+    for record, raw_distance in rows:
+        distance_value = float(raw_distance or 0.0)
+        score = max(0.0, min(1.0, 1.0 - distance_value))
+        hits.append(
+            RetrievalHit(
+                KnowledgeChunk(
+                    chunk_id=record.chunk_id,
+                    source_id=record.source_id,
+                    text=record.text,
+                    summary=record.summary,
+                    source_title=record.source_title,
+                    citation_label=record.citation_label,
+                    source_type=record.source_type,
+                    authority_type=record.authority_type,
+                    jurisdiction=record.jurisdiction,
+                    official_locator=record.official_locator,
+                    url=record.url,
+                    entities=[str(entity) for entity in record.entities or []],
+                    relationships=[relation for relation in record.relationships or [] if isinstance(relation, dict)],
+                    verification_status=record.verification_status,
+                    citation_required=bool(record.citation_required),
+                    last_checked=record.last_checked,
+                    practice_area=record.practice_area,
+                    source_date=record.source_date,
+                    tenant_id="public",
+                ),
+                score,
+                "pgvector",
+            )
+        )
+    return hits
+
+
+def _search_document_vectors(session: Any, query_embedding: list[float], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
+    tenant_id = str(filters.get("tenant_id") or "")
+    if not tenant_id:
+        return []
+    distance = DocumentChunkRecord.embedding_vector.cosine_distance(query_embedding).label("distance")
+    query_obj = (
+        session.query(DocumentChunkRecord, distance)
+        .filter(DocumentChunkRecord.embedding_vector.is_not(None))
+        .filter(DocumentChunkRecord.tenant_id == tenant_id)
+    )
+    if filters.get("matter_id"):
+        query_obj = query_obj.filter(DocumentChunkRecord.matter_id == str(filters["matter_id"]))
+    document_ids = [str(item) for item in filters.get("document_ids") or [] if item]
+    if filters.get("document_id"):
+        document_ids.append(str(filters["document_id"]))
+    if document_ids:
+        query_obj = query_obj.filter(DocumentChunkRecord.document_id.in_(sorted(set(document_ids))))
+    rows = query_obj.order_by(distance).limit(limit).all()
+    hits: list[RetrievalHit] = []
+    for record, raw_distance in rows:
+        distance_value = float(raw_distance or 0.0)
+        score = max(0.0, min(1.0, 1.0 - distance_value))
+        hits.append(
+            RetrievalHit(
+                KnowledgeChunk(
+                    chunk_id=record.chunk_id,
+                    source_id=f"document:{record.document_id}",
+                    text=record.text,
+                    summary=record.summary or record.text[:500],
+                    source_title=f"Vault document {record.document_id}",
+                    citation_label=f"Vault document {record.document_id}",
+                    source_type="tenant_document",
+                    authority_type="record",
+                    jurisdiction="Tenant private document",
+                    official_locator=f"tenant:{record.tenant_id}/document:{record.document_id}/chunk:{record.chunk_index}",
+                    entities=[],
+                    relationships=[
+                        {"type": "matter_document", "from": str(record.matter_id or ""), "to": record.document_id},
+                        {"type": "document_chunk", "from": record.document_id, "to": record.chunk_id},
+                    ],
+                    verification_status="tenant_document_unverified",
+                    citation_required=True,
+                    practice_area="tenant_document",
+                    tenant_id=record.tenant_id,
+                    matter_id=record.matter_id,
+                    document_id=record.document_id,
+                ),
+                score,
+                "pgvector",
+            )
+        )
+    return hits
 
 
 class Neo4jGraphAdapter(GraphRetrievalAdapter):
@@ -969,6 +1325,39 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
                 ]
         except Exception as exc:
             raise RetrievalBackendError(f"Neo4j retrieval failed: {exc}") from exc
+
+    def upsert_relationships(self, chunks: list[KnowledgeChunk], *, tenant_id: str | None = None) -> int:
+        rows = neo4j_relationship_rows_from_chunks(chunks, tenant_id=tenant_id)
+        if not rows:
+            return 0
+        cypher = """
+        UNWIND $rows AS row
+        MERGE (c:KnowledgeChunk {chunk_id: row.chunk_id})
+        SET c.source_id = row.source_id,
+            c.source_type = row.source_type,
+            c.authority_type = row.authority_type,
+            c.jurisdiction = row.jurisdiction,
+            c.citation_label = row.citation_label,
+            c.tenant_id = row.tenant_id,
+            c.scope = row.scope
+        MERGE (s:LegalSource {source_id: row.source_id})
+        SET s.source_type = row.source_type,
+            s.authority_type = row.authority_type,
+            s.jurisdiction = row.jurisdiction,
+            s.citation_label = row.citation_label,
+            s.scope = row.scope
+        MERGE (c)-[:BELONGS_TO_SOURCE]->(s)
+        FOREACH (entity IN row.entities |
+          MERGE (e:LegalEntity {name: entity})
+          MERGE (c)-[:MENTIONS]->(e)
+        )
+        """
+        try:
+            with self.driver.session(database=self.config.neo4j_database) as session:
+                session.run(cypher, {"rows": rows})
+        except Exception as exc:
+            raise RetrievalBackendError(f"Neo4j relationship indexing failed: {exc}") from exc
+        return len(rows)
 
     def status(self) -> dict[str, Any]:
         return {
@@ -1076,6 +1465,29 @@ class DCKnowledgeRAG:
             )
             payload["answer"] = llm_answer.content
             payload["llm"] = llm_answer.to_dict()
+            auth_context = context.get("auth_context") if isinstance(context.get("auth_context"), dict) else {}
+            retrieval_run_id = record_retrieval_run(
+                tenant_context=auth_context,
+                query=query,
+                source_scope=_result_source_scope(results),
+                filters=filters,
+                results=results,
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                document_id=str(context.get("document_id")) if context.get("document_id") else None,
+            )
+            reliability_snapshot_id = record_reliability_snapshot(
+                tenant_context=auth_context,
+                reliability=verification,
+                citations=payload["citations"],
+                matter_id=str(context.get("matter_id")) if context.get("matter_id") else None,
+                document_id=str(context.get("document_id")) if context.get("document_id") else None,
+                retrieval_run_id=retrieval_run_id,
+            )
+            if retrieval_run_id or reliability_snapshot_id:
+                payload["persistence"] = {
+                    "retrieval_run_id": retrieval_run_id,
+                    "reliability_snapshot_id": reliability_snapshot_id,
+                }
             span["rag"] = payload
             span["metadata"] = {
                 **_safe_rag_trace_metadata(context, filters),
@@ -1228,7 +1640,10 @@ class DCKnowledgeRAG:
 
     def _build_vector_adapter(self) -> VectorRetrievalAdapter:
         if self.config.vector_backend == "qdrant":
-            return QdrantVectorAdapter(self.config)
+            primary = QdrantVectorAdapter(self.config)
+            if self.config.pgvector_dsn and _is_postgres_database_url(self.config.pgvector_dsn):
+                return FallbackVectorAdapter(primary, PgVectorAdapter(self.config))
+            return primary
         if self.config.vector_backend == "pgvector":
             return PgVectorAdapter(self.config)
         return LocalVectorAdapter(self._chunks)
@@ -1258,7 +1673,11 @@ class DCKnowledgeRAG:
             self._graph_adapter = LocalGraphAdapter(self._chunks)
 
     def _filter_registered_hits(self, hits: list[RetrievalHit]) -> list[RetrievalHit]:
-        filtered = [hit for hit in hits if self._source_registry.is_allowed_for_retrieval(hit.chunk.source_id)]
+        filtered = [
+            hit
+            for hit in hits
+            if hit.chunk.source_type == "tenant_document" or self._source_registry.is_allowed_for_retrieval(hit.chunk.source_id)
+        ]
         if not _is_local_env() and hits and not filtered:
             raise RetrievalBackendError("registered_official_sources_required")
         return filtered
@@ -1585,6 +2004,9 @@ def _context_text(matter_context: dict[str, Any]) -> str:
 
 def _metadata_filters(matter_context: dict[str, Any]) -> dict[str, Any]:
     auth_context = matter_context.get("auth_context") if isinstance(matter_context.get("auth_context"), dict) else {}
+    attached_document_ids = matter_context.get("attached_document_ids")
+    if not isinstance(attached_document_ids, list):
+        attached_document_ids = []
     filters = {
         "jurisdiction": matter_context.get("jurisdiction") or "District of Columbia",
         "practice_area": matter_context.get("practice_area"),
@@ -1592,10 +2014,37 @@ def _metadata_filters(matter_context: dict[str, Any]) -> dict[str, Any]:
         "date_from": matter_context.get("date_from") or matter_context.get("source_date_from"),
         "date_to": matter_context.get("date_to") or matter_context.get("source_date_to"),
         "tenant_id": auth_context.get("tenant_id") or matter_context.get("tenant_id"),
+        "matter_id": matter_context.get("matter_id"),
+        "document_id": matter_context.get("document_id"),
+        "document_ids": [str(item) for item in attached_document_ids if item],
     }
     if str(filters["jurisdiction"]).lower() in {"dc", "d.c.", "district of columbia"}:
         filters["jurisdiction"] = "District of Columbia"
     return {key: value for key, value in filters.items() if value is not None}
+
+
+def _result_source_scope(results: list[dict[str, Any]]) -> str:
+    has_tenant_documents = False
+    has_public_sources = False
+    for item in results:
+        provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
+        citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
+        source_type = str(
+            provenance.get("source_type")
+            or citation.get("source_type")
+            or item.get("source_type")
+            or ""
+        )
+        source_id = str(item.get("source_id") or "")
+        if source_type == "tenant_document" or source_id.startswith("document:"):
+            has_tenant_documents = True
+        else:
+            has_public_sources = True
+    if has_tenant_documents and has_public_sources:
+        return "mixed"
+    if has_tenant_documents:
+        return "tenant_documents"
+    return "public_dc_sources"
 
 
 def _tenant_context_valid(matter_context: dict[str, Any]) -> bool:
@@ -1628,9 +2077,17 @@ def _apply_metadata_filters(chunks: list[KnowledgeChunk], filters: dict[str, Any
     tenant_id = str(filters.get("tenant_id") or "")
     date_from = str(filters.get("date_from") or "")
     date_to = str(filters.get("date_to") or "")
+    matter_id = str(filters.get("matter_id") or "")
+    document_ids = {str(item) for item in filters.get("document_ids") or [] if item}
+    if filters.get("document_id"):
+        document_ids.add(str(filters["document_id"]))
     filtered: list[KnowledgeChunk] = []
     for chunk in chunks:
-        if jurisdiction and chunk.jurisdiction.lower() not in {jurisdiction, "district of columbia"}:
+        if (
+            chunk.source_type != "tenant_document"
+            and jurisdiction
+            and chunk.jurisdiction.lower() not in {jurisdiction, "district of columbia"}
+        ):
             continue
         if practice_area and chunk.practice_area.lower() != practice_area:
             continue
@@ -1638,6 +2095,13 @@ def _apply_metadata_filters(chunks: list[KnowledgeChunk], filters: dict[str, Any
             continue
         if tenant_id and chunk.tenant_id not in {None, "", "public", tenant_id}:
             continue
+        if chunk.source_type == "tenant_document":
+            if tenant_id and chunk.tenant_id != tenant_id:
+                continue
+            if matter_id and chunk.matter_id != matter_id:
+                continue
+            if document_ids and chunk.document_id not in document_ids:
+                continue
         if date_from and chunk.source_date and chunk.source_date < date_from:
             continue
         if date_to and chunk.source_date and chunk.source_date > date_to:
@@ -1675,6 +2139,8 @@ def _chunk_from_payload(payload: dict[str, Any], fallback_id: str) -> KnowledgeC
         practice_area=str(payload.get("practice_area") or "professional_responsibility"),
         source_date=payload.get("source_date"),
         tenant_id=payload.get("tenant_id"),
+        matter_id=payload.get("matter_id"),
+        document_id=payload.get("document_id"),
     )
 
 
@@ -1710,32 +2176,119 @@ def _chunk_from_ingestion_payload(payload: dict[str, Any], source: SourceRecord)
     )
 
 
+def _qdrant_point_id(chunk_id: str) -> str:
+    return hashlib.sha256(chunk_id.encode("utf-8")).hexdigest()
+
+
+def _qdrant_payload(chunk: KnowledgeChunk) -> dict[str, Any]:
+    source_type = chunk.source_type
+    scope = "tenant_document" if source_type == "tenant_document" else "public_dc_source"
+    payload = {
+        "chunk_id": chunk.chunk_id,
+        "source_id": chunk.source_id,
+        "text": chunk.text,
+        "summary": chunk.summary,
+        "source_title": chunk.source_title,
+        "citation_label": chunk.citation_label,
+        "source_type": source_type,
+        "authority_type": chunk.authority_type,
+        "jurisdiction": chunk.jurisdiction,
+        "official_locator": chunk.official_locator,
+        "url": chunk.url,
+        "entities": chunk.entities,
+        "relationships": chunk.relationships,
+        "verification_status": chunk.verification_status,
+        "citation_required": chunk.citation_required,
+        "last_checked": chunk.last_checked,
+        "practice_area": chunk.practice_area,
+        "source_date": chunk.source_date,
+        "tenant_id": chunk.tenant_id if scope == "tenant_document" else "public",
+        "scope": scope,
+    }
+    if source_type == "tenant_document" and chunk.source_id.startswith("document:"):
+        payload["document_id"] = chunk.document_id or chunk.source_id.removeprefix("document:")
+        matter_id = chunk.matter_id
+        if not matter_id:
+            matter_ids = [
+                str(relation.get("from") or "")
+                for relation in chunk.relationships
+                if relation.get("type") == "matter_document" and relation.get("from")
+            ]
+            matter_id = matter_ids[0] if matter_ids else None
+        if matter_id:
+            payload["matter_id"] = matter_id
+    return payload
+
+
+def sync_qdrant_from_postgres(*, tenant_id: str, config: RetrievalConfig | None = None, limit: int = 1000) -> dict[str, Any]:
+    if not tenant_id:
+        return {"indexed": 0, "ok": False, "issues": ["tenant_id is required for Qdrant sync."]}
+    retrieval_config = config or RetrievalConfig.from_env()
+    adapter = QdrantVectorAdapter(retrieval_config)
+    chunks = _persistent_chunks(tenant_id)[: max(1, limit)]
+    indexed = adapter.upsert_chunks(chunks)
+    return {"indexed": indexed, "ok": True, "issues": [], "collection": retrieval_config.qdrant_collection}
+
+
+def neo4j_relationship_rows_from_chunks(chunks: list[KnowledgeChunk], *, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for chunk in chunks:
+        scope = "tenant_document" if chunk.source_type == "tenant_document" else "public_dc_source"
+        row = {
+            "chunk_id": chunk.chunk_id,
+            "source_id": chunk.source_id,
+            "source_type": chunk.source_type,
+            "authority_type": chunk.authority_type,
+            "jurisdiction": chunk.jurisdiction,
+            "citation_label": chunk.citation_label,
+            "tenant_id": chunk.tenant_id if scope == "tenant_document" else None,
+            "scope": scope,
+            "entities": chunk.entities,
+            "relationships": chunk.relationships,
+        }
+        if tenant_id and row["tenant_id"] not in {None, tenant_id}:
+            continue
+        rows.append(row)
+    return rows
+
+
 def _qdrant_filter(filters: dict[str, Any]) -> Any:
     try:
         from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, Range  # type: ignore
     except Exception:
         return None
-    must: list[Any] = []
+    public_must: list[Any] = [FieldCondition(key="scope", match=MatchValue(value="public_dc_source"))]
+    private_must: list[Any] = [FieldCondition(key="scope", match=MatchValue(value="tenant_document"))]
     if filters.get("jurisdiction"):
-        must.append(FieldCondition(key="jurisdiction", match=MatchValue(value=filters["jurisdiction"])))
+        public_must.append(FieldCondition(key="jurisdiction", match=MatchValue(value=filters["jurisdiction"])))
     if filters.get("practice_area"):
-        must.append(FieldCondition(key="practice_area", match=MatchValue(value=filters["practice_area"])))
+        public_must.append(FieldCondition(key="practice_area", match=MatchValue(value=filters["practice_area"])))
     if filters.get("authority_type"):
         authority_type = filters["authority_type"]
         if isinstance(authority_type, list):
-            must.append(FieldCondition(key="authority_type", match=MatchAny(any=authority_type)))
+            public_must.append(FieldCondition(key="authority_type", match=MatchAny(any=authority_type)))
         else:
-            must.append(FieldCondition(key="authority_type", match=MatchValue(value=authority_type)))
-    if filters.get("tenant_id"):
-        must.append(FieldCondition(key="tenant_id", match=MatchAny(any=["public", filters["tenant_id"]])))
+            public_must.append(FieldCondition(key="authority_type", match=MatchValue(value=authority_type)))
+    tenant_id = filters.get("tenant_id")
+    if tenant_id:
+        private_must.append(FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)))
+    else:
+        private_must.append(FieldCondition(key="tenant_id", match=MatchValue(value="__missing_tenant__")))
+    if filters.get("matter_id"):
+        private_must.append(FieldCondition(key="matter_id", match=MatchValue(value=filters["matter_id"])))
+    document_ids = [str(item) for item in filters.get("document_ids") or [] if item]
+    if filters.get("document_id"):
+        document_ids.append(str(filters["document_id"]))
+    if document_ids:
+        private_must.append(FieldCondition(key="document_id", match=MatchAny(any=sorted(set(document_ids)))))
     source_range: dict[str, Any] = {}
     if filters.get("date_from"):
         source_range["gte"] = filters["date_from"]
     if filters.get("date_to"):
         source_range["lte"] = filters["date_to"]
     if source_range:
-        must.append(FieldCondition(key="source_date", range=Range(**source_range)))
-    return Filter(must=must) if must else None
+        public_must.append(FieldCondition(key="source_date", range=Range(**source_range)))
+    return Filter(should=[Filter(must=public_must), Filter(must=private_must)])
 
 
 def _cosine(left: dict[str, float], right: dict[str, float]) -> float:
@@ -1753,6 +2306,8 @@ __all__ = [
     "RetrievalBackendError",
     "SourceValidationError",
     "ingest_dc_sources",
+    "neo4j_relationship_rows_from_chunks",
     "rag_backend_status",
     "retrieve_dc_knowledge",
+    "sync_qdrant_from_postgres",
 ]

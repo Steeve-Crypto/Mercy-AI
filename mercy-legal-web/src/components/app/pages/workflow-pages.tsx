@@ -15,6 +15,8 @@ import {
   type CoreRagEnvelope,
   type CoreTemplateGalleryItem,
 } from "@/lib/core-client";
+import { extractionLimitedMessage, safeObjectEntries, safeText } from "@/lib/display-safety";
+import { createWorkHistoryClient } from "@/lib/work-history-client";
 
 type MattersPageProps = { matters: CoreMatter[]; coreOnline: boolean };
 type TemplatesPageProps = { initialTemplates: CoreTemplateGalleryItem[] };
@@ -145,6 +147,34 @@ export function ResearchPage({ matters }: ResearchPageProps) {
       return;
     }
     setResult(response.data);
+    try {
+      await createWorkHistoryClient({
+        matterId: matterId || null,
+        sourceType: matterId ? "matter" : "research",
+        workflowType: "research",
+        title: `D.C. research - ${query.trim().slice(0, 90)}`,
+        inputSummary: query.trim(),
+        requestText: query.trim(),
+        outputSummary: `Retrieval returned ${response.data.results.length} source result${response.data.results.length === 1 ? "" : "s"} for attorney review.`,
+        outputText: response.data.results
+          .slice(0, 5)
+          .map((item) => `${item.citation?.label ?? item.source_id}: ${safeText(item.summary || item.text, "Summary unavailable.")}`)
+          .join("\n\n"),
+        reliabilitySnapshot: {
+          verification: response.data.verification,
+          guardrail_status: response.data.guardrail_status,
+          response_envelope: response.data.response_envelope,
+          route: response.data.route,
+          persistence: response.data.persistence,
+        },
+        citationsSnapshot: response.data.citations ?? [],
+        retrievalRunId: response.data.persistence?.retrieval_run_id ?? null,
+        reliabilitySnapshotId: response.data.persistence?.reliability_snapshot_id ?? null,
+        moeRoute: response.data.route ?? null,
+      });
+    } catch {
+      // History persistence is non-blocking for research results.
+    }
   }
 
   return (
@@ -167,8 +197,8 @@ export function ResearchPage({ matters }: ResearchPageProps) {
               <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
                 <p className="text-sm font-semibold text-slate-950">Retrieval summary</p>
                 <p className="mt-1 text-sm text-slate-600">
-                  {result.results.length} result(s), verification status {result.verification.status}, guardrails {result.guardrail_status}.
-                  Mercy was not invoked on this page; use Mercy Assistant for full reliability review.
+                  Retrieval completed with review warnings. {result.results.length} source result{result.results.length === 1 ? "" : "s"} returned.
+                  Mercy was not invoked on this page; use Mercy Assistant for full reliability review before relying on these results.
                 </p>
               </div>
             ) : (
@@ -199,7 +229,7 @@ export function ResearchPage({ matters }: ResearchPageProps) {
                     Research history
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Recent research will appear here when persistence is connected. For now, run a query and review returned source metadata before using the output.
+                    Recent research is saved to History after each completed run. Review returned source metadata before using the output.
                   </p>
                 </div>
               </div>
@@ -207,8 +237,8 @@ export function ResearchPage({ matters }: ResearchPageProps) {
             {result?.results.map((item) => (
               <div key={item.chunk_id} className="rounded-xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-slate-950">{item.citation?.label ?? item.source_id}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{item.summary || item.text}</p>
-                <p className="mt-2 text-xs text-slate-500">Score {Math.round(item.combined_score * 100)} / {item.verification_status}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{safeText(item.summary || item.text, "Summary unavailable. Review the source before use.")}</p>
+                <p className="mt-2 text-xs text-slate-500">Source relevance {Math.round(item.combined_score * 100)}%. Attorney review required before use.</p>
               </div>
             ))}
           </div>
@@ -338,6 +368,18 @@ export function VaultPage({ matters }: VaultPageProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CoreDiscoveryEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const vaultDocuments = useMemo(() => matters.flatMap((matter) =>
+    (matter.documents ?? []).map((document, index) => ({
+      id: safeText(document.document_id ?? document.id ?? document.filename ?? `${matter.matter_id}-${index}`, `${matter.matter_id}-${index}`),
+      filename: safeText(document.title ?? document.name ?? document.filename ?? document.document_id, `Document ${index + 1}`),
+      matterName: safeText(matter.name, "Unassigned matter"),
+      type: safeText(document.type ?? document.document_type ?? document.mime_type, "Legal document"),
+      uploaded: safeText(document.uploaded_at ?? document.created_at ?? document.date, "Pending"),
+      facts: typeof document.facts_extracted === "number" ? document.facts_extracted : 0,
+      citations: typeof document.citation_count === "number" ? document.citation_count : 0,
+      status: safeText(document.status ?? document.extraction_status, "Ready"),
+    })),
+  ), [matters]);
 
   async function upload() {
     if (!file) return;
@@ -352,7 +394,7 @@ export function VaultPage({ matters }: VaultPageProps) {
     setResult(response.data);
   }
 
-  const facts = useMemo(() => result?.facts ? JSON.stringify(result.facts, null, 2) : "Upload a PDF to run discovery/document analysis.", [result]);
+  const factEntries = useMemo(() => safeObjectEntries(result?.facts), [result]);
 
   return (
     <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
@@ -375,7 +417,32 @@ export function VaultPage({ matters }: VaultPageProps) {
           </div>
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           {result ? (
-            <pre className="mt-5 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-700">{facts}</pre>
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+                <span>Document stored. Review extraction details before relying on any document-derived facts.</span>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <VaultCue icon={FileText} label="Status" text={factEntries.length ? "Ready for review" : "Extraction limited"} />
+                <VaultCue icon={Bot} label="Facts" text={`${factEntries.length} clean field${factEntries.length === 1 ? "" : "s"}`} />
+                <VaultCue icon={ShieldCheck} label="Review" text="Attorney review required" />
+              </div>
+              <div className="mt-4 rounded-lg bg-white p-4">
+                <h2 className="text-sm font-semibold text-slate-950">Extraction summary</h2>
+                {factEntries.length ? (
+                  <dl className="mt-3 grid gap-3 md:grid-cols-2">
+                    {factEntries.map((entry) => (
+                      <div key={entry.label} className="rounded-lg border border-slate-200 p-3">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.label}</dt>
+                        <dd className="mt-1 text-sm leading-6 text-slate-700">{entry.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{extractionLimitedMessage()}</p>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
@@ -388,6 +455,50 @@ export function VaultPage({ matters }: VaultPageProps) {
             </div>
           )}
         </section>
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Repository</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">Uploaded files attached to matters, shown without raw extraction payloads.</p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              {vaultDocuments.length} file{vaultDocuments.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3">
+            {vaultDocuments.length ? vaultDocuments.map((document) => (
+              <article key={document.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-slate-950">{document.filename}</h3>
+                    <p className="mt-1 text-xs text-slate-500">{document.type} · {document.matterName}</p>
+                  </div>
+                  <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    {document.status.toLowerCase().includes("fail") ? "Extraction limited" : document.status}
+                  </span>
+                </div>
+                <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                  <VaultMetric label="Uploaded" value={document.uploaded} />
+                  <VaultMetric label="Facts" value={document.facts} />
+                  <VaultMetric label="Citations" value={document.citations} />
+                </dl>
+              </article>
+            )) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
+                No Vault documents yet. Upload a PDF and attach it to a matter to use it in Mercy or research workflows.
+              </div>
+            )}
+          </div>
+        </section>
+    </div>
+  );
+}
+
+function VaultMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg bg-white p-3">
+      <dt className="font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 truncate font-semibold text-slate-900">{value}</dd>
     </div>
   );
 }

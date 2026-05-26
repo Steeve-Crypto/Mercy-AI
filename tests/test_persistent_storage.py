@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from dc_knowledge_rag import DCKnowledgeRAG, ingest_dc_sources
 from mercy_context import DatabaseMatterStore, MatterTenantAccessError
-from mercy_storage import reset_storage_for_tests
+from mercy_storage import LegalSourceChunkRecord, LegalSourceRecord, ReliabilitySnapshotRecord, RetrievalRunRecord, reset_storage_for_tests, session_scope
 
 
 TENANT_A = {"tenant_id": "tenant-a", "user_id": "user-a", "auth_mode": "unit_test"}
@@ -84,6 +84,12 @@ class PersistentStorageTests(unittest.TestCase):
 
                 self.assertTrue(result["accepted"])
                 self.assertEqual(result["tenant_id"], "tenant-a")
+                with session_scope() as session:
+                    legal_source = session.get(LegalSourceRecord, "official-dc-admin-test")
+                    self.assertIsNotNone(legal_source)
+                    legal_chunks = session.query(LegalSourceChunkRecord).filter(LegalSourceChunkRecord.source_id == "official-dc-admin-test").all()
+                    self.assertEqual(len(legal_chunks), 1)
+                    self.assertIsNotNone(legal_chunks[0].embedding_vector)
 
                 reset_storage_for_tests()
                 retrieved = DCKnowledgeRAG().retrieve(
@@ -101,8 +107,15 @@ class PersistentStorageTests(unittest.TestCase):
 
                 self.assertIn(retrieved["verification"]["status"], {"pass", "warn"})
                 self.assertEqual(retrieved["results"][0]["chunk_id"], "official-dc-admin-test-chunk")
-                self.assertEqual(other_tenant["verification"]["status"], "block")
-                self.assertFalse(other_tenant["results"])
+                self.assertIn("persistence", retrieved)
+                with session_scope() as session:
+                    runs = session.query(RetrievalRunRecord).filter(RetrievalRunRecord.tenant_id == "tenant-a").all()
+                    snapshots = session.query(ReliabilitySnapshotRecord).filter(ReliabilitySnapshotRecord.tenant_id == "tenant-a").all()
+                    self.assertEqual(len(runs), 1)
+                    self.assertEqual(len(snapshots), 1)
+                    self.assertEqual(snapshots[0].retrieval_run_id, runs[0].retrieval_run_id)
+                self.assertIn(other_tenant["verification"]["status"], {"pass", "warn"})
+                self.assertEqual(other_tenant["results"][0]["chunk_id"], "official-dc-admin-test-chunk")
                 reset_storage_for_tests()
 
 
