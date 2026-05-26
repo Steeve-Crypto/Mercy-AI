@@ -4,6 +4,7 @@ import math
 import os
 import re
 import hashlib
+import uuid
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, date
@@ -16,6 +17,7 @@ from mercy_storage import (
     DCRagChunkRecord,
     DCRagSourceRecord,
     DocumentChunkRecord,
+    DocumentRecord,
     LegalSourceChunkRecord,
     LegalSourceRecord,
     configured_database_url,
@@ -31,6 +33,7 @@ from observability import record_rag_trace, trace_event, trace_span
 from security_controls import record_security_audit, sanitize_payload, sanitize_text
 from evals.regression_status import latest_regression_health
 from finetune.status import fine_tuning_readiness_status
+from mercy_config import get_config
 
 
 RAG_VERSION = "dc-knowledge-rag-1.0"
@@ -192,8 +195,12 @@ class KnowledgeChunk:
     practice_area: str = "professional_responsibility"
     source_date: str | None = None
     tenant_id: str | None = None
+    firm_id: str | None = None
     matter_id: str | None = None
     document_id: str | None = None
+    filename: str | None = None
+    document_status: str | None = None
+    extraction_status: str | None = None
 
     def to_result(
         self,
@@ -214,7 +221,7 @@ class KnowledgeChunk:
             last_checked=self.last_checked,
             retrieval_method=retrieval_method,
         )
-        return {
+        result = {
             "chunk_id": self.chunk_id,
             "source_id": self.source_id,
             "text": self.text,
@@ -242,6 +249,15 @@ class KnowledgeChunk:
             "matter_id": self.matter_id,
             "document_id": self.document_id,
         }
+        if self.firm_id:
+            result["firm_id"] = self.firm_id
+        if self.filename:
+            result["filename"] = self.filename
+        if self.document_status:
+            result["document_status"] = self.document_status
+        if self.extraction_status:
+            result["extraction_status"] = self.extraction_status
+        return result
 
 
 @dataclass
@@ -436,6 +452,11 @@ def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
                 if record.chunk_id not in seen
             )
             document_records = session.query(DocumentChunkRecord).filter(DocumentChunkRecord.tenant_id == tenant_id).all()
+            document_ids = {record.document_id for record in document_records}
+            documents = {
+                record.document_id: record
+                for record in session.query(DocumentRecord).filter(DocumentRecord.document_id.in_(document_ids)).all()
+            } if document_ids else {}
             chunks.extend(
                 KnowledgeChunk(
                     chunk_id=record.chunk_id,
@@ -459,8 +480,12 @@ def _persistent_chunks(tenant_id: str | None) -> list[KnowledgeChunk]:
                     practice_area="tenant_document",
                     source_date=None,
                     tenant_id=record.tenant_id,
+                    firm_id=record.firm_id,
                     matter_id=record.matter_id,
                     document_id=record.document_id,
+                    filename=documents[record.document_id].filename if record.document_id in documents else None,
+                    document_status=documents[record.document_id].status if record.document_id in documents else None,
+                    extraction_status=documents[record.document_id].extraction_status if record.document_id in documents else None,
                 )
                 for record in document_records
                 if record.chunk_id not in seen
@@ -663,7 +688,9 @@ class RetrievalConfig:
     vector_backend: str = "local"
     graph_backend: str = "local"
     qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
     qdrant_collection: str | None = None
+    qdrant_collection_prefix: str | None = None
     pgvector_dsn: str | None = None
     pgvector_table: str | None = None
     neo4j_uri: str | None = None
@@ -673,13 +700,14 @@ class RetrievalConfig:
 
     @classmethod
     def from_env(cls) -> "RetrievalConfig":
-        vector_backend = os.getenv("MERCY_RAG_VECTOR_BACKEND", "").lower()
-        graph_backend = os.getenv("MERCY_RAG_GRAPH_BACKEND", "").lower()
+        mercy_config = get_config()
+        vector_backend = mercy_config.rag_vector_backend.lower()
+        graph_backend = mercy_config.rag_graph_backend.lower()
         database_url = configured_database_url()
         if not vector_backend or vector_backend == "auto":
             vector_backend = (
                 "qdrant"
-                if os.getenv("MERCY_QDRANT_URL")
+                if mercy_config.qdrant_url
                 else "pgvector"
                 if _is_postgres_database_url(database_url)
                 else "local"
@@ -690,13 +718,16 @@ class RetrievalConfig:
             vector_backend = "local"
         if graph_backend not in SUPPORTED_GRAPH_BACKENDS:
             graph_backend = "local"
+        qdrant_api_key = mercy_config.qdrant_api_key.get_secret_value() if mercy_config.qdrant_api_key else None
         return cls(
             vector_backend=vector_backend,
             graph_backend=graph_backend,
-            qdrant_url=os.getenv("MERCY_QDRANT_URL"),
-            qdrant_collection=os.getenv("MERCY_QDRANT_COLLECTION", "dc_legal_knowledge"),
+            qdrant_url=mercy_config.qdrant_url,
+            qdrant_api_key=qdrant_api_key,
+            qdrant_collection=mercy_config.qdrant_collection,
+            qdrant_collection_prefix=mercy_config.qdrant_collection_prefix,
             pgvector_dsn=database_url,
-            pgvector_table=os.getenv("MERCY_PGVECTOR_TABLE", "mercy_dc_chunks"),
+            pgvector_table=mercy_config.pgvector_table,
             neo4j_uri=os.getenv("MERCY_NEO4J_URI"),
             neo4j_database=os.getenv("MERCY_NEO4J_DATABASE"),
             neo4j_user=os.getenv("MERCY_NEO4J_USER"),
@@ -1045,7 +1076,7 @@ class QdrantVectorAdapter(VectorRetrievalAdapter):
         self.config = config
         self.client = QdrantClient(
             url=config.qdrant_url,
-            api_key=os.getenv("MERCY_QDRANT_API_KEY") or None,
+            api_key=config.qdrant_api_key or os.getenv("MERCY_QDRANT_API_KEY") or None,
             check_compatibility=False,
         )
 
@@ -1084,9 +1115,10 @@ class QdrantVectorAdapter(VectorRetrievalAdapter):
             self.client.upsert(
                 collection_name=self.config.qdrant_collection or "dc_legal_knowledge",
                 points=points,
+                wait=True,
             )
         except Exception as exc:
-            raise RetrievalBackendError(f"Qdrant indexing failed: {exc}") from exc
+            raise RetrievalBackendError(f"Qdrant indexing failed: {_safe_qdrant_error_summary(exc)}") from exc
         return len(points)
 
     def status(self) -> dict[str, Any]:
@@ -1271,6 +1303,7 @@ def _search_document_vectors(session: Any, query_embedding: list[float], filters
                     citation_required=True,
                     practice_area="tenant_document",
                     tenant_id=record.tenant_id,
+                    firm_id=record.firm_id,
                     matter_id=record.matter_id,
                     document_id=record.document_id,
                 ),
@@ -2139,8 +2172,12 @@ def _chunk_from_payload(payload: dict[str, Any], fallback_id: str) -> KnowledgeC
         practice_area=str(payload.get("practice_area") or "professional_responsibility"),
         source_date=payload.get("source_date"),
         tenant_id=payload.get("tenant_id"),
+        firm_id=payload.get("firm_id"),
         matter_id=payload.get("matter_id"),
         document_id=payload.get("document_id"),
+        filename=payload.get("filename"),
+        document_status=payload.get("document_status"),
+        extraction_status=payload.get("extraction_status"),
     )
 
 
@@ -2177,12 +2214,27 @@ def _chunk_from_ingestion_payload(payload: dict[str, Any], source: SourceRecord)
 
 
 def _qdrant_point_id(chunk_id: str) -> str:
-    return hashlib.sha256(chunk_id.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(chunk_id.encode("utf-8")).hexdigest()[:32]
+    return str(uuid.UUID(hex=digest))
+
+
+def _safe_qdrant_error_summary(exc: Exception) -> str:
+    message = str(exc).splitlines()[0].strip()
+    content = getattr(exc, "content", None)
+    if isinstance(content, bytes):
+        body = content.decode("utf-8", errors="replace").strip()
+        if body:
+            message = f"{message}; body={body}"
+    message = re.sub(r"https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[redacted-ip]", message)
+    if len(message) > 800:
+        message = f"{message[:797]}..."
+    return f"{type(exc).__name__}: {message}"
 
 
 def _qdrant_payload(chunk: KnowledgeChunk) -> dict[str, Any]:
     source_type = chunk.source_type
-    scope = "tenant_document" if source_type == "tenant_document" else "public_dc_source"
+    source_kind = "tenant_document" if source_type == "tenant_document" else "public_dc_source"
     payload = {
         "chunk_id": chunk.chunk_id,
         "source_id": chunk.source_id,
@@ -2202,11 +2254,20 @@ def _qdrant_payload(chunk: KnowledgeChunk) -> dict[str, Any]:
         "last_checked": chunk.last_checked,
         "practice_area": chunk.practice_area,
         "source_date": chunk.source_date,
-        "tenant_id": chunk.tenant_id if scope == "tenant_document" else "public",
-        "scope": scope,
+        "tenant_id": chunk.tenant_id if source_kind == "tenant_document" else "public",
+        "source_kind": source_kind,
+        "scope": source_kind,
     }
     if source_type == "tenant_document" and chunk.source_id.startswith("document:"):
         payload["document_id"] = chunk.document_id or chunk.source_id.removeprefix("document:")
+        if chunk.firm_id:
+            payload["firm_id"] = chunk.firm_id
+        if chunk.filename:
+            payload["filename"] = chunk.filename
+        if chunk.document_status:
+            payload["document_status"] = chunk.document_status
+        if chunk.extraction_status:
+            payload["extraction_status"] = chunk.extraction_status
         matter_id = chunk.matter_id
         if not matter_id:
             matter_ids = [
@@ -2257,8 +2318,22 @@ def _qdrant_filter(filters: dict[str, Any]) -> Any:
         from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, Range  # type: ignore
     except Exception:
         return None
-    public_must: list[Any] = [FieldCondition(key="scope", match=MatchValue(value="public_dc_source"))]
-    private_must: list[Any] = [FieldCondition(key="scope", match=MatchValue(value="tenant_document"))]
+    public_must: list[Any] = [
+        Filter(
+            should=[
+                FieldCondition(key="source_kind", match=MatchValue(value="public_dc_source")),
+                FieldCondition(key="scope", match=MatchValue(value="public_dc_source")),
+            ]
+        )
+    ]
+    private_must: list[Any] = [
+        Filter(
+            should=[
+                FieldCondition(key="source_kind", match=MatchValue(value="tenant_document")),
+                FieldCondition(key="scope", match=MatchValue(value="tenant_document")),
+            ]
+        )
+    ]
     if filters.get("jurisdiction"):
         public_must.append(FieldCondition(key="jurisdiction", match=MatchValue(value=filters["jurisdiction"])))
     if filters.get("practice_area"):

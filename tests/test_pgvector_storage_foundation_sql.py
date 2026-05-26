@@ -9,6 +9,7 @@ MIGRATION = ROOT / "mercy-legal-web" / "supabase" / "migrations" / "202605260001
 PROVISIONING = ROOT / "mercy-legal-web" / "src" / "lib" / "signup" / "provisioning.ts"
 CHECK_SCRIPT = ROOT / "scripts" / "check_pgvector_storage_foundation.py"
 RETRIEVAL_CHECK_SCRIPT = ROOT / "scripts" / "check_pgvector_retrieval.py"
+QDRANT_CHECK_SCRIPT = ROOT / "scripts" / "check_qdrant_retrieval.py"
 VAULT_CHECK_SCRIPT = ROOT / "scripts" / "check_vault_document_storage.py"
 DC_SOURCE_CHECK_SCRIPT = ROOT / "scripts" / "check_dc_source_ingestion_storage.py"
 WORK_HISTORY_MIGRATION = ROOT / "mercy-legal-web" / "supabase" / "migrations" / "202605250001_work_history.sql"
@@ -83,6 +84,23 @@ class PgVectorStorageFoundationSqlTests(unittest.TestCase):
         self.assertIn("reliability_snapshot_linked", source)
         self.assertIn("Raw query text was stored in retrieval metadata.", source)
         self.assertNotIn("commit()", source)
+        self.assertNotIn("drop table", source.lower())
+
+    def test_qdrant_checker_uses_test_collection_and_pgvector_fallback(self) -> None:
+        source = QDRANT_CHECK_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("qdrant_retrieval_readiness", source)
+        self.assertIn("get_config", source)
+        self.assertIn("_qdrant_credentials", source)
+        self.assertIn("MERCY_QDRANT_URL", source)
+        self.assertIn("source_kind", source)
+        self.assertIn("tenant_document", source)
+        self.assertIn("public_dc_source", source)
+        self.assertIn("FallbackVectorAdapter", source)
+        self.assertIn("PgVectorAdapter", source)
+        self.assertIn("delete_collection", source)
+        self.assertIn("wrong_tenant_private_hit_count", source)
+        self.assertIn("query_text_stored", source)
         self.assertNotIn("drop table", source.lower())
 
     def test_vault_and_dc_source_checkers_are_rollback_only(self) -> None:

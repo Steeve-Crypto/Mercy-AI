@@ -5,6 +5,7 @@ from io import BytesIO
 import os
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -21,7 +22,9 @@ from dc_knowledge_rag import (
     RetrievalConfig,
     RetrievalHit,
     neo4j_relationship_rows_from_chunks,
+    _qdrant_filter,
     _qdrant_payload,
+    _qdrant_point_id,
     _result_source_scope,
     _search_document_vectors,
     _search_legal_source_vectors,
@@ -454,17 +457,54 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
             official_locator="tenant:tenant-a/document:doc-a/chunk:0",
             relationships=[{"type": "matter_document", "from": "matter-a", "to": "doc-a"}],
             tenant_id="tenant-a",
+            firm_id="firm-a",
+            filename="safe-filename.pdf",
+            document_status="ready",
+            extraction_status="ready",
         )
 
         public_payload = _qdrant_payload(public_chunk)
         private_payload = _qdrant_payload(private_chunk)
 
         self.assertEqual(public_payload["scope"], "public_dc_source")
+        self.assertEqual(public_payload["source_kind"], "public_dc_source")
         self.assertEqual(public_payload["tenant_id"], "public")
         self.assertEqual(private_payload["scope"], "tenant_document")
+        self.assertEqual(private_payload["source_kind"], "tenant_document")
         self.assertEqual(private_payload["tenant_id"], "tenant-a")
+        self.assertEqual(private_payload["firm_id"], "firm-a")
         self.assertEqual(private_payload["matter_id"], "matter-a")
         self.assertEqual(private_payload["document_id"], "doc-a")
+        self.assertEqual(private_payload["filename"], "safe-filename.pdf")
+        self.assertEqual(private_payload["document_status"], "ready")
+        self.assertEqual(private_payload["extraction_status"], "ready")
+
+    def test_qdrant_point_ids_are_valid_deterministic_uuid_strings(self) -> None:
+        point_id = _qdrant_point_id("doc-a_chunk_0000")
+
+        self.assertEqual(str(uuid.UUID(point_id)), point_id)
+        self.assertEqual(_qdrant_point_id("doc-a_chunk_0000"), point_id)
+
+    def test_qdrant_filter_requires_source_kind_and_tenant_private_scope(self) -> None:
+        qdrant_filter = _qdrant_filter(
+            {
+                "tenant_id": "tenant-a",
+                "matter_id": "matter-a",
+                "document_ids": ["doc-a", "doc-b"],
+                "jurisdiction": "District of Columbia",
+                "authority_type": ["statute", "rule"],
+            }
+        )
+
+        self.assertIsNotNone(qdrant_filter)
+        dumped = str(qdrant_filter)
+        self.assertIn("source_kind", dumped)
+        self.assertIn("scope", dumped)
+        self.assertIn("public_dc_source", dumped)
+        self.assertIn("tenant_document", dumped)
+        self.assertIn("tenant-a", dumped)
+        self.assertIn("matter-a", dumped)
+        self.assertIn("doc-a", dumped)
 
     def test_qdrant_primary_falls_back_to_pgvector_adapter(self) -> None:
         fallback_hit = RetrievalHit(

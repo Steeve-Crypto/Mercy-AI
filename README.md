@@ -115,6 +115,25 @@ SUPABASE_DB_URL=
 `https://your-project.supabase.co`; it is not a PostgreSQL/pgvector connection
 string.
 
+Optional Qdrant primary retrieval:
+
+```text
+MERCY_RAG_VECTOR_BACKEND=qdrant
+MERCY_QDRANT_URL=
+MERCY_QDRANT_API_KEY=
+MERCY_QDRANT_COLLECTION=dc_legal_knowledge
+MERCY_QDRANT_COLLECTION_PREFIX=mercy_check
+```
+
+PostgreSQL/Supabase Postgres remains Mercy's durable source of truth. Qdrant is
+used as the primary vector retrieval engine only when configured and healthy;
+SQL pgvector remains the fallback verification path. To verify live Qdrant with
+synthetic test data and cleanup:
+
+```powershell
+.\legal_discovery_ai\.venv\Scripts\python.exe scripts\check_qdrant_retrieval.py --json
+```
+
 ## Local Quick Start
 
 Install Python dependencies:

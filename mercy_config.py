@@ -123,6 +123,7 @@ class MercyConfig(BaseSettings):
     qdrant_url: str | None = Field(default=None, validation_alias=AliasChoices("MERCY_QDRANT_URL", "QDRANT_URL"))
     qdrant_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_QDRANT_API_KEY", "QDRANT_API_KEY"))
     qdrant_collection: str = Field(default="dc_legal_knowledge", validation_alias=AliasChoices("MERCY_QDRANT_COLLECTION"))
+    qdrant_collection_prefix: str = Field(default="mercy_check", validation_alias=AliasChoices("MERCY_QDRANT_COLLECTION_PREFIX"))
     neo4j_uri: str | None = Field(default=None, validation_alias=AliasChoices("MERCY_NEO4J_URI", "NEO4J_URI"))
     neo4j_user: str | None = Field(default=None, validation_alias=AliasChoices("MERCY_NEO4J_USER", "NEO4J_USER"))
     neo4j_password: SecretStr | None = Field(default=None, validation_alias=AliasChoices("MERCY_NEO4J_PASSWORD", "NEO4J_PASSWORD"))
