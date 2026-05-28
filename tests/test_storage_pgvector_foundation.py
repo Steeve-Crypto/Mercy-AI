@@ -15,8 +15,11 @@ from starlette.datastructures import Headers, UploadFile
 
 from dc_knowledge_rag import (
     DCKnowledgeRAG,
+    FallbackGraphAdapter,
     KnowledgeChunk,
     FallbackVectorAdapter,
+    GraphRetrievalAdapter,
+    LocalGraphAdapter,
     PgVectorAdapter,
     RetrievalBackendError,
     RetrievalConfig,
@@ -583,6 +586,78 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tenant_id"], "tenant-a")
+
+    def test_neo4j_relationship_rows_include_tenant_document_scope(self) -> None:
+        chunks = [
+            KnowledgeChunk(
+                chunk_id="doc-a",
+                source_id="document:doc-a",
+                text="Tenant A",
+                summary="Tenant A",
+                source_title="Doc A",
+                citation_label="Doc A",
+                source_type="tenant_document",
+                authority_type="record",
+                jurisdiction="Tenant private document",
+                official_locator="tenant:tenant-a/document:doc-a/chunk:0",
+                tenant_id="tenant-a",
+                firm_id="firm-a",
+                matter_id="matter-a",
+                document_id="doc-a",
+                filename="doc-a.pdf",
+                document_status="ready",
+                extraction_status="ready",
+            )
+        ]
+
+        rows = neo4j_relationship_rows_from_chunks(chunks, tenant_id="tenant-a")
+
+        self.assertEqual(rows[0]["scope"], "tenant_document")
+        self.assertEqual(rows[0]["firm_id"], "firm-a")
+        self.assertEqual(rows[0]["matter_id"], "matter-a")
+        self.assertEqual(rows[0]["document_id"], "doc-a")
+        self.assertEqual(rows[0]["filename"], "doc-a.pdf")
+        self.assertEqual(rows[0]["document_status"], "ready")
+        self.assertEqual(rows[0]["extraction_status"], "ready")
+
+    def test_graph_adapter_falls_back_when_external_graph_fails(self) -> None:
+        chunk = KnowledgeChunk(
+            chunk_id="doc-a",
+            source_id="document:doc-a",
+            text="Tenant A lease damages",
+            summary="Tenant A",
+            source_title="Doc A",
+            citation_label="Doc A",
+            source_type="tenant_document",
+            authority_type="record",
+            jurisdiction="Tenant private document",
+            official_locator="tenant:tenant-a/document:doc-a/chunk:0",
+            tenant_id="tenant-a",
+            matter_id="matter-a",
+            document_id="doc-a",
+            entities=["lease_damages"],
+        )
+
+        class BrokenGraph(GraphRetrievalAdapter):
+            name = "neo4j"
+
+            def search(self, *_args: object) -> list[RetrievalHit]:
+                raise RetrievalBackendError("neo4j unavailable")
+
+            def status(self) -> dict[str, object]:
+                return {"backend": "neo4j", "connected": False}
+
+        adapter = FallbackGraphAdapter(BrokenGraph(), LocalGraphAdapter([chunk]))
+        hits = adapter.search(
+            "lease damages",
+            {"auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"}},
+            {"tenant_id": "tenant-a", "matter_id": "matter-a", "document_id": "doc-a"},
+            5,
+        )
+
+        self.assertEqual([hit.chunk.chunk_id for hit in hits], ["doc-a"])
+        self.assertTrue(adapter.status()["fallback"])
+        self.assertEqual(adapter.status()["last_backend"], "local")
 
     def test_workbench_document_scope_is_verified_against_stored_matter_documents(self) -> None:
         env = DB_ENV_KEYS | {"MERCY_ENV": "local", "MERCY_AUTH_MODE": "dev"}

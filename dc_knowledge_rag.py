@@ -1063,6 +1063,41 @@ class LocalGraphAdapter(GraphRetrievalAdapter):
         return {"backend": self.name, "connected": True, "mode": "local_demo", "fallback": False}
 
 
+class FallbackGraphAdapter(GraphRetrievalAdapter):
+    name = "fallback_graph"
+
+    def __init__(self, primary: GraphRetrievalAdapter, fallback: GraphRetrievalAdapter) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self._primary_name = getattr(primary, "name", "primary_graph")
+        self._fallback_name = getattr(fallback, "name", "fallback_graph")
+        self._last_backend = self._primary_name
+        self._fallback_used = False
+
+    def search(self, query: str, matter_context: dict[str, Any], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
+        try:
+            hits = self.primary.search(query, matter_context, filters, limit)
+            self._last_backend = self._primary_name
+            self._fallback_used = False
+            return hits
+        except RetrievalBackendError:
+            hits = self.fallback.search(query, matter_context, filters, limit)
+            self._last_backend = self._fallback_name
+            self._fallback_used = True
+            return hits
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "backend": self._primary_name,
+            "connected": not self._fallback_used,
+            "mode": "external_graph_with_fallback",
+            "fallback": self._fallback_used,
+            "last_backend": self._last_backend,
+            "primary": self.primary.status(),
+            "fallback_status": self.fallback.status(),
+        }
+
+
 class QdrantVectorAdapter(VectorRetrievalAdapter):
     name = "qdrant"
 
@@ -1336,17 +1371,26 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
             "WHERE c.jurisdiction = $jurisdiction "
             "AND ($practice_area IS NULL OR c.practice_area = $practice_area) "
             "AND ($authority_type IS NULL OR c.authority_type = $authority_type) "
-            "AND ($tenant_id IS NULL OR c.tenant_id IS NULL OR c.tenant_id = 'public' OR c.tenant_id = $tenant_id) "
+            "AND (c.tenant_id IS NULL OR c.tenant_id = 'public' OR ("
+            "$tenant_id IS NOT NULL AND c.tenant_id = $tenant_id "
+            "AND ($matter_id IS NULL OR c.matter_id = $matter_id) "
+            "AND ($document_ids IS NULL OR c.document_id IN $document_ids)"
+            ")) "
             "WITH c, "
             "CASE WHEN toLower(coalesce(c.text,'') + ' ' + coalesce(c.summary,'')) CONTAINS $query_text THEN 1.0 ELSE 0.35 END AS score "
             "RETURN c AS chunk, score ORDER BY score DESC LIMIT $limit"
         )
+        document_ids = [str(item) for item in filters.get("document_ids") or [] if item]
+        if filters.get("document_id"):
+            document_ids.append(str(filters["document_id"]))
         params = {
             "query_text": query.lower()[:200],
             "jurisdiction": filters.get("jurisdiction") or "District of Columbia",
             "practice_area": filters.get("practice_area"),
             "authority_type": filters.get("authority_type"),
             "tenant_id": filters.get("tenant_id"),
+            "matter_id": filters.get("matter_id"),
+            "document_ids": sorted(set(document_ids)) or None,
             "limit": limit,
         }
         try:
@@ -1367,11 +1411,24 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
         UNWIND $rows AS row
         MERGE (c:KnowledgeChunk {chunk_id: row.chunk_id})
         SET c.source_id = row.source_id,
+            c.text = row.text,
+            c.summary = row.summary,
+            c.source_title = row.source_title,
             c.source_type = row.source_type,
             c.authority_type = row.authority_type,
             c.jurisdiction = row.jurisdiction,
             c.citation_label = row.citation_label,
+            c.official_locator = row.official_locator,
+            c.url = row.url,
+            c.verification_status = row.verification_status,
+            c.practice_area = row.practice_area,
             c.tenant_id = row.tenant_id,
+            c.firm_id = row.firm_id,
+            c.matter_id = row.matter_id,
+            c.document_id = row.document_id,
+            c.filename = row.filename,
+            c.document_status = row.document_status,
+            c.extraction_status = row.extraction_status,
             c.scope = row.scope
         MERGE (s:LegalSource {source_id: row.source_id})
         SET s.source_type = row.source_type,
@@ -1380,6 +1437,24 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
             s.citation_label = row.citation_label,
             s.scope = row.scope
         MERGE (c)-[:BELONGS_TO_SOURCE]->(s)
+        FOREACH (_ IN CASE WHEN row.scope = 'tenant_document' AND row.tenant_id IS NOT NULL AND row.matter_id IS NOT NULL THEN [1] ELSE [] END |
+          MERGE (m:Matter {matter_id: row.matter_id, tenant_id: row.tenant_id})
+          SET m.firm_id = row.firm_id
+          MERGE (m)-[:HAS_CHUNK]->(c)
+        )
+        FOREACH (_ IN CASE WHEN row.scope = 'tenant_document' AND row.tenant_id IS NOT NULL AND row.document_id IS NOT NULL THEN [1] ELSE [] END |
+          MERGE (d:Document {document_id: row.document_id, tenant_id: row.tenant_id})
+          SET d.firm_id = row.firm_id,
+              d.matter_id = row.matter_id,
+              d.filename = row.filename,
+              d.document_status = row.document_status,
+              d.extraction_status = row.extraction_status
+          MERGE (d)-[:HAS_CHUNK]->(c)
+          FOREACH (__ IN CASE WHEN row.matter_id IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (m2:Matter {matter_id: row.matter_id, tenant_id: row.tenant_id})
+            MERGE (m2)-[:HAS_DOCUMENT]->(d)
+          )
+        )
         FOREACH (entity IN row.entities |
           MERGE (e:LegalEntity {name: entity})
           MERGE (c)-[:MENTIONS]->(e)
@@ -1683,7 +1758,7 @@ class DCKnowledgeRAG:
 
     def _build_graph_adapter(self) -> GraphRetrievalAdapter:
         if self.config.graph_backend == "neo4j":
-            return Neo4jGraphAdapter(self.config)
+            return FallbackGraphAdapter(Neo4jGraphAdapter(self.config), LocalGraphAdapter(self._chunks))
         return LocalGraphAdapter(self._chunks)
 
     def _blocked_by_environment(self) -> bool:
@@ -2298,11 +2373,24 @@ def neo4j_relationship_rows_from_chunks(chunks: list[KnowledgeChunk], *, tenant_
         row = {
             "chunk_id": chunk.chunk_id,
             "source_id": chunk.source_id,
+            "text": chunk.text,
+            "summary": chunk.summary,
+            "source_title": chunk.source_title,
             "source_type": chunk.source_type,
             "authority_type": chunk.authority_type,
             "jurisdiction": chunk.jurisdiction,
             "citation_label": chunk.citation_label,
+            "official_locator": chunk.official_locator,
+            "url": chunk.url,
+            "verification_status": chunk.verification_status,
+            "practice_area": chunk.practice_area,
             "tenant_id": chunk.tenant_id if scope == "tenant_document" else None,
+            "firm_id": chunk.firm_id if scope == "tenant_document" else None,
+            "matter_id": chunk.matter_id if scope == "tenant_document" else None,
+            "document_id": chunk.document_id if scope == "tenant_document" else None,
+            "filename": chunk.filename if scope == "tenant_document" else None,
+            "document_status": chunk.document_status if scope == "tenant_document" else None,
+            "extraction_status": chunk.extraction_status if scope == "tenant_document" else None,
             "scope": scope,
             "entities": chunk.entities,
             "relationships": chunk.relationships,
