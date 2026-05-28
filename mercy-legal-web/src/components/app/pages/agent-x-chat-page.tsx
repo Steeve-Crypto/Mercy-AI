@@ -63,7 +63,7 @@ function promptFromTemplate(template?: CoreTemplateGalleryItem): string {
 
 function documentId(document: Record<string, unknown>, index: number): string {
   const raw = document.document_id ?? document.id ?? document.filename ?? document.title ?? `matter-document-${index + 1}`;
-  return String(raw).toLowerCase().replace(/[^a-z0-9-_]+/g, "-");
+  return String(raw);
 }
 
 function documentName(document: Record<string, unknown>, index: number): string {
@@ -87,6 +87,18 @@ function historyReliability(record: WorkHistoryRecord): string {
   const snapshot = record.reliabilitySnapshot ?? {};
   const status = snapshot.guardrail_status ?? snapshot.status ?? snapshot.grounding_status;
   return typeof status === "string" && status.trim() ? status : "review required";
+}
+
+function historyContext(record: WorkHistoryRecord): string {
+  const scope = record.reliabilitySnapshot?.source_scope;
+  const scopeLabel =
+    scope === "mixed" ? "mixed sources" : scope === "tenant_documents" ? "tenant documents" : scope === "public_dc_sources" ? "D.C. sources" : null;
+  const context = record.documentId ? "Document" : record.matterId ? "Matter" : "General";
+  return scopeLabel ? `${context} / ${scopeLabel}` : context;
+}
+
+function documentStatus(document: Record<string, unknown>): string {
+  return String(document.extraction_status ?? document.status ?? "ready").toLowerCase();
 }
 
 export function AgentXChatPage({
@@ -153,6 +165,8 @@ export function AgentXChatPage({
     setError(null);
     const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: prompt };
     setMessages((current) => [...current, userMessage]);
+    const selectedDocumentIds = includeVaultDocuments ? attachedDocIds : [];
+    const selectedDocuments = attachedDocuments.filter((document) => selectedDocumentIds.includes(document.id));
     const response = await executeAgent({
       task: prompt,
       matter_id: matterId || undefined,
@@ -164,10 +178,12 @@ export function AgentXChatPage({
             matter_type: activeMatter?.matter_type,
             requested_relief: activeMatter?.requested_relief,
             key_facts: activeMatter?.key_facts,
-            documents: activeMatter?.documents,
-            attached_document_ids: attachedDocIds,
-            attached_documents: attachedDocuments.map((document) => document.metadata),
+            attached_document_ids: selectedDocumentIds,
+            attached_documents: selectedDocuments.map((document) => document.metadata),
+            include_vault_documents: includeVaultDocuments,
+            include_private_documents: includeVaultDocuments,
             source_policy: useDcSources ? "official_dc_sources_first" : "matter_context_only",
+            workflow_mode: mode,
           }
         : { jurisdiction: "District of Columbia" },
       params: {
@@ -176,8 +192,8 @@ export function AgentXChatPage({
         prompt_template_id: selectedTemplate?.prompt_template_id,
         source_query: selectedTemplate?.source_query,
         jurisdiction: strictDcJurisdiction ? "District of Columbia" : undefined,
-        include_vault_documents: includeVaultDocuments || attachedDocIds.length > 0,
-        attached_document_ids: attachedDocIds,
+        include_vault_documents: includeVaultDocuments,
+        attached_document_ids: selectedDocumentIds,
         top_k: useDcSources ? 5 : 0,
         format: "docx",
       },
@@ -209,8 +225,14 @@ export function AgentXChatPage({
           confidence_score: data.confidence_score,
           grounding_policy: data.grounding_policy,
           human_review_required: data.human_review_required,
+          retrieval: data.retrieval,
+          source_scope: data.source_scope ?? data.retrieval?.source_scope,
+          source_refs: data.source_refs ?? data.retrieval?.source_refs ?? [],
+          retrieval_warnings: data.retrieval_warnings ?? [],
         },
-        citationsSnapshot: data.citations ?? [],
+        citationsSnapshot: data.citations?.length ? data.citations : data.retrieval?.source_refs ?? [],
+        retrievalRunId: data.persistence?.retrieval_run_id ?? data.retrieval?.persistence?.retrieval_run_id ?? null,
+        reliabilitySnapshotId: data.persistence?.reliability_snapshot_id ?? data.retrieval?.persistence?.reliability_snapshot_id ?? null,
         missingInputs: data.route?.missing_inputs ?? [],
         traceId: data.trace_id ?? null,
         langsmithUrl: data.langsmith_project_url ?? null,
@@ -386,6 +408,36 @@ export function AgentXChatPage({
                         <input type="checkbox" checked={includeVaultDocuments} onChange={(event) => setIncludeVaultDocuments(event.target.checked)} />
                         Include vault documents
                       </label>
+                      {activeMatter?.documents?.length ? (
+                        <div className="mt-3 border-t border-slate-100 pt-3">
+                          <p className="font-semibold text-slate-700">Vault documents</p>
+                          <div className="mt-2 max-h-36 space-y-2 overflow-auto pr-1">
+                            {activeMatter.documents.map((document, index) => {
+                              const id = documentId(document, index);
+                              const status = documentStatus(document);
+                              const ready = status === "ready";
+                              return (
+                                <label key={id} className="flex items-start gap-2">
+                                  <input
+                                    type="checkbox"
+                                    disabled={!ready}
+                                    checked={attachedDocIds.includes(id)}
+                                    onChange={(event) =>
+                                      setAttachedDocIds((current) =>
+                                        event.target.checked ? [...new Set([...current, id])] : current.filter((item) => item !== id),
+                                      )
+                                    }
+                                  />
+                                  <span>
+                                    <span className="block font-medium text-slate-700">{documentName(document, index)}</span>
+                                    {!ready ? <span className="block text-[11px] text-amber-700">Extraction limited; not retrieval-ready.</span> : null}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                       <label className="mt-2 flex items-center gap-2">
                         <input type="checkbox" checked={strictDcJurisdiction} onChange={(event) => setStrictDcJurisdiction(event.target.checked)} />
                         Jurisdiction: D.C.
@@ -514,7 +566,7 @@ export function AgentXChatPage({
                         </span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                        {record.matterId ? "Matter-linked" : "General"} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
+                        {historyContext(record)} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
                       </p>
                     </Link>
                   ))

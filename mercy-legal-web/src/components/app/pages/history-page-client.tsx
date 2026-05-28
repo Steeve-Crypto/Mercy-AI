@@ -39,6 +39,20 @@ function citationCount(record: WorkHistoryRecord) {
   return Array.isArray(record.citationsSnapshot) ? record.citationsSnapshot.length : 0;
 }
 
+function contextLabel(record: WorkHistoryRecord) {
+  if (record.documentId) return "Document";
+  if (record.matterId) return "Matter";
+  return "General";
+}
+
+function sourceScopeLabel(record: WorkHistoryRecord) {
+  const scope = record.reliabilitySnapshot?.source_scope;
+  if (scope === "mixed") return "Mixed sources";
+  if (scope === "tenant_documents") return "Tenant documents";
+  if (scope === "public_dc_sources") return "D.C. sources";
+  return null;
+}
+
 function recordSummary(record: WorkHistoryRecord) {
   return safeText(record.outputSummary ?? record.inputSummary ?? record.requestText, "Summary pending. Open the item to review the saved work.");
 }
@@ -76,8 +90,13 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
               {workflowLabel(record.workflowType)}
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-              {record.matterId ? "Matter-linked" : "General"}
+              {contextLabel(record)}
             </span>
+            {sourceScopeLabel(record) ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {sourceScopeLabel(record)}
+              </span>
+            ) : null}
           </div>
           <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-slate-950">{record.title}</h3>
         </div>

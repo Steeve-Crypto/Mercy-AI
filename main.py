@@ -637,10 +637,10 @@ def _verified_document_scope(client_context: dict[str, Any] | None, stored_conte
     if not matter_id or not isinstance(client_context, dict):
         return {}
     documents = stored_context.get("documents") if isinstance(stored_context.get("documents"), list) else []
-    allowed_ids = {
-        str(document.get("document_id") or document.get("id") or "")
+    allowed_documents = {
+        str(document.get("document_id") or document.get("id") or ""): document
         for document in documents
-        if isinstance(document, dict)
+        if isinstance(document, dict) and str(document.get("document_id") or document.get("id") or "")
     }
     requested: list[str] = []
     attached = client_context.get("attached_document_ids")
@@ -649,12 +649,28 @@ def _verified_document_scope(client_context: dict[str, Any] | None, stored_conte
     document_id = client_context.get("document_id")
     if document_id:
         requested.append(str(document_id))
-    verified = sorted({item for item in requested if item in allowed_ids})
+    verified: list[str] = []
+    warnings: list[dict[str, str]] = []
+    for item in sorted({item for item in requested if item in allowed_documents}):
+        document = allowed_documents[item]
+        status = str(document.get("extraction_status") or document.get("status") or "").lower()
+        if status and status not in {"ready"}:
+            warnings.append(
+                {
+                    "document_id": item,
+                    "status": status,
+                    "message": "Selected Vault document is not retrieval-ready; Mercy will not use document chunks for it.",
+                }
+            )
+            continue
+        verified.append(item)
     if not verified:
-        return {}
+        return {"retrieval_warnings": warnings} if warnings else {}
     return {
         "attached_document_ids": verified,
         "document_id": verified[0] if len(verified) == 1 else None,
+        "include_private_documents": True,
+        **({"retrieval_warnings": warnings} if warnings else {}),
     }
 
 
@@ -701,6 +717,21 @@ def _attach_route(
         except MatterTenantAccessError as exc:
             raise HTTPException(status_code=404, detail="Matter not found.") from exc
     return wrapped
+
+
+def _agent_result_rag_payload(result: dict[str, Any]) -> dict[str, Any] | None:
+    agent_result = result.get("agent_result") if isinstance(result.get("agent_result"), dict) else {}
+    rag = agent_result.get("rag") if isinstance(agent_result.get("rag"), dict) else None
+    if rag:
+        return rag
+    for skill_result in agent_result.get("skill_results") or []:
+        if not isinstance(skill_result, dict):
+            continue
+        provenance = skill_result.get("provenance") if isinstance(skill_result.get("provenance"), dict) else {}
+        retrieval = provenance.get("retrieval") if isinstance(provenance.get("retrieval"), dict) else None
+        if retrieval:
+            return retrieval
+    return None
 
 
 @app.get("/health")
@@ -1265,6 +1296,9 @@ async def rag_retrieve(
             context["date_to"] = request.date_to
         if request.matter_id:
             context["matter_id"] = request.matter_id
+        if "include_vault_documents" in request.matter_context:
+            context["include_vault_documents"] = bool(request.matter_context.get("include_vault_documents"))
+            context["include_private_documents"] = bool(request.matter_context.get("include_vault_documents"))
 
         route = _route_payload(
             moe_route(
@@ -1463,6 +1497,13 @@ async def agent_execute(
             "surface_context": request.surface_context,
             "auth_context": _tenant_context(tenant_user),
         }
+        mode = str(params.get("mode") or params.get("workflow_mode") or route.get("route_mode") or "")
+        context["workflow_mode"] = mode
+        if "include_vault_documents" in params:
+            context["include_vault_documents"] = bool(params.get("include_vault_documents"))
+            context["include_private_documents"] = bool(params.get("include_vault_documents"))
+        if mode == "dc_research":
+            context.setdefault("source_policy", "official_dc_sources_first")
         template_id = str(params.get("template_id") or params.get("gallery_template_id") or "")
         if template_id:
             trace_template_usage(
@@ -1481,6 +1522,22 @@ async def agent_execute(
             route=route,
             user_type=request.user_type,
         )
+        rag_payload = _agent_result_rag_payload(result)
+        if rag_payload:
+            result["persistence"] = rag_payload.get("persistence") or {}
+            result["source_scope"] = rag_payload.get("source_scope")
+            result["source_refs"] = rag_payload.get("source_refs") or []
+            result["retrieval"] = {
+                "source_scope": rag_payload.get("source_scope"),
+                "source_refs": rag_payload.get("source_refs") or [],
+                "persistence": rag_payload.get("persistence") or {},
+                "metadata_filters": rag_payload.get("metadata_filters") or {},
+                "verification": rag_payload.get("verification") or {},
+            }
+            if not result.get("citations"):
+                result["citations"] = rag_payload.get("citations") or []
+        if context.get("retrieval_warnings"):
+            result["retrieval_warnings"] = context["retrieval_warnings"]
         result["trace_id"] = span["trace_id"]
         result["langsmith_project_url"] = LANGSMITH_CONFIG.get("ui_url")
         span["route"] = route

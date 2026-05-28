@@ -140,7 +140,18 @@ export function ResearchPage({ matters }: ResearchPageProps) {
   async function runResearch() {
     setBusy(true);
     setError(null);
-    const response = await retrieveRag({ query, matter_id: matterId || undefined, top_k: 5, matter_context: { jurisdiction: "District of Columbia" } });
+    const response = await retrieveRag({
+      query,
+      matter_id: matterId || undefined,
+      top_k: 5,
+      matter_context: {
+        jurisdiction: "District of Columbia",
+        include_vault_documents: Boolean(matterId),
+        include_private_documents: Boolean(matterId),
+        source_policy: "official_dc_sources_first",
+        workflow_mode: "dc_research",
+      },
+    });
     setBusy(false);
     if (!response.ok || !response.data) {
       setError(response.error ?? "Research failed.");
@@ -166,8 +177,10 @@ export function ResearchPage({ matters }: ResearchPageProps) {
           response_envelope: response.data.response_envelope,
           route: response.data.route,
           persistence: response.data.persistence,
+          source_scope: response.data.source_scope,
+          source_refs: response.data.source_refs ?? [],
         },
-        citationsSnapshot: response.data.citations ?? [],
+        citationsSnapshot: response.data.citations?.length ? response.data.citations : response.data.source_refs ?? [],
         retrievalRunId: response.data.persistence?.retrieval_run_id ?? null,
         reliabilitySnapshotId: response.data.persistence?.reliability_snapshot_id ?? null,
         moeRoute: response.data.route ?? null,

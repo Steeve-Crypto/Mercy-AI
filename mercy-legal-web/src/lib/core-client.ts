@@ -223,6 +223,21 @@ export type CoreRagResult = {
   relationships?: Array<Record<string, string>>;
   practice_area?: string;
   source_date?: string;
+  matter_id?: string | null;
+  document_id?: string | null;
+};
+
+export type CoreRetrievalSourceScope = "public_dc_sources" | "tenant_documents" | "mixed" | string;
+
+export type CoreRetrievalReference = {
+  chunk_id?: string | null;
+  source_id?: string | null;
+  source_type?: string | null;
+  citation_label?: string | null;
+  document_id?: string | null;
+  matter_id?: string | null;
+  verification_status?: string | null;
+  combined_score?: number | null;
 };
 
 export type CoreRagEnvelope = {
@@ -230,6 +245,8 @@ export type CoreRagEnvelope = {
   query: string;
   results: CoreRagResult[];
   citations: CoreCitation[];
+  source_scope?: CoreRetrievalSourceScope;
+  source_refs?: CoreRetrievalReference[];
   verification: {
     status: "pass" | "warn" | "block" | string;
     issues?: string[];
@@ -269,6 +286,23 @@ export type CoreAgentEnvelope = {
   mcp_skills_used?: string[];
   mcp_skill_results?: Array<Record<string, unknown>>;
   citations: CoreCitation[];
+  source_scope?: CoreRetrievalSourceScope | null;
+  source_refs?: CoreRetrievalReference[];
+  persistence?: {
+    retrieval_run_id?: string | null;
+    reliability_snapshot_id?: string | null;
+  };
+  retrieval?: {
+    source_scope?: CoreRetrievalSourceScope | null;
+    source_refs?: CoreRetrievalReference[];
+    persistence?: {
+      retrieval_run_id?: string | null;
+      reliability_snapshot_id?: string | null;
+    };
+    metadata_filters?: Record<string, unknown>;
+    verification?: Record<string, unknown>;
+  };
+  retrieval_warnings?: Array<Record<string, string>>;
   grounding_policy?: {
     status: string;
     strict_grounding: boolean;
@@ -1066,6 +1100,7 @@ export async function retrieveRag(payload: {
   user_type?: string;
   surface_context?: string;
 }, auth?: CoreAuthContext): Promise<CoreClientResult<CoreRagEnvelope>> {
+  const hasDocumentScope = Boolean(payload.matter_context?.document_id || payload.matter_context?.attached_document_ids);
   return coreFetch<CoreRagEnvelope>(
     "/v1/rag/retrieve",
     {
@@ -1077,11 +1112,16 @@ export async function retrieveRag(payload: {
         top_k: 5,
         user_type: "solo",
         surface_context: "mercy_legal_web",
+        ...payload,
         matter_context: {
           jurisdiction: "District of Columbia",
           authority_type: ["statute", "rule", "case", "regulation", "ethics_opinion", "court_rule"],
+          include_vault_documents: Boolean(payload.matter_id || hasDocumentScope),
+          include_private_documents: Boolean(payload.matter_id || hasDocumentScope),
+          source_policy: "official_dc_sources_first",
+          workflow_mode: "dc_research",
+          ...(payload.matter_context ?? {}),
         },
-        ...payload,
       }),
     },
     auth,
@@ -1096,6 +1136,8 @@ export async function executeAgent(payload: {
   user_type?: string;
   surface_context?: string;
 }, auth?: CoreAuthContext): Promise<CoreClientResult<CoreAgentEnvelope>> {
+  const hasDocumentScope = Boolean(payload.matter_context?.document_id || payload.matter_context?.attached_document_ids);
+  const includeVaultDocuments = Boolean(payload.params?.include_vault_documents ?? payload.matter_id ?? hasDocumentScope);
   return coreFetch<CoreAgentEnvelope>(
     "/v1/agent/execute",
     {
@@ -1106,11 +1148,13 @@ export async function executeAgent(payload: {
       body: JSON.stringify({
         user_type: "solo",
         surface_context: "mercy_legal_web",
+        ...payload,
         matter_context: {
           jurisdiction: "District of Columbia",
+          include_vault_documents: includeVaultDocuments,
+          include_private_documents: includeVaultDocuments,
           ...(payload.matter_context ?? {}),
         },
-        ...payload,
       }),
     },
     auth,

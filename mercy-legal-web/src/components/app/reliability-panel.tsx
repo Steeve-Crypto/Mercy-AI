@@ -22,15 +22,23 @@ function pill(status?: string): string {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+function agentRag(agent?: CoreAgentEnvelope | null): CoreRagEnvelope | null {
+  const agentResult = agent?.agent_result;
+  if (!agentResult || typeof agentResult !== "object") return null;
+  const rag = (agentResult as { rag?: CoreRagEnvelope }).rag;
+  return rag ?? null;
+}
+
 export function ReliabilityPanel({ envelope, route, agent, rag, citations }: ReliabilityPanelProps) {
-  const activeEnvelope = envelope ?? agent?.response_envelope ?? rag?.response_envelope ?? null;
-  const activeRoute = route ?? activeEnvelope?.route ?? agent?.route ?? rag?.route ?? null;
-  const activeCitations = citations ?? activeEnvelope?.citations ?? agent?.citations ?? rag?.citations ?? [];
-  const guardrailStatus = activeEnvelope?.guardrail_status ?? agent?.guardrail_status ?? rag?.guardrail_status ?? activeRoute?.guardrail_status;
-  const confidence = activeEnvelope?.confidence_score ?? agent?.confidence_score ?? rag?.confidence_score ?? activeRoute?.confidence;
-  const groundingStatus = agent?.grounding_policy?.status ?? rag?.verification?.status ?? guardrailStatus;
+  const activeRag = rag ?? agentRag(agent);
+  const activeEnvelope = envelope ?? agent?.response_envelope ?? activeRag?.response_envelope ?? null;
+  const activeRoute = route ?? activeEnvelope?.route ?? agent?.route ?? activeRag?.route ?? null;
+  const activeCitations = citations ?? activeEnvelope?.citations ?? agent?.citations ?? activeRag?.citations ?? [];
+  const guardrailStatus = activeEnvelope?.guardrail_status ?? agent?.guardrail_status ?? activeRag?.guardrail_status ?? activeRoute?.guardrail_status;
+  const confidence = activeEnvelope?.confidence_score ?? agent?.confidence_score ?? activeRag?.confidence_score ?? activeRoute?.confidence;
+  const groundingStatus = agent?.grounding_policy?.status ?? activeRag?.verification?.status ?? guardrailStatus;
   const traceUrl = agent?.langsmith_project_url && agent.trace_id ? `${agent.langsmith_project_url}?trace_id=${agent.trace_id}` : null;
-  const reviewRequired = activeEnvelope?.dc_ethics_metadata.human_review_required ?? agent?.human_review_required ?? rag?.human_review_required ?? true;
+  const reviewRequired = activeEnvelope?.dc_ethics_metadata.human_review_required ?? agent?.human_review_required ?? activeRag?.human_review_required ?? true;
   const officialDcGrounding = activeCitations.some((citation) =>
     `${citation.source_type} ${citation.verification_status} ${citation.note}`.toLowerCase().includes("official"),
   );
@@ -107,7 +115,7 @@ export function ReliabilityPanel({ envelope, route, agent, rag, citations }: Rel
             ))
           ) : (
             <p className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500">
-              No citations returned yet. Ask Agent X or run D.C. research to populate this panel.
+              Mercy did not retrieve source support for this response. Attorney review required.
             </p>
           )}
         </div>

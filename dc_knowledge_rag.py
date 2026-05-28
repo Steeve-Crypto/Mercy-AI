@@ -1296,7 +1296,7 @@ def _search_legal_source_vectors(session: Any, query_embedding: list[float], fil
 
 def _search_document_vectors(session: Any, query_embedding: list[float], filters: dict[str, Any], limit: int) -> list[RetrievalHit]:
     tenant_id = str(filters.get("tenant_id") or "")
-    if not tenant_id:
+    if not tenant_id or not filters.get("include_private_documents"):
         return []
     distance = DocumentChunkRecord.embedding_vector.cosine_distance(query_embedding).label("distance")
     query_obj = (
@@ -1380,6 +1380,7 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
             "CASE WHEN toLower(coalesce(c.text,'') + ' ' + coalesce(c.summary,'')) CONTAINS $query_text THEN 1.0 ELSE 0.35 END AS score "
             "RETURN c AS chunk, score ORDER BY score DESC LIMIT $limit"
         )
+        include_private = bool(filters.get("include_private_documents"))
         document_ids = [str(item) for item in filters.get("document_ids") or [] if item]
         if filters.get("document_id"):
             document_ids.append(str(filters["document_id"]))
@@ -1388,9 +1389,9 @@ class Neo4jGraphAdapter(GraphRetrievalAdapter):
             "jurisdiction": filters.get("jurisdiction") or "District of Columbia",
             "practice_area": filters.get("practice_area"),
             "authority_type": filters.get("authority_type"),
-            "tenant_id": filters.get("tenant_id"),
-            "matter_id": filters.get("matter_id"),
-            "document_ids": sorted(set(document_ids)) or None,
+            "tenant_id": filters.get("tenant_id") if include_private else None,
+            "matter_id": filters.get("matter_id") if include_private else None,
+            "document_ids": sorted(set(document_ids)) if include_private and document_ids else None,
             "limit": limit,
         }
         try:
@@ -1551,6 +1552,8 @@ class DCKnowledgeRAG:
                 "query": query,
                 "results": results,
                 "citations": [result["citation"] for result in results],
+                "source_scope": _result_source_scope(results),
+                "source_refs": _safe_result_refs(results),
                 "verification": verification,
                 "backend_status": self._backend_status(),
                 "graph_context": self._graph_context(results),
@@ -2115,6 +2118,14 @@ def _metadata_filters(matter_context: dict[str, Any]) -> dict[str, Any]:
     attached_document_ids = matter_context.get("attached_document_ids")
     if not isinstance(attached_document_ids, list):
         attached_document_ids = []
+    requested_document_ids = [str(item) for item in attached_document_ids if item]
+    if matter_context.get("document_id"):
+        requested_document_ids.append(str(matter_context["document_id"]))
+    include_private_value = matter_context.get("include_private_documents", matter_context.get("include_vault_documents", None))
+    if include_private_value is None:
+        include_private_documents = bool(matter_context.get("matter_id") or requested_document_ids)
+    else:
+        include_private_documents = bool(include_private_value) and bool(matter_context.get("matter_id") or requested_document_ids)
     filters = {
         "jurisdiction": matter_context.get("jurisdiction") or "District of Columbia",
         "practice_area": matter_context.get("practice_area"),
@@ -2124,7 +2135,8 @@ def _metadata_filters(matter_context: dict[str, Any]) -> dict[str, Any]:
         "tenant_id": auth_context.get("tenant_id") or matter_context.get("tenant_id"),
         "matter_id": matter_context.get("matter_id"),
         "document_id": matter_context.get("document_id"),
-        "document_ids": [str(item) for item in attached_document_ids if item],
+        "document_ids": sorted(set(requested_document_ids)),
+        "include_private_documents": include_private_documents,
     }
     if str(filters["jurisdiction"]).lower() in {"dc", "d.c.", "district of columbia"}:
         filters["jurisdiction"] = "District of Columbia"
@@ -2155,6 +2167,26 @@ def _result_source_scope(results: list[dict[str, Any]]) -> str:
     return "public_dc_sources"
 
 
+def _safe_result_refs(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for item in results[:20]:
+        citation = item.get("citation") if isinstance(item.get("citation"), dict) else {}
+        provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
+        refs.append(
+            {
+                "chunk_id": item.get("chunk_id"),
+                "source_id": item.get("source_id"),
+                "source_type": provenance.get("source_type") or citation.get("source_type"),
+                "citation_label": citation.get("label"),
+                "document_id": item.get("document_id"),
+                "matter_id": item.get("matter_id"),
+                "verification_status": item.get("verification_status") or citation.get("verification_status"),
+                "combined_score": item.get("combined_score"),
+            }
+        )
+    return refs
+
+
 def _tenant_context_valid(matter_context: dict[str, Any]) -> bool:
     auth_context = matter_context.get("auth_context")
     return isinstance(auth_context, dict) and bool(auth_context.get("tenant_id")) and bool(auth_context.get("user_id"))
@@ -2168,6 +2200,9 @@ def _safe_rag_trace_metadata(matter_context: dict[str, Any], filters: dict[str, 
         "matter_id": matter_context.get("matter_id"),
         "jurisdiction": filters.get("jurisdiction"),
         "practice_area": filters.get("practice_area"),
+        "include_private_documents": filters.get("include_private_documents"),
+        "document_id": filters.get("document_id"),
+        "document_count": len(filters.get("document_ids") or []),
         "date_from": filters.get("date_from"),
         "date_to": filters.get("date_to"),
     }
@@ -2191,6 +2226,8 @@ def _apply_metadata_filters(chunks: list[KnowledgeChunk], filters: dict[str, Any
         document_ids.add(str(filters["document_id"]))
     filtered: list[KnowledgeChunk] = []
     for chunk in chunks:
+        if chunk.source_type == "tenant_document" and not filters.get("include_private_documents"):
+            continue
         if (
             chunk.source_type != "tenant_document"
             and jurisdiction
@@ -2432,18 +2469,19 @@ def _qdrant_filter(filters: dict[str, Any]) -> Any:
             public_must.append(FieldCondition(key="authority_type", match=MatchAny(any=authority_type)))
         else:
             public_must.append(FieldCondition(key="authority_type", match=MatchValue(value=authority_type)))
+    include_private = bool(filters.get("include_private_documents"))
     tenant_id = filters.get("tenant_id")
-    if tenant_id:
-        private_must.append(FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)))
-    else:
-        private_must.append(FieldCondition(key="tenant_id", match=MatchValue(value="__missing_tenant__")))
-    if filters.get("matter_id"):
-        private_must.append(FieldCondition(key="matter_id", match=MatchValue(value=filters["matter_id"])))
     document_ids = [str(item) for item in filters.get("document_ids") or [] if item]
     if filters.get("document_id"):
         document_ids.append(str(filters["document_id"]))
-    if document_ids:
-        private_must.append(FieldCondition(key="document_id", match=MatchAny(any=sorted(set(document_ids)))))
+    if include_private and tenant_id:
+        private_must.append(FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)))
+        if filters.get("matter_id"):
+            private_must.append(FieldCondition(key="matter_id", match=MatchValue(value=filters["matter_id"])))
+        if document_ids:
+            private_must.append(FieldCondition(key="document_id", match=MatchAny(any=sorted(set(document_ids)))))
+    else:
+        return Filter(must=public_must)
     source_range: dict[str, Any] = {}
     if filters.get("date_from"):
         source_range["gte"] = filters["date_from"]

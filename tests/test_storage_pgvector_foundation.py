@@ -25,6 +25,7 @@ from dc_knowledge_rag import (
     RetrievalConfig,
     RetrievalHit,
     neo4j_relationship_rows_from_chunks,
+    _metadata_filters,
     _qdrant_filter,
     _qdrant_payload,
     _qdrant_point_id,
@@ -410,7 +411,7 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
         hits = _search_document_vectors(
             session,
             [0.1, 0.2, 0.3],
-            {"tenant_id": "tenant-a", "matter_id": "matter-a", "document_id": "doc-a"},
+            {"tenant_id": "tenant-a", "matter_id": "matter-a", "document_id": "doc-a", "include_private_documents": True},
             5,
         )
 
@@ -428,7 +429,7 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
         hits = _search_document_vectors(
             session,
             [0.1, 0.2, 0.3],
-            {"tenant_id": "tenant-b", "matter_id": "matter-a", "document_id": "doc-a"},
+            {"tenant_id": "tenant-b", "matter_id": "matter-a", "document_id": "doc-a", "include_private_documents": True},
             5,
         )
 
@@ -494,6 +495,7 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
                 "tenant_id": "tenant-a",
                 "matter_id": "matter-a",
                 "document_ids": ["doc-a", "doc-b"],
+                "include_private_documents": True,
                 "jurisdiction": "District of Columbia",
                 "authority_type": ["statute", "rule"],
             }
@@ -651,7 +653,7 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
         hits = adapter.search(
             "lease damages",
             {"auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"}},
-            {"tenant_id": "tenant-a", "matter_id": "matter-a", "document_id": "doc-a"},
+            {"tenant_id": "tenant-a", "matter_id": "matter-a", "document_id": "doc-a", "include_private_documents": True},
             5,
         )
 
@@ -686,6 +688,34 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
         self.assertEqual(context["document_id"], "doc-allowed")
         self.assertEqual(context["auth_context"]["tenant_id"], "tenant-a")
 
+    def test_workbench_extraction_limited_document_is_not_marked_retrieval_ready(self) -> None:
+        env = DB_ENV_KEYS | {"MERCY_ENV": "local", "MERCY_AUTH_MODE": "dev"}
+        with patch.dict(os.environ, env, clear=False):
+            reset_storage_for_tests()
+            get_config.cache_clear()
+            from auth_context import TenantUser
+            from main import _scoped_matter_context
+
+            tenant_user = TenantUser(tenant_id="tenant-a", user_id="user-a", auth_mode="unit_test")
+            stored = {
+                "matter_id": "matter-a",
+                "documents": [
+                    {"document_id": "doc-ready", "filename": "ready.pdf", "extraction_status": "ready"},
+                    {"document_id": "doc-limited", "filename": "limited.pdf", "extraction_status": "extraction_limited"},
+                ],
+            }
+            with patch("main._matter_context", return_value=stored):
+                context = _scoped_matter_context(
+                    tenant_user,
+                    matter_id="matter-a",
+                    client_context={"attached_document_ids": ["doc-ready", "doc-limited"]},
+                    surface_context="unit_test",
+                )
+
+        self.assertEqual(context["attached_document_ids"], ["doc-ready"])
+        self.assertEqual(context["document_id"], "doc-ready")
+        self.assertEqual(context["retrieval_warnings"][0]["document_id"], "doc-limited")
+
     def test_retrieval_source_scope_distinguishes_public_private_and_mixed_results(self) -> None:
         public_result = {
             "chunk_id": "public-chunk",
@@ -701,6 +731,47 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
         self.assertEqual(_result_source_scope([public_result]), "public_dc_sources")
         self.assertEqual(_result_source_scope([document_result]), "tenant_documents")
         self.assertEqual(_result_source_scope([public_result, document_result]), "mixed")
+
+    def test_workbench_general_context_does_not_enable_private_document_retrieval(self) -> None:
+        filters = _metadata_filters(
+            {
+                "jurisdiction": "District of Columbia",
+                "auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"},
+                "surface_context": "unit_test_workbench",
+            }
+        )
+
+        self.assertFalse(filters["include_private_documents"])
+        self.assertNotIn("matter_id", filters)
+        self.assertEqual(filters["tenant_id"], "tenant-a")
+
+    def test_workbench_matter_and_document_scope_enable_private_retrieval(self) -> None:
+        filters = _metadata_filters(
+            {
+                "jurisdiction": "District of Columbia",
+                "matter_id": "matter-a",
+                "attached_document_ids": ["doc-a", "doc-b"],
+                "auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"},
+                "surface_context": "unit_test_workbench",
+            }
+        )
+
+        self.assertTrue(filters["include_private_documents"])
+        self.assertEqual(filters["matter_id"], "matter-a")
+        self.assertEqual(filters["document_ids"], ["doc-a", "doc-b"])
+
+    def test_workbench_vault_context_can_be_disabled_for_public_only_research(self) -> None:
+        filters = _metadata_filters(
+            {
+                "jurisdiction": "District of Columbia",
+                "matter_id": "matter-a",
+                "include_vault_documents": False,
+                "auth_context": {"tenant_id": "tenant-a", "user_id": "user-a"},
+                "surface_context": "unit_test_workbench",
+            }
+        )
+
+        self.assertFalse(filters["include_private_documents"])
 
     def test_retrieval_run_persists_safe_source_references_without_raw_query(self) -> None:
         env = DB_ENV_KEYS | {

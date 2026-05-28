@@ -54,7 +54,7 @@ type MatterDetailWorkspaceProps = {
 };
 
 type MatterTab = "overview" | "documents" | "research" | "drafting" | "activity" | "billing";
-type DocumentStatus = "Processing..." | "Ready" | "Failed";
+type DocumentStatus = "Processing..." | "Ready" | "Failed" | "Extraction limited";
 
 type MatterDocument = {
   id: string;
@@ -96,9 +96,7 @@ function documentTitle(document: Record<string, unknown>, index: number): string
 }
 
 function documentId(document: Record<string, unknown>, index: number): string {
-  return asText(document.document_id ?? document.id ?? document.filename ?? document.title, `matter-document-${index + 1}`)
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, "-");
+  return asText(document.document_id ?? document.id ?? document.filename ?? document.title, `matter-document-${index + 1}`);
 }
 
 function formatBytes(bytes?: number): string {
@@ -116,9 +114,11 @@ function normalizeMatterDocuments(documents: Array<Record<string, unknown>>): Ma
     size: typeof document.size === "number" ? formatBytes(document.size) : asText(document.size, "Size pending"),
     type: asText(document.type ?? document.document_type ?? document.mime_type, "PDF / legal document"),
     status:
-      asText(document.status ?? document.extraction_status, "Ready") === "Failed"
+      asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "failed"
         ? "Failed"
-        : asText(document.status ?? document.extraction_status, "Ready") === "Processing..."
+        : asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "extraction_limited"
+          ? "Extraction limited"
+          : asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "processing..."
           ? "Processing..."
           : "Ready",
     progress: typeof document.extraction_progress === "number" ? document.extraction_progress : undefined,
@@ -363,7 +363,10 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         client_role: matter.client_role,
         requested_relief: matter.requested_relief,
         key_facts: matter.key_facts,
-        documents: matter.documents,
+        include_vault_documents: true,
+        include_private_documents: true,
+        source_policy: "official_dc_sources_first",
+        workflow_mode: "dc_research",
       },
     });
     setResearchBusy(false);
@@ -391,8 +394,10 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
           response_envelope: response.data.response_envelope,
           route: response.data.route,
           persistence: response.data.persistence,
+          source_scope: response.data.source_scope,
+          source_refs: response.data.source_refs ?? [],
         },
-        citationsSnapshot: response.data.citations ?? [],
+        citationsSnapshot: response.data.citations?.length ? response.data.citations : response.data.source_refs ?? [],
         retrievalRunId: response.data.persistence?.retrieval_run_id ?? null,
         reliabilitySnapshotId: response.data.persistence?.reliability_snapshot_id ?? null,
         moeRoute: response.data.route ?? null,
@@ -902,11 +907,11 @@ function StatusBadge({ status, progress }: { status: DocumentStatus; progress?: 
       : status === "Failed"
         ? "bg-rose-50 text-rose-700"
         : "bg-amber-50 text-amber-700";
-  const Icon = status === "Ready" ? CheckCircle2 : status === "Failed" ? AlertTriangle : Loader2;
+  const Icon = status === "Ready" ? CheckCircle2 : status === "Processing..." ? Loader2 : AlertTriangle;
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${styles}`}>
       <Icon className={`size-3.5 ${status === "Processing..." ? "animate-spin" : ""}`} />
-      {status === "Failed" ? "Extraction limited" : status}
+      {status}
       {typeof progress === "number" && status !== "Ready" ? ` ${progress}%` : ""}
     </span>
   );
