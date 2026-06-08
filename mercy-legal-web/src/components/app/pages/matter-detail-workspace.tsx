@@ -45,6 +45,7 @@ import {
   safeText,
   titleCase,
 } from "@/lib/display-safety";
+import { extractionLimitedWarning, normalizeVaultDocument, statusBadgeClasses, type VaultReadiness, type VaultStatusKey } from "@/lib/vault-documents";
 import type { WorkHistoryRecord } from "@/lib/work-history-types";
 import { createWorkHistoryClient, listWorkHistoryClient } from "@/lib/work-history-client";
 
@@ -54,7 +55,7 @@ type MatterDetailWorkspaceProps = {
 };
 
 type MatterTab = "overview" | "documents" | "research" | "drafting" | "activity" | "billing";
-type DocumentStatus = "Processing..." | "Ready" | "Failed" | "Extraction limited";
+type DocumentStatus = "Uploading" | "Extracting" | "Ready for Mercy" | "Failed" | "Extraction Limited";
 
 type MatterDocument = {
   id: string;
@@ -63,6 +64,9 @@ type MatterDocument = {
   size: string;
   type: string;
   status: DocumentStatus;
+  statusKey: VaultStatusKey;
+  readiness: VaultReadiness;
+  readinessLabel: string;
   progress?: number;
   factsExtracted?: number;
   citationCount?: number;
@@ -91,10 +95,6 @@ function asText(value: unknown, fallback = "Pending"): string {
   return fallback;
 }
 
-function documentTitle(document: Record<string, unknown>, index: number): string {
-  return asText(document.title ?? document.name ?? document.filename ?? document.document_id, `Document ${index + 1}`);
-}
-
 function documentId(document: Record<string, unknown>, index: number): string {
   return asText(document.document_id ?? document.id ?? document.filename ?? document.title, `matter-document-${index + 1}`);
 }
@@ -109,22 +109,18 @@ function formatBytes(bytes?: number): string {
 function normalizeMatterDocuments(documents: Array<Record<string, unknown>>): MatterDocument[] {
   return documents.map((document, index) => ({
     id: documentId(document, index),
-    filename: documentTitle(document, index),
-    uploadDate: asText(document.uploaded_at ?? document.created_at ?? document.date, "Upload date pending"),
-    size: typeof document.size === "number" ? formatBytes(document.size) : asText(document.size, "Size pending"),
-    type: asText(document.type ?? document.document_type ?? document.mime_type, "PDF / legal document"),
-    status:
-      asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "failed"
-        ? "Failed"
-        : asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "extraction_limited"
-          ? "Extraction limited"
-          : asText(document.status ?? document.extraction_status, "Ready").toLowerCase() === "processing..."
-          ? "Processing..."
-          : "Ready",
+    filename: normalizeVaultDocument(document, index).filename,
+    uploadDate: normalizeVaultDocument(document, index).lastUpdated,
+    size: normalizeVaultDocument(document, index).sizeLabel,
+    type: normalizeVaultDocument(document, index).type,
+    status: normalizeVaultDocument(document, index).statusLabel as DocumentStatus,
+    statusKey: normalizeVaultDocument(document, index).statusKey,
+    readiness: normalizeVaultDocument(document, index).readiness,
+    readinessLabel: normalizeVaultDocument(document, index).readinessLabel,
     progress: typeof document.extraction_progress === "number" ? document.extraction_progress : undefined,
     factsExtracted: typeof document.facts_extracted === "number" ? document.facts_extracted : undefined,
     citationCount: typeof document.citation_count === "number" ? document.citation_count : undefined,
-    previewAvailable: Boolean(document.storage_path || document.preview_url || document.document_id),
+    previewAvailable: normalizeVaultDocument(document, index).previewAvailable,
     source: "matter",
   }));
 }
@@ -210,7 +206,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   );
   const chatHref = `/chat?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
   const intakeHref = `/intake?matterId=${encodeURIComponent(matter.matter_id)}` as Route;
-  const documentsReady = documents.filter((document) => document.status === "Ready").length;
+  const documentsReady = documents.filter((document) => document.readiness === "searchable").length;
   const openInputs = matter.missing_information?.length ?? 0;
   const latestRoute = matter.route_history?.[matter.route_history.length - 1] ?? null;
   const latestConfidence = latestRoute ? Math.round(latestRoute.confidence * 100) : null;
@@ -270,7 +266,10 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
           uploadDate: new Date().toLocaleString(),
           size: formatBytes(uploadFile.size),
           type: uploadFile.type || "application/pdf",
-          status: "Processing...",
+          status: "Uploading",
+          statusKey: "uploading",
+          readiness: "not_searchable",
+          readinessLabel: "Not searchable",
           previewAvailable: false,
           source: "local_upload",
         };
@@ -282,7 +281,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         if (!response.ok || !response.data) {
           setUploadError(response.error ?? `Document upload failed for ${uploadFile.name}.`);
           setDocuments((current) =>
-            current.map((document) => (document.id === localId ? { ...document, status: "Failed" } : document)),
+            current.map((document) => (document.id === localId ? { ...document, status: "Failed", statusKey: "failed", readiness: "not_searchable", readinessLabel: "Not searchable" } : document)),
           );
           addToast("error", response.error ?? `${uploadFile.name} failed to upload.`);
           continue;
@@ -292,7 +291,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
         const refreshed = await refreshDocuments();
         if (!refreshed) {
           setDocuments((current) =>
-            current.map((document) => (document.id === localId ? { ...document, status: "Ready" } : document)),
+            current.map((document) => (document.id === localId ? { ...document, status: "Ready for Mercy", statusKey: "ready", readiness: "searchable", readinessLabel: "Searchable" } : document)),
           );
         }
         addToast("success", `${uploadFile.name} uploaded and sent for extraction.`);
@@ -744,8 +743,24 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                           <p className="mt-1 text-xs text-slate-500">{document.type}</p>
                         </div>
                       </div>
-                      <StatusBadge status={document.status} progress={document.progress} />
+                      <StatusBadge status={document.status} statusKey={document.statusKey} progress={document.progress} />
                     </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${document.readiness === "searchable" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : document.readiness === "limited" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                        {document.readinessLabel}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        Attached to Matter
+                      </span>
+                    </div>
+
+                    {document.readiness === "limited" ? (
+                      <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                        <span>{extractionLimitedWarning}</span>
+                      </div>
+                    ) : null}
 
                     <dl className="mt-5 grid grid-cols-2 gap-3 text-xs">
                       <DocumentMetric label="Uploaded" value={document.uploadDate} />
@@ -754,7 +769,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                       <DocumentMetric label="Citations" value={document.citationCount ?? 0} />
                     </dl>
 
-                    <div className="mt-5 grid grid-cols-3 gap-2">
+                    <div className="mt-5 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => previewDocument(document)}
@@ -764,14 +779,14 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                         {previewingId === document.id ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
                         Preview
                       </button>
-                      {document.status === "Ready" ? (
+                      {document.readiness === "searchable" ? (
                         <Link
                           href={`/chat?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}&attached=1` as Route}
                           onClick={() => addToast("success", `${document.filename} attached to Mercy.`)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
                         >
                           <Paperclip className="size-3.5" />
-                          Attach
+                          Use in Mercy
                         </Link>
                       ) : (
                         <button
@@ -780,9 +795,16 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-400"
                         >
                           <Paperclip className="size-3.5" />
-                          Attach
+                          Use in Mercy
                         </button>
                       )}
+                      <Link
+                        href={`/research?matterId=${encodeURIComponent(matter.matter_id)}&attachedDocs=${encodeURIComponent(document.id)}&documentContext=1` as Route}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#C7D2FE] px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
+                      >
+                        <Search className="size-3.5" />
+                        Use in Research
+                      </Link>
                       <button
                         type="button"
                         onClick={() => deleteDocument(document)}
@@ -900,19 +922,13 @@ function Info({ label, value }: { label: string; value: unknown }) {
   );
 }
 
-function StatusBadge({ status, progress }: { status: DocumentStatus; progress?: number }) {
-  const styles =
-    status === "Ready"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "Failed"
-        ? "bg-rose-50 text-rose-700"
-        : "bg-amber-50 text-amber-700";
-  const Icon = status === "Ready" ? CheckCircle2 : status === "Processing..." ? Loader2 : AlertTriangle;
+function StatusBadge({ status, statusKey, progress }: { status: DocumentStatus; statusKey: VaultStatusKey; progress?: number }) {
+  const Icon = statusKey === "ready" ? CheckCircle2 : statusKey === "uploading" || statusKey === "extracting" ? Loader2 : AlertTriangle;
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${styles}`}>
-      <Icon className={`size-3.5 ${status === "Processing..." ? "animate-spin" : ""}`} />
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClasses(statusKey)}`}>
+      <Icon className={`size-3.5 ${statusKey === "uploading" || statusKey === "extracting" ? "animate-spin" : ""}`} />
       {status}
-      {typeof progress === "number" && status !== "Ready" ? ` ${progress}%` : ""}
+      {typeof progress === "number" && statusKey !== "ready" ? ` ${progress}%` : ""}
     </span>
   );
 }

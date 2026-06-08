@@ -8,6 +8,7 @@ type MercyPageProps = {
     matterId?: string;
     attachedDocs?: string;
     attached?: string;
+    mode?: string;
   }>;
 };
 
@@ -24,6 +25,7 @@ export default async function MercyPage({ searchParams }: MercyPageProps) {
       initialMatterId={params?.matterId}
       initialAttachedDocIds={params?.attachedDocs?.split(",").filter(Boolean) ?? []}
       initialAttachedConfirmation={params?.attached === "1"}
+      initialMode={params?.mode}
     />
   );
 }

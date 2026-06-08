@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Bot, BriefcaseBusiness, FileText, Loader2, Search, ShieldCheck, UploadCloud } from "lucide-react";
+import { AlertTriangle, Bot, BriefcaseBusiness, Eye, FileText, FolderOpen, Loader2, Search, ShieldCheck, UploadCloud } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   getTemplateGallery,
@@ -16,11 +16,12 @@ import {
   type CoreTemplateGalleryItem,
 } from "@/lib/core-client";
 import { extractionLimitedMessage, safeObjectEntries, safeText } from "@/lib/display-safety";
+import { extractionLimitedWarning, normalizeVaultDocument, statusBadgeClasses, type VaultDocumentView } from "@/lib/vault-documents";
 import { createWorkHistoryClient } from "@/lib/work-history-client";
 
 type MattersPageProps = { matters: CoreMatter[]; coreOnline: boolean };
 type TemplatesPageProps = { initialTemplates: CoreTemplateGalleryItem[] };
-type ResearchPageProps = { matters: CoreMatter[] };
+type ResearchPageProps = { matters: CoreMatter[]; initialMatterId?: string; initialAttachedDocIds?: string[]; initialDocumentContext?: boolean };
 type IntakePageProps = { matters: CoreMatter[] };
 type VaultPageProps = { matters: CoreMatter[] };
 
@@ -130,8 +131,8 @@ export function IntakePage({ matters }: IntakePageProps) {
   );
 }
 
-export function ResearchPage({ matters }: ResearchPageProps) {
-  const [matterId, setMatterId] = useState(matters[0]?.matter_id ?? "");
+export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds = [], initialDocumentContext = false }: ResearchPageProps) {
+  const [matterId, setMatterId] = useState(initialMatterId ?? matters[0]?.matter_id ?? "");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CoreRagEnvelope | null>(null);
@@ -140,14 +141,20 @@ export function ResearchPage({ matters }: ResearchPageProps) {
   async function runResearch() {
     setBusy(true);
     setError(null);
+    const activeMatter = matters.find((matter) => matter.matter_id === matterId);
+    const selectedDocuments = (activeMatter?.documents ?? []).filter((document, index) =>
+      initialAttachedDocIds.includes(normalizeVaultDocument(document, index, activeMatter).id),
+    );
     const response = await retrieveRag({
       query,
       matter_id: matterId || undefined,
       top_k: 5,
       matter_context: {
         jurisdiction: "District of Columbia",
-        include_vault_documents: Boolean(matterId),
-        include_private_documents: Boolean(matterId),
+        attached_document_ids: initialAttachedDocIds,
+        attached_documents: selectedDocuments,
+        include_vault_documents: Boolean(matterId || initialAttachedDocIds.length),
+        include_private_documents: Boolean(matterId || initialAttachedDocIds.length),
         source_policy: "official_dc_sources_first",
         workflow_mode: "dc_research",
       },
@@ -204,6 +211,20 @@ export function ResearchPage({ matters }: ResearchPageProps) {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="What are the D.C. requirements..." className="h-11 rounded-lg border border-slate-300 px-3 text-sm" />
             <button onClick={runResearch} disabled={busy || !query.trim()} className="flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}Research</button>
           </div>
+          {initialDocumentContext ? (
+            <div className="mt-4 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3 text-sm text-[#4338CA]">
+              Research opened with {initialAttachedDocIds.length} Vault document{initialAttachedDocIds.length === 1 ? "" : "s"} selected. Public D.C. sources remain available; private retrieval is limited to the selected document context and matter scope.
+            </div>
+          ) : null}
+          {initialAttachedDocIds.length && matters.find((matter) => matter.matter_id === matterId)?.documents?.some((document, index) => {
+            const normalized = normalizeVaultDocument(document, index, matters.find((matter) => matter.matter_id === matterId));
+            return initialAttachedDocIds.includes(normalized.id) && normalized.readiness === "limited";
+          }) ? (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>{extractionLimitedWarning}</span>
+            </div>
+          ) : null}
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           <div className="mt-5 space-y-3">
             {result ? (
@@ -381,18 +402,25 @@ export function VaultPage({ matters }: VaultPageProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CoreDiscoveryEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const vaultDocuments = useMemo(() => matters.flatMap((matter) =>
-    (matter.documents ?? []).map((document, index) => ({
-      id: safeText(document.document_id ?? document.id ?? document.filename ?? `${matter.matter_id}-${index}`, `${matter.matter_id}-${index}`),
-      filename: safeText(document.title ?? document.name ?? document.filename ?? document.document_id, `Document ${index + 1}`),
-      matterName: safeText(matter.name, "Unassigned matter"),
-      type: safeText(document.type ?? document.document_type ?? document.mime_type, "Legal document"),
-      uploaded: safeText(document.uploaded_at ?? document.created_at ?? document.date, "Pending"),
-      facts: typeof document.facts_extracted === "number" ? document.facts_extracted : 0,
-      citations: typeof document.citation_count === "number" ? document.citation_count : 0,
-      status: safeText(document.status ?? document.extraction_status, "Ready"),
-    })),
-  ), [matters]);
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const vaultDocuments = useMemo<VaultDocumentView[]>(
+    () => matters.flatMap((matter) => (matter.documents ?? []).map((document, index) => normalizeVaultDocument(document, index, matter))),
+    [matters],
+  );
+  const filteredDocuments = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return vaultDocuments.filter((document) => {
+      const matchesFilter =
+        filter === "all" ||
+        (filter === "ready" && document.readiness === "searchable") ||
+        (filter === "processing" && ["uploading", "extracting"].includes(document.statusKey)) ||
+        (filter === "limited" && document.readiness === "limited") ||
+        (filter === "matter" && Boolean(document.matterId)) ||
+        (filter === "unassigned" && !document.matterId);
+      return matchesFilter && (!normalizedSearch || document.searchText.includes(normalizedSearch));
+    });
+  }, [filter, search, vaultDocuments]);
 
   async function upload() {
     if (!file) return;
@@ -478,27 +506,102 @@ export function VaultPage({ matters }: VaultPageProps) {
               {vaultDocuments.length} file{vaultDocuments.length === 1 ? "" : "s"}
             </span>
           </div>
+          <div className="mt-5 space-y-3">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search filename, matter, status, upload date, or summary..."
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
+            />
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["all", "All"],
+                ["ready", "Ready"],
+                ["processing", "Processing"],
+                ["limited", "Extraction Limited"],
+                ["matter", "Matter-linked"],
+                ["unassigned", "Unassigned"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    filter === value ? "border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="mt-5 grid gap-3">
-            {vaultDocuments.length ? vaultDocuments.map((document) => (
+            {filteredDocuments.length ? filteredDocuments.map((document) => (
               <article key={document.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-slate-950">{document.filename}</h3>
                     <p className="mt-1 text-xs text-slate-500">{document.type} · {document.matterName}</p>
                   </div>
-                  <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                    {document.status.toLowerCase().includes("fail") ? "Extraction limited" : document.status}
+                  <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClasses(document.statusKey)}`}>
+                    {document.statusLabel}
                   </span>
                 </div>
-                <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
-                  <VaultMetric label="Uploaded" value={document.uploaded} />
-                  <VaultMetric label="Facts" value={document.facts} />
-                  <VaultMetric label="Citations" value={document.citations} />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${document.readiness === "searchable" ? "border-emerald-200 bg-white text-emerald-700" : document.readiness === "limited" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600"}`}>
+                    {document.readinessLabel}
+                  </span>
+                  {document.matterId ? <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">Attached to Matter</span> : null}
+                  {document.readiness === "searchable" ? <span className="rounded-full border border-[#C7D2FE] bg-white px-2.5 py-1 text-xs font-medium text-[#4338CA]">Ready for Mercy</span> : null}
+                </div>
+                {document.readiness === "limited" ? (
+                  <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    <span>{extractionLimitedWarning}</span>
+                  </div>
+                ) : null}
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <VaultMetric label="Last updated" value={document.lastUpdated} />
+                  <VaultMetric label="Size" value={document.sizeLabel} />
+                  <VaultMetric label="Pages" value={document.pageCountLabel ?? "Not available"} />
+                  <VaultMetric label="Citations" value={document.citationCount} />
                 </dl>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    href={(document.matterId ? `/matters/${encodeURIComponent(document.matterId)}?tab=documents` : "/matters") as Route}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Eye className="size-3.5" />
+                    View details
+                  </Link>
+                  <Link
+                    href={`/mercy?${new URLSearchParams({ ...(document.matterId ? { matterId: document.matterId } : {}), attachedDocs: document.id, attached: "1" }).toString()}` as Route}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
+                  >
+                    <Bot className="size-3.5" />
+                    Send to Mercy
+                  </Link>
+                  <Link
+                    href={`/research?${new URLSearchParams({ ...(document.matterId ? { matterId: document.matterId } : {}), attachedDocs: document.id, documentContext: "1" }).toString()}` as Route}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7D2FE] bg-white px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
+                  >
+                    <Search className="size-3.5" />
+                    Use in Research
+                  </Link>
+                  {document.matterId ? (
+                    <Link
+                      href={`/matters/${encodeURIComponent(document.matterId)}` as Route}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <FolderOpen className="size-3.5" />
+                      Open Matter
+                    </Link>
+                  ) : null}
+                </div>
               </article>
             )) : (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
-                No Vault documents yet. Upload a PDF and attach it to a matter to use it in Mercy or research workflows.
+                No Vault documents match this view. Upload a PDF and attach it to a matter to use it in Mercy or research workflows.
               </div>
             )}
           </div>

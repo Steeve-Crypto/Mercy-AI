@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
 import { executeAgent, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
+import { documentId, documentName, extractionLimitedWarning, normalizeVaultDocument } from "@/lib/vault-documents";
 import type { WorkHistoryRecord } from "@/lib/work-history-types";
 import { createWorkHistoryClient, listWorkHistoryClient, sourceTypeForRun, workflowTypeFromMode } from "@/lib/work-history-client";
 
@@ -36,6 +37,7 @@ type AgentXChatPageProps = {
   initialMatterId?: string;
   initialAttachedDocIds?: string[];
   initialAttachedConfirmation?: boolean;
+  initialMode?: string;
 };
 
 function agentOutput(result: CoreAgentEnvelope): string {
@@ -59,16 +61,6 @@ function promptFromTemplate(template?: CoreTemplateGalleryItem): string {
     `Source query: ${template.source_query}`,
     "Draft in a D.C.-specific, attorney-review-required format with citation/source verification placeholders where needed.",
   ].join("\n");
-}
-
-function documentId(document: Record<string, unknown>, index: number): string {
-  const raw = document.document_id ?? document.id ?? document.filename ?? document.title ?? `matter-document-${index + 1}`;
-  return String(raw);
-}
-
-function documentName(document: Record<string, unknown>, index: number): string {
-  const raw = document.title ?? document.name ?? document.filename ?? document.document_id ?? `Document ${index + 1}`;
-  return String(raw);
 }
 
 function workflowLabel(value: string): string {
@@ -97,10 +89,6 @@ function historyContext(record: WorkHistoryRecord): string {
   return scopeLabel ? `${context} / ${scopeLabel}` : context;
 }
 
-function documentStatus(document: Record<string, unknown>): string {
-  return String(document.extraction_status ?? document.status ?? "ready").toLowerCase();
-}
-
 export function AgentXChatPage({
   initialMatters,
   templates,
@@ -109,13 +97,14 @@ export function AgentXChatPage({
   initialMatterId,
   initialAttachedDocIds = [],
   initialAttachedConfirmation = false,
+  initialMode,
 }: AgentXChatPageProps) {
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.template_id === initialTemplateId),
     [initialTemplateId, templates],
   );
   const [matterId, setMatterId] = useState(initialMatterId ?? initialMatters[0]?.matter_id ?? "");
-  const [mode, setMode] = useState(selectedTemplate ? "template_generation" : "drafting");
+  const [mode, setMode] = useState(initialMode ?? (selectedTemplate ? "template_generation" : "drafting"));
   const [useDcSources, setUseDcSources] = useState(true);
   const [useMatterContext, setUseMatterContext] = useState(true);
   const [includeVaultDocuments, setIncludeVaultDocuments] = useState(true);
@@ -140,6 +129,14 @@ export function AgentXChatPage({
       };
     });
   }, [activeMatter?.documents, attachedDocIds]);
+  const activeVaultDocuments = useMemo(
+    () => (activeMatter?.documents ?? []).map((document, index) => normalizeVaultDocument(document, index, activeMatter ?? undefined)),
+    [activeMatter],
+  );
+  const selectedLimitedDocuments = useMemo(
+    () => activeVaultDocuments.filter((document) => attachedDocIds.includes(document.id) && document.readiness === "limited"),
+    [activeVaultDocuments, attachedDocIds],
+  );
   const lastResult = [...messages].reverse().find((message) => message.result)?.result ?? null;
 
   useEffect(() => {
@@ -348,6 +345,11 @@ export function AgentXChatPage({
                     >
                       <FileText className="size-3.5" />
                       {document.name}
+                      {activeMatter ? (
+                        <Link href={`/matters/${encodeURIComponent(activeMatter.matter_id)}?tab=documents`} className="text-[11px] font-semibold text-[#4F46E5] hover:underline">
+                          View in Vault
+                        </Link>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setAttachedDocIds((current) => current.filter((id) => id !== document.id))}
@@ -358,6 +360,11 @@ export function AgentXChatPage({
                     </span>
                   ))}
                 </div>
+                {selectedLimitedDocuments.length ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                    {extractionLimitedWarning}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -408,29 +415,28 @@ export function AgentXChatPage({
                         <input type="checkbox" checked={includeVaultDocuments} onChange={(event) => setIncludeVaultDocuments(event.target.checked)} />
                         Include vault documents
                       </label>
-                      {activeMatter?.documents?.length ? (
+                      {activeVaultDocuments.length ? (
                         <div className="mt-3 border-t border-slate-100 pt-3">
-                          <p className="font-semibold text-slate-700">Vault documents</p>
+                          <p className="font-semibold text-slate-700">Ready Vault documents</p>
                           <div className="mt-2 max-h-36 space-y-2 overflow-auto pr-1">
-                            {activeMatter.documents.map((document, index) => {
-                              const id = documentId(document, index);
-                              const status = documentStatus(document);
-                              const ready = status === "ready";
+                            {activeVaultDocuments.map((document) => {
+                              const ready = document.readiness === "searchable";
                               return (
-                                <label key={id} className="flex items-start gap-2">
+                                <label key={document.id} className="flex items-start gap-2">
                                   <input
                                     type="checkbox"
-                                    disabled={!ready}
-                                    checked={attachedDocIds.includes(id)}
+                                    checked={attachedDocIds.includes(document.id)}
                                     onChange={(event) =>
                                       setAttachedDocIds((current) =>
-                                        event.target.checked ? [...new Set([...current, id])] : current.filter((item) => item !== id),
+                                        event.target.checked ? [...new Set([...current, document.id])] : current.filter((item) => item !== document.id),
                                       )
                                     }
                                   />
                                   <span>
-                                    <span className="block font-medium text-slate-700">{documentName(document, index)}</span>
-                                    {!ready ? <span className="block text-[11px] text-amber-700">Extraction limited; not retrieval-ready.</span> : null}
+                                    <span className="block font-medium text-slate-700">{document.filename}</span>
+                                    <span className={`block text-[11px] ${ready ? "text-emerald-700" : document.readiness === "limited" ? "text-amber-700" : "text-slate-500"}`}>
+                                      {ready ? "Ready for Mercy / searchable" : document.readiness === "limited" ? "Extraction Limited / warning required" : "Processing / not searchable"}
+                                    </span>
                                   </span>
                                 </label>
                               );

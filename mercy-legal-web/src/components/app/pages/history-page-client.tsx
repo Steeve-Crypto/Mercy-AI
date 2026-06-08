@@ -7,6 +7,7 @@ import { BookOpenText, Clock3, FileText, MessageSquareText, Plus, Search, Shield
 import type { WorkHistoryRecord, WorkHistoryWorkflowType } from "@/lib/work-history-types";
 import { setWorkHistorySavedClient } from "@/lib/work-history-client";
 import { formatTimestamp, safeText, titleCase } from "@/lib/display-safety";
+import { sourceScopeLabel as vaultSourceScopeLabel } from "@/lib/vault-documents";
 
 type HistoryPageClientProps = {
   initialRecords: WorkHistoryRecord[];
@@ -46,11 +47,7 @@ function contextLabel(record: WorkHistoryRecord) {
 }
 
 function sourceScopeLabel(record: WorkHistoryRecord) {
-  const scope = record.reliabilitySnapshot?.source_scope;
-  if (scope === "mixed") return "Mixed sources";
-  if (scope === "tenant_documents") return "Tenant documents";
-  if (scope === "public_dc_sources") return "D.C. sources";
-  return null;
+  return vaultSourceScopeLabel(record.reliabilitySnapshot?.source_scope ?? (record.reliabilitySnapshot?.retrieval as Record<string, unknown> | undefined)?.source_scope);
 }
 
 function recordSummary(record: WorkHistoryRecord) {
@@ -58,13 +55,29 @@ function recordSummary(record: WorkHistoryRecord) {
 }
 
 function reopenHref(record: WorkHistoryRecord): Route {
-  if (record.matterId) return `/mercy?matterId=${encodeURIComponent(record.matterId)}` as Route;
-  return "/mercy" as Route;
+  const params = new URLSearchParams();
+  if (record.matterId) params.set("matterId", record.matterId);
+  if (record.documentId) {
+    params.set("attachedDocs", record.documentId);
+    params.set("attached", "1");
+  }
+  const snapshotMode = record.reliabilitySnapshot?.workflow_mode ?? (record.reliabilitySnapshot?.route as Record<string, unknown> | undefined)?.selected_capability;
+  if (typeof snapshotMode === "string" && snapshotMode.trim()) params.set("mode", snapshotMode);
+  const suffix = params.toString();
+  return (suffix ? `/mercy?${suffix}` : "/mercy") as Route;
 }
 
 function matterHref(record: WorkHistoryRecord): Route | null {
   if (!record.matterId) return null;
   return `/matters/${encodeURIComponent(record.matterId)}` as Route;
+}
+
+function contextNames(record: WorkHistoryRecord) {
+  const refs = Array.isArray(record.reliabilitySnapshot?.source_refs) ? record.reliabilitySnapshot.source_refs : [];
+  const documentRef = refs.find((item) => typeof item === "object" && item !== null && "document_id" in item) as Record<string, unknown> | undefined;
+  const documentName = safeText(documentRef?.citation_label ?? documentRef?.document_id ?? record.documentId, "");
+  const matterName = safeText((record.reliabilitySnapshot?.matter_name as string | undefined) ?? record.matterId, "");
+  return [matterName, documentName].filter(Boolean).join(" / ");
 }
 
 function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onSavedChange: (record: WorkHistoryRecord) => void }) {
@@ -99,6 +112,7 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
             ) : null}
           </div>
           <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-slate-950">{record.title}</h3>
+          {contextNames(record) ? <p className="mt-1 truncate text-xs text-slate-500">{contextNames(record)}</p> : null}
         </div>
         <button
           type="button"
@@ -131,10 +145,7 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
       </dl>
       <div className="mt-4 flex flex-wrap gap-2">
         <Link href={reopenHref(record)} className="rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]">
-          Reopen
-        </Link>
-        <Link href={reopenHref(record)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-          Continue
+          Re-open in Mercy
         </Link>
         {matterHref(record) ? (
           <Link href={matterHref(record)!} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -173,48 +184,55 @@ function HistorySectionCard({ section, onSavedChange }: { section: HistorySectio
 
 export function HistoryPageClient({ initialRecords, configured, initialError }: HistoryPageClientProps) {
   const [records, setRecords] = useState(initialRecords);
+  const [activeTab, setActiveTab] = useState<"all" | "recent" | "matter" | "research">("all");
 
   const sections = useMemo<HistorySection[]>(() => {
     const notArchived = records.filter((record) => record.status !== "archived");
+    const visibleRecords = notArchived.filter((record) => {
+      if (activeTab === "recent") return true;
+      if (activeTab === "matter") return Boolean(record.matterId);
+      if (activeTab === "research") return record.workflowType === "research";
+      return true;
+    });
     return [
       {
         title: "Recent work",
         description: "Latest Mercy runs, research, review, and citation checks.",
         icon: MessageSquareText,
-        records: notArchived,
+        records: activeTab === "recent" ? visibleRecords.slice(0, 12) : visibleRecords,
       },
       {
         title: "Matter-linked work",
         description: "Work tied to a selected matter.",
         icon: FileText,
-        records: notArchived.filter((record) => Boolean(record.matterId)),
+        records: visibleRecords.filter((record) => Boolean(record.matterId)),
       },
       {
         title: "Drafting history",
         description: "Drafting, template, review, and document-review work.",
         icon: FileText,
-        records: notArchived.filter((record) => ["drafting", "template", "review", "document_review"].includes(record.workflowType)),
+        records: visibleRecords.filter((record) => ["drafting", "template", "review", "document_review"].includes(record.workflowType)),
       },
       {
         title: "Research history",
         description: "D.C. source research and matter-linked retrieval runs.",
         icon: Search,
-        records: notArchived.filter((record) => record.workflowType === "research"),
+        records: visibleRecords.filter((record) => record.workflowType === "research"),
       },
       {
         title: "Citation checks",
         description: "Citation/source checking work and reliability review context.",
         icon: ShieldCheck,
-        records: notArchived.filter((record) => record.workflowType === "citation_check"),
+        records: visibleRecords.filter((record) => record.workflowType === "citation_check"),
       },
       {
         title: "Saved outputs",
         description: "Work product marked for follow-up.",
         icon: BookOpenText,
-        records: notArchived.filter((record) => record.status === "saved" || Boolean(record.savedAt)),
+        records: visibleRecords.filter((record) => record.status === "saved" || Boolean(record.savedAt)),
       },
     ];
-  }, [records]);
+  }, [activeTab, records]);
 
   function updateRecord(nextRecord: WorkHistoryRecord) {
     setRecords((current) => current.map((record) => (record.id === nextRecord.id ? nextRecord : record)));
@@ -257,6 +275,25 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
         {initialError ? (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{initialError}</p>
         ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {[
+            ["all", "All"],
+            ["recent", "Recent"],
+            ["matter", "By Matter"],
+            ["research", "Research"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveTab(value as typeof activeTab)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                activeTab === value ? "border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </section>
 
       {!records.length ? (
