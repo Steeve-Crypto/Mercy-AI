@@ -8,8 +8,14 @@ import {
   test,
   uniqueName,
 } from "./helpers";
+import type { Page } from "@playwright/test";
 
 test.describe.configure({ mode: "parallel" });
+
+async function runMercyChat(page: Page, prompt: string) {
+  await page.getByPlaceholder(/Ask (Agent X|Mercy)/i).fill(prompt);
+  await page.getByRole("button", { name: /Run Mercy|Send/i }).click();
+}
 
 test("chat returns an Agent X response with the full Reliability Panel", async ({ page, request }, testInfo) => {
   await installMercySession(page);
@@ -17,10 +23,10 @@ test("chat returns an Agent X response with the full Reliability Panel", async (
   const matter = await seedMatter(request, uniqueName("D.C. indemnity analysis", testInfo));
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matter.matter_id)}`);
-  await page.getByPlaceholder(/Ask Agent X/i).fill(
+  await runMercyChat(
+    page,
     "Analyze enforceability risks under District of Columbia law for a commercial lease indemnity clause that shifts all negligence liability to a small business tenant. Cite only verified D.C. authority and flag attorney review issues.",
   );
-  await page.getByRole("button", { name: /Send/i }).click();
 
   await expect(page.getByText(/Agent X/i).last()).toBeVisible({ timeout: 60_000 });
   await expectReliabilityPanel(page);
@@ -43,8 +49,7 @@ test("missing citations show a reliability warning", async ({ page, request }, t
   const matter = await seedMatter(request, uniqueName("D.C. missing citation warning", testInfo));
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matter.matter_id)}`);
-  await page.getByPlaceholder(/Ask Agent X/i).fill("Assess a D.C. wage claim but identify missing citation support.");
-  await page.getByRole("button", { name: /Send/i }).click();
+  await runMercyChat(page, "Assess a D.C. wage claim but identify missing citation support.");
 
   await expectReliabilityPanel(page);
   await expect(page.getByTestId("guardrail-status")).toContainText(/warn/i);
@@ -66,8 +71,7 @@ test("low confidence response requires attorney review", async ({ page, request 
   const matter = await seedMatter(request, uniqueName("D.C. low confidence warning", testInfo));
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matter.matter_id)}`);
-  await page.getByPlaceholder(/Ask Agent X/i).fill("Analyze an ambiguous D.C. ethics issue with limited facts.");
-  await page.getByRole("button", { name: /Send/i }).click();
+  await runMercyChat(page, "Analyze an ambiguous D.C. ethics issue with limited facts.");
 
   await expectReliabilityPanel(page);
   await expect(page.getByTestId("agent-confidence")).toContainText(/41%/);
@@ -91,8 +95,7 @@ test("unsupported legal claim triggers guardrail and grounding warning", async (
   const matter = await seedMatter(request, uniqueName("D.C. unsupported claim warning", testInfo));
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matter.matter_id)}`);
-  await page.getByPlaceholder(/Ask Agent X/i).fill("Assert an unsupported D.C. legal rule without citations.");
-  await page.getByRole("button", { name: /Send/i }).click();
+  await runMercyChat(page, "Assert an unsupported D.C. legal rule without citations.");
 
   await expectReliabilityPanel(page);
   await expect(page.getByTestId("guardrail-status")).toContainText(/block/i);
@@ -122,8 +125,7 @@ test("missing D.C. grounding remains visible in the Reliability Panel", async ({
   const matter = await seedMatter(request, uniqueName("D.C. grounding missing warning", testInfo));
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matter.matter_id)}`);
-  await page.getByPlaceholder(/Ask Agent X/i).fill("Review D.C. citation grounding for a consumer protection demand.");
-  await page.getByRole("button", { name: /Send/i }).click();
+  await runMercyChat(page, "Review D.C. citation grounding for a consumer protection demand.");
 
   await expectReliabilityPanel(page);
   await expect(page.getByTestId("dc-grounding")).toContainText(/Source verification required before use/i);

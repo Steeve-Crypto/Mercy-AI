@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { test as base, expect, type APIRequestContext, type Page, type Route, type TestInfo } from "@playwright/test";
 import { Buffer } from "node:buffer";
 
 export { expect };
@@ -234,18 +234,20 @@ export function agentEnvelopeFixture(options: AgentFixtureOptions = {}) {
 }
 
 export async function mockAgentResponse(page: Page, fixture: ReturnType<typeof agentEnvelopeFixture>): Promise<void> {
-  await page.route("**/v1/agent/execute", async (route) => {
+  const handler = async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(fixture),
     });
-  });
+  };
+  await page.route("**/v1/agent/execute", handler);
+  await page.route("**/api/core/v1/agent/execute", handler);
 }
 
 export async function mockFullMatterIntake(page: Page, matterName: string, matterId?: string): Promise<string> {
   const resolvedMatterId = matterId ?? `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await page.route("**/v1/matter/intake/full", async (route) => {
+  const handler = async (route: Route) => {
     const fixture = agentEnvelopeFixture();
     await route.fulfill({
       status: 200,
@@ -312,7 +314,9 @@ export async function mockFullMatterIntake(page: Page, matterName: string, matte
         next_steps: ["Open matter detail"],
       }),
     });
-  });
+  };
+  await page.route("**/v1/matter/intake/full", handler);
+  await page.route("**/api/core/v1/matter/intake/full", handler);
   return resolvedMatterId;
 }
 

@@ -4,6 +4,56 @@ This checklist is the go/no-go gate before inviting real D.C. attorneys or small
 
 Current posture: **not ready for external attorney beta until all Must Pass items are complete**.
 
+## Current Implementation State - 2026-06-18
+
+Mercy is a local/beta-candidate legal workspace with the FastAPI core, tenant-scoped matter/document APIs, Mercy chat, Research, Vault, History, templates, beta status, monitoring, and Office add-in surfaces substantially implemented. The product is not approved for real client-confidential external beta until the remaining blockers below are cleared.
+
+Verified in this update:
+
+- Core `/health` returns `200` locally when the FastAPI backend is running.
+- Browser-side Core calls now route through the Next.js `/api/core/*` proxy; server-side calls continue to use the configured backend URL.
+- Vault upload remains wired to `/v1/workspace/discovery/upload`.
+- Vault document refresh, preview, and delete actions use existing backend document endpoints under `/v1/matters/{matter_id}/documents`.
+- Mercy and Research handoffs preserve durable document IDs through route query context.
+- Web TypeScript typecheck passes.
+- `main.py` and `scripts/full-smoke-test.py` compile with `py -3 -m py_compile`.
+- One narrowed CI Playwright reliability test passed after updating stale chat selectors and proxy-aware route mocks; the local Windows npm/Playwright process did not exit cleanly before the command timeout.
+
+Implemented but not fully manually verified in-browser:
+
+- Upload document to Vault, refresh metadata, and see the document library update.
+- Preview an uploaded matter document from Vault.
+- Delete a matter-attached document from Vault.
+- Send a Vault document to Mercy and use a Vault document in Research.
+- Extraction-limited warning path in Vault-to-Mercy use.
+- Full GitHub Actions run after the CI selector/proxy test fixes.
+
+Current blockers:
+
+- Full CI should be re-run on GitHub to confirm the complete Playwright and Office smoke workflow passes in Linux.
+- Local Windows `npm.ps1` can resolve to a broken roaming npm prefix; use `npm.cmd` locally until the Node/npm install is repaired.
+- External beta still needs final auth/session activation hardening, beta entitlement/payment state verification, and full manual smoke.
+- Real-client use remains blocked until data retention, deletion, support, and legal documentation are tenant-approved.
+
+Vault document type support:
+
+- Current support is PDF-only. The frontend upload control accepts `application/pdf`, and the backend rejects non-`.pdf` filenames.
+- Scanned PDFs may be stored, but reliable OCR is not implemented as a first-class extraction path; extraction-limited states require attorney review.
+- DOCX, TXT, RTF, email attachments, and OCR are future features, not current beta promises.
+
+Future feature backlog:
+
+- DOCX, TXT, and RTF Vault ingestion.
+- Scanned PDF OCR with explicit confidence and extraction-limit reporting.
+- Outlook/email attachment ingestion.
+- Richer Vault summaries, key facts, and safe preview snippets.
+- Advanced document search and batch document actions.
+- First-class `source_scope` and History schema if current metadata surfacing remains too implicit.
+- Office document-context alignment with the same Vault document IDs and extraction warnings.
+- Admin/manual provisioning completion and verification.
+- Payment/session activation hardening.
+- Final beta smoke covering upload, attach, Mercy, Research, History reopen, wrong-tenant blocking, and Office add-in context.
+
 ## 1. Product Scope
 
 - [ ] Mercy is clearly positioned as a D.C.-native legal AI workspace for solo attorneys and small firms.

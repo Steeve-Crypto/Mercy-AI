@@ -564,7 +564,7 @@ export type CoreMicrosoftIdentityMapping = {
   effective_scope_type: "firm" | "solo" | string;
   effective_scope_id: string;
   roles: string[];
-  status: "active" | "disabled" | "pending" | string;
+  status: "pending" | "trialing" | "active" | "suspended" | "canceled" | "disabled" | string;
   created_at?: string | null;
   updated_at?: string | null;
   last_login_at?: string | null;
@@ -664,8 +664,7 @@ function browserAuthContext(): CoreAuthContext {
 }
 
 function coreRequestUrl(path: string): string {
-  const browser = typeof window !== "undefined";
-  if (browser && !localDevAuthDefaultsEnabled()) {
+  if (typeof window !== "undefined") {
     return `/api/core${path}`;
   }
   return `${MERCY_CORE_API_URL}${path}`;
@@ -826,7 +825,7 @@ export async function upsertMicrosoftIdentityMapping(payload: {
   tenant_id: string;
   firm_id?: string;
   roles: string[];
-  status: "active" | "disabled" | "pending";
+  status: "pending" | "trialing" | "active" | "suspended" | "canceled" | "disabled";
   attorney_seat_limit?: number;
 }, auth?: CoreAuthContext): Promise<CoreClientResult<CoreMicrosoftIdentityMappingEnvelope>> {
   return coreFetch<CoreMicrosoftIdentityMappingEnvelope>(
@@ -845,7 +844,7 @@ export async function upsertMicrosoftIdentityMapping(payload: {
 export async function updateMicrosoftIdentityMappingStatus(
   microsoftTenantId: string,
   microsoftObjectId: string,
-  status: "active" | "disabled" | "pending",
+  status: "pending" | "trialing" | "active" | "suspended" | "canceled" | "disabled",
   auth?: CoreAuthContext,
 ): Promise<CoreClientResult<CoreMicrosoftIdentityMappingEnvelope>> {
   return coreFetch<CoreMicrosoftIdentityMappingEnvelope>(

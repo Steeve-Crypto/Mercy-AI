@@ -7,11 +7,15 @@ import { AlertTriangle, Bot, BriefcaseBusiness, Eye, FileText, FolderOpen, Loade
 import type { LucideIcon } from "lucide-react";
 import {
   getTemplateGallery,
+  deleteMatterDocument,
+  listMatterDocuments,
+  previewMatterDocument,
   retrieveRag,
   submitFullMatterIntake,
   uploadDiscoveryDocument,
   type CoreDiscoveryEnvelope,
   type CoreMatter,
+  type CoreMatterDocument,
   type CoreRagEnvelope,
   type CoreTemplateGalleryItem,
 } from "@/lib/core-client";
@@ -404,9 +408,15 @@ export function VaultPage({ matters }: VaultPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [documentOverrides, setDocumentOverrides] = useState<Record<string, CoreMatterDocument[]>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const vaultDocuments = useMemo<VaultDocumentView[]>(
-    () => matters.flatMap((matter) => (matter.documents ?? []).map((document, index) => normalizeVaultDocument(document, index, matter))),
-    [matters],
+    () =>
+      matters.flatMap((matter) =>
+        (documentOverrides[matter.matter_id] ?? matter.documents ?? []).map((document, index) => normalizeVaultDocument(document, index, matter)),
+      ),
+    [documentOverrides, matters],
   );
   const filteredDocuments = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -433,6 +443,58 @@ export function VaultPage({ matters }: VaultPageProps) {
       return;
     }
     setResult(response.data);
+    if (matterId) {
+      await refreshMatterDocuments(matterId);
+    }
+  }
+
+  async function refreshMatterDocuments(targetMatterId: string) {
+    setActionBusy(`refresh:${targetMatterId}`);
+    setActionError(null);
+    const response = await listMatterDocuments(targetMatterId);
+    setActionBusy(null);
+    if (!response.ok || !response.data) {
+      setActionError(response.error ?? "Could not refresh Vault document metadata.");
+      return null;
+    }
+    const documents = response.data.documents;
+    setDocumentOverrides((current) => ({ ...current, [targetMatterId]: documents }));
+    return documents;
+  }
+
+  async function previewDocument(document: VaultDocumentView) {
+    if (!document.matterId) {
+      setActionError("Attach this document to a matter before previewing it from Vault.");
+      return;
+    }
+    setActionBusy(`preview:${document.id}`);
+    setActionError(null);
+    const response = await previewMatterDocument(document.matterId, document.id);
+    setActionBusy(null);
+    if (!response.ok || !response.data) {
+      setActionError(response.error ?? "Document preview is unavailable.");
+      return;
+    }
+    window.open(response.data, "_blank", "noopener,noreferrer");
+  }
+
+  async function deleteDocument(document: VaultDocumentView) {
+    if (!document.matterId) {
+      setActionError("Only matter-attached documents can be deleted from Vault.");
+      return;
+    }
+    const confirmed = window.confirm(`Delete ${document.filename} from this matter?`);
+    if (!confirmed) return;
+    setActionBusy(`delete:${document.id}`);
+    setActionError(null);
+    const response = await deleteMatterDocument(document.matterId, document.id);
+    setActionBusy(null);
+    if (!response.ok || !response.data) {
+      setActionError(response.error ?? "Document delete failed.");
+      return;
+    }
+    const documents = response.data.documents;
+    setDocumentOverrides((current) => ({ ...current, [document.matterId!]: documents }));
   }
 
   const factEntries = useMemo(() => safeObjectEntries(result?.facts), [result]);
@@ -532,6 +594,17 @@ export function VaultPage({ matters }: VaultPageProps) {
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 {matterLinkedCount} matter-linked
               </span>
+              {matterId ? (
+                <button
+                  type="button"
+                  onClick={() => void refreshMatterDocuments(matterId)}
+                  disabled={actionBusy === `refresh:${matterId}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#C7D2FE] bg-white px-3 py-1 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
+                >
+                  {actionBusy === `refresh:${matterId}` ? <Loader2 className="size-3 animate-spin" /> : null}
+                  Refresh selected matter
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="mt-5 space-y-3">
@@ -562,6 +635,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                 </button>
               ))}
             </div>
+            {actionError ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{actionError}</p> : null}
           </div>
           <div className="mt-5 rounded-xl border border-slate-200 bg-white">
             <div className="hidden grid-cols-[minmax(260px,1.5fr)_220px_180px_180px] gap-4 rounded-t-xl bg-slate-50 px-4 py-3 text-xs font-semibold uppercase text-slate-500 lg:grid">
@@ -602,13 +676,15 @@ export function VaultPage({ matters }: VaultPageProps) {
                   <VaultMetric label="Citations" value={document.citationCount} />
                 </dl>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    href={(document.matterId ? `/matters/${encodeURIComponent(document.matterId)}?tab=documents` : "/matters") as Route}
+                  <button
+                    type="button"
+                    onClick={() => void previewDocument(document)}
+                    disabled={actionBusy === `preview:${document.id}`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
-                    <Eye className="size-3.5" />
+                    {actionBusy === `preview:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
                     Preview
-                  </Link>
+                  </button>
                   <Link
                     href={`/mercy?${new URLSearchParams({ ...(document.matterId ? { matterId: document.matterId } : {}), attachedDocs: document.id, attached: "1" }).toString()}` as Route}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
@@ -640,6 +716,17 @@ export function VaultPage({ matters }: VaultPageProps) {
                       Attach to Matter
                     </Link>
                   )}
+                  {document.matterId ? (
+                    <button
+                      type="button"
+                      onClick={() => void deleteDocument(document)}
+                      disabled={actionBusy === `delete:${document.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                    >
+                      {actionBusy === `delete:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                      Delete
+                    </button>
+                  ) : null}
                 </div>
               </article>
             )) : (
