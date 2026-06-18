@@ -111,6 +111,7 @@ GET  /v1/workspace/clerk-os
 ```
 
 These endpoints preserve compatibility with the brownfield discovery and drafting workflows.
+`POST /v1/workspace/discovery/upload` currently accepts PDF uploads only; non-PDF filenames are rejected. DOCX, TXT, and OCR ingestion remain future Vault hardening items.
 
 ## Response Envelope
 
@@ -125,4 +126,3 @@ Legal outputs should preserve:
 - `matter_context_snapshot`
 - `audit_timestamp`
 - `human_review_required`
-
