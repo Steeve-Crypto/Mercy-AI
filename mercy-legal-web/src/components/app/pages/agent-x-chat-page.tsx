@@ -99,6 +99,7 @@ export function AgentXChatPage({
   initialAttachedConfirmation = false,
   initialMode,
 }: AgentXChatPageProps) {
+  const [hydrated, setHydrated] = useState(false);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.template_id === initialTemplateId),
     [initialTemplateId, templates],
@@ -108,6 +109,10 @@ export function AgentXChatPage({
   const [useDcSources, setUseDcSources] = useState(true);
   const [useMatterContext, setUseMatterContext] = useState(true);
   const [includeVaultDocuments, setIncludeVaultDocuments] = useState(true);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const [strictDcJurisdiction, setStrictDcJurisdiction] = useState(true);
   const [attachedDocIds, setAttachedDocIds] = useState(initialAttachedDocIds);
   const [showAttachConfirmation, setShowAttachConfirmation] = useState(initialAttachedConfirmation && initialAttachedDocIds.length > 0);
@@ -272,7 +277,7 @@ export function AgentXChatPage({
   }
 
   return (
-    <div className="grid min-h-screen gap-5 bg-[#F8FAFC] p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-6">
+    <div data-testid="mercy-workbench-ready" data-ready={hydrated} className="grid min-h-screen gap-5 bg-[#F8FAFC] p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-6">
       <main className="flex min-h-[calc(100vh-2rem)] min-w-0 flex-col">
         <section className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
           <header className="shrink-0 pb-4 text-center">

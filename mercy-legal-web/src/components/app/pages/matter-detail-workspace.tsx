@@ -183,6 +183,7 @@ function historyActivity(records: WorkHistoryRecord[]) {
 }
 
 export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWorkspaceProps) {
+  const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<MatterTab>("overview");
   const [query, setQuery] = useState("");
   const [researchBusy, setResearchBusy] = useState(false);
@@ -194,6 +195,10 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const [documents, setDocuments] = useState<MatterDocument[]>(() => normalizeMatterDocuments(matter.documents ?? []));
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -408,7 +413,7 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   }
 
   return (
-    <div className="p-5 lg:p-8">
+    <div data-testid="matter-workspace-ready" data-ready={hydrated} className="p-5 lg:p-8">
       <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>

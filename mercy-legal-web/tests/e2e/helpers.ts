@@ -46,6 +46,14 @@ export async function installMercySession(page: Page): Promise<void> {
   );
 }
 
+export async function waitForAppReady(page: Page, testId: string, timeout = 45_000): Promise<void> {
+  await page.waitForLoadState("domcontentloaded");
+  if (/\/(sign-in|sign-up)(?:\?|$)/.test(page.url())) {
+    throw new Error(`Protected app route redirected to authentication: ${page.url()}`);
+  }
+  await page.locator(`[data-testid="${testId}"][data-ready="true"]`).waitFor({ state: "visible", timeout });
+}
+
 export async function seedMatter(request: APIRequestContext, name = uniqueName("D.C. lease review")) {
   const response = await request.post(`${coreUrl}/v1/matters`, {
     headers: { ...authHeaders(), "Content-Type": "application/json" },

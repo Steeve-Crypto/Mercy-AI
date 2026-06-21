@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { ReactNode } from "react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CheckCircle2, Loader2, Scale, UserRound } from "lucide-react";
 import { submitFullMatterIntake, type CoreFullMatterIntakeEnvelope } from "@/lib/core-client";
 
@@ -70,6 +70,7 @@ function deadlineRecords(value: string): Array<Record<string, string>> {
 
 export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<IntakeState>(initialState);
   const [busy, setBusy] = useState(false);
@@ -79,6 +80,10 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
   const currentValidation = useMemo(() => validateStep(step, form), [form, step]);
   const matterDetailHref = created?.matter_id ? (`/matters/${encodeURIComponent(created.matter_id)}` as Route) : null;
   const chatHref = created?.matter_id ? (`/chat?matterId=${encodeURIComponent(created.matter_id)}` as Route) : null;
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   function update<K extends keyof IntakeState>(key: K, value: IntakeState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -176,7 +181,7 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
   }
 
   return (
-      <div className="p-5 lg:p-8">
+      <div data-testid="intake-workspace-ready" data-ready={hydrated} className="p-5 lg:p-8">
         <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
