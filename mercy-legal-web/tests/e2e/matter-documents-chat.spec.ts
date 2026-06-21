@@ -9,20 +9,20 @@ test("matter documents tab uploads a PDF and attaches it to chat", async ({ page
   await seedMatterDocument(request, matter, pdf.name);
 
   await page.goto(`/matters/${matter.matter_id}`);
-  await page.getByRole("button", { name: /Documents/i }).click();
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByTestId("matter-document-card").filter({ hasText: pdf.name })).toBeVisible({
     timeout: 45_000,
   });
   const attachHref = await page
     .getByTestId("matter-document-card")
     .filter({ hasText: pdf.name })
-    .getByRole("link", { name: /Attach/i })
+    .getByRole("link", { name: /Use in Mercy/i })
     .getAttribute("href");
   if (!attachHref) throw new Error("Attach link did not expose an href");
   await page.goto(attachHref);
 
   await expect(page).toHaveURL(/\/chat\?matterId=.*attachedDocs=.*attached=1/);
-  await expect(page.getByText(/Attached vault documents/i)).toBeVisible();
+  await expect(page.getByText(/Document attached to Agent X/i)).toBeVisible();
   await expect(page.getByText(pdf.name)).toBeVisible();
 });
 
@@ -34,13 +34,13 @@ test("matter document context is isolated between matters", async ({ page, reque
   await seedMatterDocument(request, matterA, pdf.name);
 
   await page.goto(`/matters/${matterA.matter_id}`);
-  await page.getByRole("button", { name: /Documents/i }).click();
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByTestId("matter-document-card").filter({ hasText: pdf.name })).toBeVisible({
     timeout: 45_000,
   });
 
   await page.goto(`/matters/${matterB.matter_id}`);
-  await page.getByRole("button", { name: /Documents/i }).click();
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
   await expect(page.getByText(pdf.name)).toHaveCount(0);
 
   await page.goto(`/chat?matterId=${encodeURIComponent(matterB.matter_id)}`);

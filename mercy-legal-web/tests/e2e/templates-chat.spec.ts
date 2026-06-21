@@ -12,7 +12,7 @@ test("templates gallery Use Template opens chat with a prefilled D.C. legal prom
   await page.goto(href);
 
   await expect(page).toHaveURL(/\/chat\?templateId=/);
-  const composer = page.getByPlaceholder(/Ask Agent X/i);
+  const composer = page.getByPlaceholder(/Ask Mercy/i);
   await expect(composer).toBeVisible();
   await expect(composer).toHaveValue(/Use the ".+" template with Agent X\./);
 });

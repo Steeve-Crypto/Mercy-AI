@@ -7,9 +7,9 @@ test("dashboard loads and shows attorney quick actions", async ({ page }) => {
   await page.goto("/dashboard");
 
   await expect(page.getByRole("heading", { name: /Mercy command center/i })).toBeVisible();
-  await expect(page.getByText(/Quick start/i)).toBeVisible();
-  await expect(page.getByRole("main").getByRole("link", { name: /Ask Agent X/i })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("link", { name: /New Intake/i })).toBeVisible();
+  await expect(page.getByText(/Next best actions/i)).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: /Assistant/i })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: /New Matter/i })).toBeVisible();
   await expect(page.getByRole("main").getByRole("link", { name: /Research D\.C\. law/i })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("link", { name: /Use a template/i })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: /Open Matters/i })).toBeVisible();
 });

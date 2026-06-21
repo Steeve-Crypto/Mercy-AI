@@ -53,7 +53,7 @@ test("missing citations show a reliability warning", async ({ page, request }, t
 
   await expectReliabilityPanel(page);
   await expect(page.getByTestId("guardrail-status")).toContainText(/warn/i);
-  await expect(page.getByTestId("citations-panel")).toContainText(/No citations returned yet/i);
+  await expect(page.getByTestId("citations-panel")).toContainText(/did not retrieve source support/i);
 });
 
 test("low confidence response requires attorney review", async ({ page, request }, testInfo) => {
