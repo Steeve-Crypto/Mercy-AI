@@ -57,21 +57,21 @@ export function AdminHome() {
 
 type ProvisioningForm = {
   accountType: "solo" | "firm";
-  microsoftTenantId: string;
-  microsoftObjectId: string;
+  workspaceName: string;
+  firmName: string;
   email: string;
   mercyUserId: string;
   tenantId: string;
   firmId: string;
   roles: string;
-  status: "active" | "pending" | "disabled";
+  status: "pending" | "trialing" | "active" | "suspended" | "canceled";
   attorneySeatLimit: string;
 };
 
 const emptyProvisioningForm: ProvisioningForm = {
   accountType: "solo",
-  microsoftTenantId: "",
-  microsoftObjectId: "",
+  workspaceName: "",
+  firmName: "",
   email: "",
   mercyUserId: "",
   tenantId: "",
@@ -80,6 +80,21 @@ const emptyProvisioningForm: ProvisioningForm = {
   status: "pending",
   attorneySeatLimit: "1",
 };
+
+function slug(value: string, fallback: string) {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return normalized || fallback;
+}
+
+function pendingUserId(email: string) {
+  return email.trim() ? `pending:${email.trim().toLowerCase()}` : "";
+}
+
+function statusBadgeClass(status: string) {
+  if (status === "active" || status === "trialing") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "pending") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-rose-200 bg-rose-50 text-rose-700";
+}
 
 export function ProvisioningAdminPage() {
   const [mappings, setMappings] = useState<CoreMicrosoftIdentityMapping[]>([]);
@@ -94,6 +109,11 @@ export function ProvisioningAdminPage() {
     if (Number.isNaN(parsed)) return firmMode ? 2 : 1;
     return parsed;
   }, [firmMode, form.attorneySeatLimit]);
+  const tenantId = form.tenantId.trim() || `tenant-${slug(form.workspaceName || form.email, "beta-workspace")}`;
+  const firmId = firmMode ? form.firmId.trim() || `firm-${slug(form.firmName || form.workspaceName || form.email, "beta-firm")}` : "";
+  const mercyUserId = form.mercyUserId.trim() || pendingUserId(form.email);
+  const microsoftTenantId = firmMode ? firmId : tenantId;
+  const microsoftObjectId = mercyUserId;
 
   async function refresh() {
     const result = await listMicrosoftIdentityMappings();
@@ -115,6 +135,7 @@ export function ProvisioningAdminPage() {
       if (key === "accountType") {
         next.attorneySeatLimit = value === "firm" ? "2" : "1";
         if (value === "solo") next.firmId = "";
+        if (value === "solo") next.firmName = "";
       }
       return next;
     });
@@ -125,12 +146,12 @@ export function ProvisioningAdminPage() {
     setError(null);
     setNotice(null);
     const result = await upsertMicrosoftIdentityMapping({
-      microsoft_tenant_id: form.microsoftTenantId.trim(),
-      microsoft_object_id: form.microsoftObjectId.trim(),
+      microsoft_tenant_id: microsoftTenantId,
+      microsoft_object_id: microsoftObjectId,
       email: form.email.trim() || undefined,
-      mercy_user_id: form.mercyUserId.trim(),
-      tenant_id: form.tenantId.trim(),
-      firm_id: firmMode ? form.firmId.trim() : undefined,
+      mercy_user_id: mercyUserId,
+      tenant_id: tenantId,
+      firm_id: firmMode ? firmId : undefined,
       roles: form.roles.split(",").map((role) => role.trim()).filter(Boolean),
       status: form.status,
       attorney_seat_limit: normalizedSeatLimit,
@@ -146,7 +167,7 @@ export function ProvisioningAdminPage() {
   }
 
   async function disable(mapping: CoreMicrosoftIdentityMapping) {
-    const result = await updateMicrosoftIdentityMappingStatus(mapping.microsoft_tenant_id, mapping.microsoft_object_id, "disabled");
+    const result = await updateMicrosoftIdentityMappingStatus(mapping.microsoft_tenant_id, mapping.microsoft_object_id, "suspended");
     if (!result.ok) {
       setError(result.error);
       return;
@@ -157,7 +178,7 @@ export function ProvisioningAdminPage() {
 
   return (
     <>
-      <PageHeader title="Provisioning" description="Manual Microsoft identity mapping for Mercy Office beta access." />
+      <PageHeader title="Provisioning" description="Manual beta account provisioning for solo attorneys and small firms." />
       <div className="space-y-5 p-5 lg:p-8">
         {notice ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</div> : null}
         {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{error}</div> : null}
@@ -170,67 +191,82 @@ export function ProvisioningAdminPage() {
               <option value="firm">Firm user</option>
             </select>
           </label>
-          <Input label="Tenant ID" value={form.tenantId} onChange={(value) => update("tenantId", value)} />
-          {firmMode ? <Input label="Firm ID" value={form.firmId} onChange={(value) => update("firmId", value)} /> : null}
+          <Input label="Owner email" value={form.email} onChange={(value) => update("email", value)} />
+          <Input label="Workspace name" value={form.workspaceName} onChange={(value) => update("workspaceName", value)} />
+          {firmMode ? <Input label="Firm name" value={form.firmName} onChange={(value) => update("firmName", value)} /> : null}
+          <Input label="Tenant/workspace ID" value={form.tenantId} placeholder={tenantId} onChange={(value) => update("tenantId", value)} />
+          {firmMode ? <Input label="Firm ID" value={form.firmId} placeholder={firmId} onChange={(value) => update("firmId", value)} /> : null}
           <Input label="Attorney seat limit" value={form.attorneySeatLimit} onChange={(value) => update("attorneySeatLimit", value)} />
-          <Input label="Microsoft tenant ID" value={form.microsoftTenantId} onChange={(value) => update("microsoftTenantId", value)} />
-          <Input label="Microsoft object ID" value={form.microsoftObjectId} onChange={(value) => update("microsoftObjectId", value)} />
-          <Input label="Mercy user ID" value={form.mercyUserId} onChange={(value) => update("mercyUserId", value)} />
-          <Input label="Verified email" value={form.email} onChange={(value) => update("email", value)} />
+          <Input label="Mercy user ID" value={form.mercyUserId} placeholder={mercyUserId || "pending:owner@example.com"} onChange={(value) => update("mercyUserId", value)} />
           <Input label="Roles" value={form.roles} onChange={(value) => update("roles", value)} />
           <label className="space-y-2 text-sm font-medium text-slate-700">
             Status
             <select className="w-full rounded-md border border-slate-300 px-3 py-2" value={form.status} onChange={(event) => update("status", event.target.value as ProvisioningForm["status"])}>
               <option value="pending">Pending</option>
+              <option value="trialing">Trialing</option>
               <option value="active">Active</option>
-              <option value="disabled">Disabled</option>
+              <option value="suspended">Suspended</option>
+              <option value="canceled">Canceled</option>
             </select>
           </label>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600 md:col-span-2">
+            Pending records are safe for users who have not signed up yet. After signup, update the Mercy user ID if the Supabase user ID differs from the pending email key. Service-role Auth user creation is intentionally not exposed in this admin UI.
+          </div>
           <div className="md:col-span-2">
             <button type="button" onClick={submit} disabled={loading} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {loading ? "Saving..." : "Save mapping"}
+              {loading ? "Saving..." : "Provision beta account"}
             </button>
           </div>
         </section>
 
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
-            <h2 className="text-lg font-semibold text-slate-950">Provisioned identities</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Provisioned beta accounts</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
+                  <th className="px-4 py-3">Account</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Mercy user</th>
-                  <th className="px-4 py-3">Tenant</th>
+                  <th className="px-4 py-3">Owner email</th>
+                  <th className="px-4 py-3">Workspace</th>
                   <th className="px-4 py-3">Firm</th>
                   <th className="px-4 py-3">Seats</th>
                   <th className="px-4 py-3">Roles</th>
-                  <th className="px-4 py-3">Last login</th>
+                  <th className="px-4 py-3">Created</th>
                   <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {mappings.map((mapping) => (
                   <tr key={mapping.id}>
-                    <td className="px-4 py-3">{mapping.status}</td>
-                    <td className="px-4 py-3">{mapping.mercy_user_id}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        {mapping.account_type === "firm" ? "Firm" : "Solo"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(mapping.status)}`}>
+                        {mapping.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{mapping.email ?? mapping.mercy_user_id}</td>
                     <td className="px-4 py-3">{mapping.tenant_id}</td>
                     <td className="px-4 py-3">{mapping.firm_id ?? "-"}</td>
                     <td className="px-4 py-3">{mapping.attorney_seat_limit}</td>
                     <td className="px-4 py-3">{mapping.roles.join(", ")}</td>
-                    <td className="px-4 py-3">{mapping.last_login_at ?? "never"}</td>
+                    <td className="px-4 py-3">{mapping.created_at ?? "-"}</td>
                     <td className="px-4 py-3">
-                      <button type="button" onClick={() => void disable(mapping)} disabled={mapping.status === "disabled"} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
-                        Disable
+                      <button type="button" onClick={() => void disable(mapping)} disabled={mapping.status === "suspended" || mapping.status === "disabled"} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                        Deactivate
                       </button>
                     </td>
                   </tr>
                 ))}
                 {mappings.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-5 text-slate-500" colSpan={8}>No Microsoft identities provisioned.</td>
+                    <td className="px-4 py-5 text-slate-500" colSpan={9}>No beta accounts provisioned.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -242,11 +278,11 @@ export function ProvisioningAdminPage() {
   );
 }
 
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function Input({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
   return (
     <label className="space-y-2 text-sm font-medium text-slate-700">
       {label}
-      <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)} />
+      <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }

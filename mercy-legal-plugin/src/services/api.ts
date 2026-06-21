@@ -34,8 +34,30 @@ const viteEnv = (import.meta as ImportMeta & {
     VITE_MERCY_USER_ID?: string;
   };
 }).env;
+
+// Production builds (Vite replaces import.meta.env at build time) MUST supply real HTTPS endpoints via .env.production or
+// environment variables. The defaults below are only for local dev against `npm run dev` + source manifests.
 const CORE_API_URL = (viteEnv?.VITE_MERCY_CORE_API_URL || DEFAULT_CORE_URL).replace(/\/+$/, "");
 const WEB_AUTH_URL = (viteEnv?.VITE_MERCY_WEB_AUTH_URL || "https://127.0.0.1:3000").replace(/\/+$/, "");
+
+// Guard: prevent shipping a bundle that would call localhost in production.
+// Vite replaces import.meta.env at build; we use a safe any cast because the project's
+// tsconfig + vite/client reference may not expose the full shape in this context.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isProdBuild = Boolean((import.meta as any)?.env?.PROD);
+if (isProdBuild) {
+  if (CORE_API_URL.includes("127.0.0.1") || CORE_API_URL.includes("localhost")) {
+    throw new Error(
+      "Production build of mercy-legal-plugin detected localhost CORE_API_URL. " +
+        "Set VITE_MERCY_CORE_API_URL (and VITE_MERCY_WEB_AUTH_URL) via .env.production or build environment before `npm run build`."
+    );
+  }
+  if (WEB_AUTH_URL.includes("127.0.0.1") || WEB_AUTH_URL.includes("localhost")) {
+    console.warn(
+      "Warning: Production build using localhost WEB_AUTH_URL. PKCE sign-in dialog will not work for real users."
+    );
+  }
+}
 const MATTER_ID = "word-addin-session-matter";
 let ACTIVE_MATTER_ID = MATTER_ID;
 let ACTIVE_MATTER: CoreMatterListItem | null = null;
@@ -374,8 +396,16 @@ function recentSafeResponses(): CoreAgentResponse[] {
   return readJson<CoreAgentResponse[]>(RECENT_SAFE_RESPONSES_KEY, []);
 }
 
+// Single source of truth for the backend base. All network calls (coreFetch, postCoreIntake, postAgent, etc.)
+// to the Mercy core must go through here so that production builds (VITE_MERCY_CORE_API_URL injected at
+// build time via .env.production or env vars) are respected and localhost is never shipped.
+function getCoreBase(): string {
+  return CORE_API_URL;
+}
+
 async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${CORE_API_URL}${path}`, {
+  const base = getCoreBase();
+  const response = await fetch(`${base}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
@@ -392,6 +422,8 @@ async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function postCoreIntake(payload: Record<string, unknown>): Promise<CoreIntakeResponse> {
+  // All core API calls (including this one) respect the build-time injected prod config
+  // via getCoreBase() / CORE_API_URL (see definition and coreFetch).
   return coreFetch<CoreIntakeResponse>("/v1/matter/intake/full", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -430,6 +462,7 @@ async function postCoreIntake(payload: Record<string, unknown>): Promise<CoreInt
 }
 
 async function postAgent(request: AgentRequest): Promise<CoreAgentResponse> {
+  // Uses the same prod-aware base URL (injected at build via VITE_MERCY_CORE_API_URL).
   return coreFetch<CoreAgentResponse>("/v1/agent/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

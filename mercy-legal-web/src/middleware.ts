@@ -35,9 +35,15 @@ function hasWorkspaceAccess(user: { app_metadata?: Record<string, unknown>; user
   const tenantId = stringFromMetadata(app, "tenant_id") || stringFromMetadata(userMeta, "tenant_id");
   const firmId = stringFromMetadata(app, "firm_id") || stringFromMetadata(userMeta, "firm_id");
   const accountType = stringFromMetadata(app, "account_type") || stringFromMetadata(userMeta, "account_type");
-  const subscriptionStatus = stringFromMetadata(app, "subscription_status") || stringFromMetadata(userMeta, "subscription_status");
+  const subscriptionStatus =
+    stringFromMetadata(app, "subscription_status") ||
+    stringFromMetadata(app, "account_status") ||
+    stringFromMetadata(userMeta, "subscription_status") ||
+    stringFromMetadata(userMeta, "account_status");
+  const workspaceActive = app.workspace_active ?? app.account_active ?? userMeta.workspace_active ?? userMeta.account_active;
 
   if (!tenantId || !subscriptionStatus || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) return false;
+  if (workspaceActive === false || workspaceActive === "false" || workspaceActive === "deactivated") return false;
   if (accountType === "firm" && !firmId) return false;
   return true;
 }

@@ -27,6 +27,8 @@ class TenantUser:
     roles: tuple[str, ...] = ()
     firm_id: str | None = None
     tenant_id_is_firm_fallback: bool = False
+    account_status: str | None = None
+    account_active: bool = True
 
     def to_context(self) -> dict[str, Any]:
         context = {
@@ -38,6 +40,9 @@ class TenantUser:
         }
         if self.firm_id:
             context["firm_id"] = self.firm_id
+        if self.account_status:
+            context["account_status"] = self.account_status
+        context["account_active"] = self.account_active
         return context
 
     def to_metadata(self) -> dict[str, Any]:
@@ -257,6 +262,55 @@ def _firm_from_claims(payload: dict[str, Any]) -> str | None:
     )
 
 
+ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
+BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled", "disabled"}
+PLATFORM_BYPASS_ROLES = {"superadmin", "platform_admin", "ops"}
+
+
+def _account_status_from_claims(payload: dict[str, Any]) -> str | None:
+    app_metadata = _claim_metadata(payload, "app_metadata")
+    user_metadata = _claim_metadata(payload, "user_metadata")
+    return _claim_string(
+        app_metadata.get("subscription_status"),
+        app_metadata.get("account_status"),
+        app_metadata.get("status"),
+        user_metadata.get("subscription_status"),
+        user_metadata.get("account_status"),
+        user_metadata.get("status"),
+        payload.get("subscription_status"),
+        payload.get("account_status"),
+    )
+
+
+def _account_active_from_claims(payload: dict[str, Any]) -> bool:
+    app_metadata = _claim_metadata(payload, "app_metadata")
+    user_metadata = _claim_metadata(payload, "user_metadata")
+    for value in (
+        app_metadata.get("workspace_active"),
+        app_metadata.get("account_active"),
+        app_metadata.get("active"),
+        user_metadata.get("workspace_active"),
+        user_metadata.get("account_active"),
+        user_metadata.get("active"),
+        payload.get("workspace_active"),
+        payload.get("account_active"),
+    ):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"false", "0", "no", "disabled", "deactivated"}:
+            return False
+    return True
+
+
+def _enforce_account_access(roles: tuple[str, ...], status: str | None, active: bool) -> None:
+    if any(role in PLATFORM_BYPASS_ROLES for role in roles):
+        return
+    if not active:
+        raise HTTPException(status_code=403, detail="Mercy workspace access is deactivated for this account.")
+    if status and status.strip().lower() not in ACTIVE_ACCOUNT_STATUSES:
+        raise HTTPException(status_code=403, detail="Mercy workspace access requires an active or trialing account.")
+
+
 def _tenant_user_from_supabase_jwt(authorization: str | None) -> TenantUser:
     payload = _jwt_payload(_bearer_token(authorization))
     user_id = _claim_string(payload.get("sub"), payload.get("user_id"))
@@ -266,13 +320,19 @@ def _tenant_user_from_supabase_jwt(authorization: str | None) -> TenantUser:
         raise HTTPException(status_code=401, detail="JWT subject is required.")
     if not tenant_id_claim and not firm_id:
         raise HTTPException(status_code=401, detail="JWT tenant or firm claim is required.")
+    roles = _roles_from_claims(payload)
+    account_status = _account_status_from_claims(payload)
+    account_active = _account_active_from_claims(payload)
+    _enforce_account_access(roles, account_status, account_active)
     return TenantUser(
         tenant_id=tenant_id_claim or firm_id or "",
         user_id=user_id,
         auth_mode="supabase_jwt",
-        roles=_roles_from_claims(payload),
+        roles=roles,
         firm_id=firm_id,
         tenant_id_is_firm_fallback=tenant_id_claim is None and firm_id is not None,
+        account_status=account_status,
+        account_active=account_active,
     )
 
 

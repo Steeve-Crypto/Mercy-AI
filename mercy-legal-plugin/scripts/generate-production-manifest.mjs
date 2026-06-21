@@ -18,15 +18,25 @@ if (!/^https:\/\/[^/]+/i.test(baseUrl)) {
 }
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const manifestPath = resolve(root, "manifest.xml");
 const distPath = resolve(root, "dist");
-const outputPath = resolve(distPath, "manifest.xml");
-
 const devBaseUrl = "https://localhost:3000";
-const manifest = readFileSync(manifestPath, "utf8").replaceAll(devBaseUrl, baseUrl);
+
+// Generate production manifests for both Word and Outlook by replacing the dev base URL.
+// Source manifests (with localhost) remain for local dev sideloading against `npm run dev`.
+const manifests = [
+  { src: "manifest.xml", out: "manifest.xml" },
+  { src: "manifest.outlook.xml", out: "manifest.outlook.xml" },
+];
 
 mkdirSync(distPath, { recursive: true });
-writeFileSync(outputPath, manifest);
 
-console.log(`Generated ${outputPath}`);
-console.log(`Production base URL: ${baseUrl}`);
+for (const m of manifests) {
+  const srcPath = resolve(root, m.src);
+  const outPath = resolve(distPath, m.out);
+  const content = readFileSync(srcPath, "utf8").replaceAll(devBaseUrl, baseUrl);
+  writeFileSync(outPath, content);
+  console.log(`Generated ${outPath}`);
+}
+
+console.log(`Production base URL for hosted assets (taskpane.html, icons, built JS): ${baseUrl}`);
+console.log("Upload the entire dist/ folder to this origin root so that https://your-domain/taskpane.html serves the built add-in.");

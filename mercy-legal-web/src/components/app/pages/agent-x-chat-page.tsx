@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookOpenText,
@@ -116,6 +116,7 @@ export function AgentXChatPage({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [workHistory, setWorkHistory] = useState<WorkHistoryRecord[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
   const attachedDocuments = useMemo(() => {
@@ -140,6 +141,10 @@ export function AgentXChatPage({
   const lastResult = [...messages].reverse().find((message) => message.result)?.result ?? null;
 
   useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [busy, messages.length]);
+
+  useEffect(() => {
     let cancelled = false;
     listWorkHistoryClient({ limit: 5 })
       .then((result) => {
@@ -154,18 +159,20 @@ export function AgentXChatPage({
   }, []);
 
   async function send() {
-    if (!prompt.trim()) {
+    const promptText = prompt.trim();
+    if (!promptText) {
       setError("Enter a question or drafting instruction for Agent X.");
       return;
     }
     setBusy(true);
     setError(null);
-    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: prompt };
+    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: promptText };
     setMessages((current) => [...current, userMessage]);
+    setPrompt("");
     const selectedDocumentIds = includeVaultDocuments ? attachedDocIds : [];
     const selectedDocuments = attachedDocuments.filter((document) => selectedDocumentIds.includes(document.id));
     const response = await executeAgent({
-      task: prompt,
+      task: promptText,
       matter_id: matterId || undefined,
       matter_context: useMatterContext
         ? {
@@ -196,7 +203,6 @@ export function AgentXChatPage({
       },
     });
     setBusy(false);
-    setPrompt("");
     if (!response.ok || !response.data) {
       setError(response.error ?? "Agent X request failed.");
       return;
@@ -211,8 +217,8 @@ export function AgentXChatPage({
         sourceType: sourceTypeForRun(mode, matterId, attachedDocIds[0]),
         workflowType: workflowTypeFromMode(mode),
         title: `${workflowLabel(mode)}${activeMatter?.name ? ` - ${activeMatter.name}` : ""}`,
-        inputSummary: shortText(prompt, 36),
-        requestText: prompt,
+        inputSummary: shortText(promptText, 36),
+        requestText: promptText,
         outputSummary: shortText(output, 44),
         outputText: output,
         reliabilitySnapshot: {
@@ -249,17 +255,14 @@ export function AgentXChatPage({
 
   return (
     <div className="grid min-h-screen gap-5 bg-[#F8FAFC] p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-6">
-      <main className="flex min-w-0 flex-col items-center">
-        <section className="w-full max-w-5xl">
-          <div className="pt-8 text-center lg:pt-14">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#4F46E5] text-white shadow-sm">
-              <Bot className="size-6" />
+      <main className="flex min-h-[calc(100vh-2rem)] min-w-0 flex-col">
+        <section className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
+          <header className="shrink-0 pb-4 text-center">
+            <div className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-[#4F46E5] text-white shadow-sm">
+              <Bot className="size-5" />
             </div>
-            <h1 className="mt-5 text-4xl font-semibold tracking-normal text-slate-950">Mercy</h1>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Draft, review, research, and verify legal work with matter context.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950">Mercy</h1>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
                 Core {coreOnline ? "online" : "offline"}
               </span>
@@ -268,10 +271,70 @@ export function AgentXChatPage({
                 History
               </Link>
             </div>
-          </div>
+          </header>
 
-          <div className="mx-auto mt-8 max-w-4xl rounded-[1.25rem] border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white px-3 py-4 shadow-sm md:px-5">
+            {messages.length ? (
+              <div className="space-y-5">
+                {messages.map((message) => (
+                  <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {message.role === "assistant" ? (
+                      <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5]">
+                        <Bot className="size-4" />
+                      </div>
+                    ) : null}
+                    <div
+                      className={`max-w-[min(760px,85%)] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                        message.role === "user"
+                          ? "bg-[#4F46E5] text-white"
+                          : "border border-slate-200 bg-slate-50 text-slate-800"
+                      }`}
+                    >
+                      <pre className="whitespace-pre-wrap break-words font-sans">{message.content}</pre>
+                    </div>
+                  </div>
+                ))}
+                {busy ? (
+                  <div className="flex justify-start gap-3">
+                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5]">
+                      <Bot className="size-4" />
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      <Loader2 className="size-4 animate-spin text-[#4F46E5]" />
+                      Mercy is working
+                    </div>
+                  </div>
+                ) : null}
+                <div ref={messagesEndRef} />
+              </div>
+            ) : (
+              <div className="flex min-h-[360px] items-center justify-center">
+                <div className="max-w-2xl text-center">
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#EEF2FF] text-[#4F46E5]">
+                    <Bot className="size-6" />
+                  </div>
+                  <h2 className="mt-4 text-lg font-semibold text-slate-950">Start with the work, then verify.</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Ask for drafting, review, research support, or citation checking. Attorney review and source verification remain required before use.
+                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <BookOpenText className="size-3.5" />
+                      Open templates
+                    </Link>
+                    <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <FileText className="size-3.5" />
+                      Run D.C. research
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="sticky bottom-0 z-10 mt-4 shrink-0 bg-[#F8FAFC] pb-1">
+            <div className="mx-auto max-w-4xl rounded-[1.25rem] border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
               <label className="sr-only" htmlFor="mercy-matter">
                 Matter context
               </label>
@@ -372,8 +435,14 @@ export function AgentXChatPage({
               <textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    if (!busy && prompt.trim()) void send();
+                  }
+                }}
                 placeholder="Ask Mercy about this matter, draft a document, review language, or check sources..."
-                className="min-h-40 w-full resize-none rounded-t-2xl border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
+                className="max-h-40 min-h-24 w-full resize-none rounded-t-2xl border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
               />
               <div className="flex flex-col gap-3 border-t border-slate-200 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap gap-2">
@@ -481,7 +550,7 @@ export function AgentXChatPage({
           </div>
 
           {templates.length ? (
-            <div className="mx-auto mt-5 max-w-4xl">
+            <div className="mx-auto mt-3 max-w-4xl">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended workflows</p>
                 <span className="text-xs text-slate-400">{workflowLabel(mode)}</span>
@@ -502,91 +571,42 @@ export function AgentXChatPage({
               </div>
             </div>
           ) : null}
-
-          <div className="mx-auto mt-5 grid max-w-4xl gap-3 lg:grid-cols-[minmax(0,1fr)_240px]">
-            {messages.length ? (
-              <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`rounded-2xl p-4 text-sm leading-6 ${
-                      message.role === "user"
-                        ? "ml-auto max-w-3xl bg-[#4F46E5] text-white"
-                        : "max-w-3xl border border-slate-200 bg-slate-50 text-slate-800"
-                    }`}
-                  >
-                    {message.role === "assistant" ? (
-                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#4F46E5]">
-                        <Bot className="size-3.5" />
-                        Agent X
-                      </div>
-                    ) : null}
-                    <pre className="whitespace-pre-wrap font-sans">{message.content}</pre>
-                  </div>
-                ))}
-              </section>
-            ) : (
-              <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
-                    <Bot className="size-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-950">Start with the work, then verify.</h2>
-                    <p className="mt-1 text-sm leading-6 text-slate-500">
-                      Ask for drafting, review, research support, or citation checking. Attorney review and source verification remain required before use.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                        <BookOpenText className="size-3.5" />
-                        Open templates
-                      </Link>
-                      <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                        <FileText className="size-3.5" />
-                        Run D.C. research
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 font-semibold text-slate-950">
-                  <Clock3 className="size-4 text-[#4F46E5]" />
-                  Recent work
-                </div>
-                <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
-                  History
-                </Link>
-              </div>
-              <div className="mt-3 space-y-2">
-                {workHistory.length ? (
-                  workHistory.slice(0, 4).map((record) => (
-                    <Link key={record.id} href="/history" className="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-white">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-xs font-semibold text-slate-900">{record.title}</p>
-                        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                          {historyReliability(record)}
-                        </span>
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                        {historyContext(record)} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
-                      </p>
-                    </Link>
-                  ))
-                ) : (
-                  <p className="mt-2 text-xs">Recent Mercy work will appear here after drafting, research, review, or citation-checking runs are saved.</p>
-                )}
-              </div>
-            </section>
           </div>
         </section>
       </main>
 
       <aside className="space-y-4">
         <ReliabilityPanel agent={lastResult} />
+        <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 font-semibold text-slate-950">
+              <Clock3 className="size-4 text-[#4F46E5]" />
+              Recent work
+            </div>
+            <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
+              History
+            </Link>
+          </div>
+          <div className="mt-3 space-y-2">
+            {workHistory.length ? (
+              workHistory.slice(0, 4).map((record) => (
+                <Link key={record.id} href="/history" className="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-white">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-xs font-semibold text-slate-900">{record.title}</p>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                      {historyReliability(record)}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                    {historyContext(record)} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <p className="mt-2 text-xs">Recent Mercy work will appear here after drafting, research, review, or citation-checking runs are saved.</p>
+            )}
+          </div>
+        </section>
         <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600 shadow-sm">
           <div className="flex items-center gap-2 font-semibold text-slate-950">
             <SlidersHorizontal className="size-4 text-[#4F46E5]" />

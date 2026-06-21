@@ -381,7 +381,7 @@ if TYPE_CHECKING or SQLALCHEMY_AVAILABLE:
     class MicrosoftIdentityMappingRecord(Base):
         __tablename__ = "microsoft_identity_mappings"
         __table_args__ = (
-            CheckConstraint("status IN ('active', 'disabled', 'pending')", name="ck_microsoft_identity_status"),
+            CheckConstraint("status IN ('pending', 'trialing', 'active', 'suspended', 'canceled', 'disabled')", name="ck_microsoft_identity_status"),
             CheckConstraint("account_type IN ('firm', 'solo')", name="ck_microsoft_identity_account_type"),
             CheckConstraint("tenant_id IS NOT NULL AND length(tenant_id) > 0", name="ck_microsoft_identity_tenant_required"),
             CheckConstraint(
@@ -956,6 +956,18 @@ def validate_attorney_seat_limit(*, firm_id: str | None, attorney_seat_limit: in
     return account_type, normalized
 
 
+ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
+BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled", "disabled"}
+VALID_ACCOUNT_STATUSES = ACTIVE_ACCOUNT_STATUSES | BLOCKED_ACCOUNT_STATUSES
+
+
+def normalize_account_status(status: str | None) -> str:
+    normalized_status = (status or "pending").strip().lower()
+    if normalized_status not in VALID_ACCOUNT_STATUSES:
+        raise ValueError("status must be pending, trialing, active, suspended, or canceled.")
+    return normalized_status
+
+
 def upsert_microsoft_identity_mapping(
     *,
     microsoft_tenant_id: str,
@@ -973,9 +985,7 @@ def upsert_microsoft_identity_mapping(
     tid = microsoft_tenant_id.strip()
     oid = microsoft_object_id.strip()
     user_id = mercy_user_id.strip()
-    normalized_status = status.strip().lower()
-    if normalized_status not in {"active", "disabled", "pending"}:
-        raise ValueError("status must be active, disabled, or pending.")
+    normalized_status = normalize_account_status(status)
     if not tid or not oid or not user_id:
         raise ValueError("microsoft_tenant_id, microsoft_object_id, and mercy_user_id are required.")
     firm = (firm_id or "").strip() or None
@@ -1082,9 +1092,7 @@ def list_microsoft_identity_mappings() -> list[dict[str, Any]]:
 
 
 def set_microsoft_identity_mapping_status(microsoft_tenant_id: str, microsoft_object_id: str, status: str) -> dict[str, Any]:
-    normalized_status = status.strip().lower()
-    if normalized_status not in {"active", "disabled", "pending"}:
-        raise ValueError("status must be active, disabled, or pending.")
+    normalized_status = normalize_account_status(status)
     with session_scope() as session:
         record = (
             session.query(MicrosoftIdentityMappingRecord)

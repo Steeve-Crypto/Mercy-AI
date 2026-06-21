@@ -68,6 +68,8 @@ def _supabase_jwt(
     firm_id: str | None = None,
     expires_in: int = 3600,
     roles: list[str] | None = None,
+    account_status: str | None = None,
+    account_active: bool | None = None,
     issuer: str | None = None,
     audience: str = "authenticated",
 ) -> str:
@@ -89,6 +91,14 @@ def _supabase_jwt(
         app_metadata = payload["app_metadata"]
         assert isinstance(app_metadata, dict)
         app_metadata["firm_id"] = firm_id
+    if account_status:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["account_status"] = account_status
+    if account_active is not None:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["workspace_active"] = account_active
     if issuer:
         payload["iss"] = issuer
     signing_input = f"{_b64url(header)}.{_b64url(payload)}"
@@ -230,6 +240,162 @@ class AuthTenantGuardTests(unittest.TestCase):
                 reset_storage_for_tests()
 
         self.assertEqual(response.status_code, 403)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_superadmin_can_provision_solo_beta_account(self) -> None:
+        token = _supabase_rs256_jwt(user_id="admin-user", tenant_id="admin-tenant", roles=["superadmin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'solo-provision.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.post(
+                    "/v1/admin/microsoft-identity-mappings",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "microsoft_tenant_id": "tenant-solo-beta",
+                        "microsoft_object_id": "pending:solo@example.com",
+                        "email": "solo@example.com",
+                        "mercy_user_id": "pending:solo@example.com",
+                        "tenant_id": "tenant-solo-beta",
+                        "roles": ["owner", "admin", "attorney"],
+                        "status": "trialing",
+                        "attorney_seat_limit": 1,
+                    },
+                )
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 200, response.text)
+        mapping = response.json()["mapping"]
+        self.assertEqual(mapping["account_type"], "solo")
+        self.assertIsNone(mapping["firm_id"])
+        self.assertEqual(mapping["tenant_id"], "tenant-solo-beta")
+        self.assertEqual(mapping["status"], "trialing")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_superadmin_can_provision_firm_beta_account(self) -> None:
+        token = _supabase_rs256_jwt(user_id="admin-user", tenant_id="admin-tenant", roles=["superadmin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'firm-provision.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.post(
+                    "/v1/admin/microsoft-identity-mappings",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "microsoft_tenant_id": "firm-beta",
+                        "microsoft_object_id": "pending:owner@firm.com",
+                        "email": "owner@firm.com",
+                        "mercy_user_id": "pending:owner@firm.com",
+                        "tenant_id": "tenant-firm-workspace",
+                        "firm_id": "firm-beta",
+                        "roles": ["owner", "admin", "firm_admin", "attorney"],
+                        "status": "active",
+                        "attorney_seat_limit": 2,
+                    },
+                )
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 200, response.text)
+        mapping = response.json()["mapping"]
+        self.assertEqual(mapping["account_type"], "firm")
+        self.assertEqual(mapping["firm_id"], "firm-beta")
+        self.assertEqual(mapping["tenant_id"], "tenant-firm-workspace")
+        self.assertEqual(mapping["attorney_seat_limit"], 2)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_non_superadmin_cannot_provision_beta_account(self) -> None:
+        token = _supabase_rs256_jwt(user_id="admin-user", tenant_id="admin-tenant", roles=["admin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'non-superadmin.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.post(
+                    "/v1/admin/microsoft-identity-mappings",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "microsoft_tenant_id": "tenant-denied",
+                        "microsoft_object_id": "pending:denied@example.com",
+                        "mercy_user_id": "pending:denied@example.com",
+                        "tenant_id": "tenant-denied",
+                    },
+                )
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 403)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_firm_beta_account_requires_two_or_more_seats(self) -> None:
+        token = _supabase_rs256_jwt(user_id="admin-user", tenant_id="admin-tenant", roles=["superadmin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_URL": "https://mercy-test.supabase.co",
+                "SUPABASE_JWKS_URL": "https://mercy-test.supabase.co/auth/v1/.well-known/jwks.json",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'seat-minimum.db'}",
+            }
+            with _patched_env(os.environ, env), patch("auth_context.jwt.PyJWKClient") as jwks:
+                reset_storage_for_tests()
+                jwks.return_value.get_signing_key.return_value = SimpleNamespace(key=RS_PUBLIC_KEY)
+                client = TestClient(app)  # type: ignore[arg-type]
+                response = client.post(
+                    "/v1/admin/microsoft-identity-mappings",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "microsoft_tenant_id": "firm-one-seat",
+                        "microsoft_object_id": "pending:one@firm.com",
+                        "mercy_user_id": "pending:one@firm.com",
+                        "tenant_id": "tenant-one-seat",
+                        "firm_id": "firm-one-seat",
+                        "status": "active",
+                        "attorney_seat_limit": 1,
+                    },
+                )
+                reset_storage_for_tests()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at least 2", response.text)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_account_status_gate_allows_active_and_trialing_blocks_inactive(self) -> None:
+        with _patched_env(os.environ, {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"}):
+            for status in ("active", "trialing"):
+                token = _supabase_jwt(user_id=f"user-{status}", tenant_id=f"tenant-{status}", account_status=status)
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
+                self.assertEqual(tenant_user.account_status, status)
+
+            for status in ("pending", "suspended", "canceled"):
+                token = _supabase_jwt(user_id=f"user-{status}", tenant_id=f"tenant-{status}", account_status=status)
+                with self.assertRaises(Exception):
+                    _tenant_user_from_supabase_jwt(f"Bearer {token}")
+
+            token = _supabase_jwt(user_id="deactivated-user", tenant_id="tenant-deactivated", account_status="active", account_active=False)
+            with self.assertRaises(Exception):
+                _tenant_user_from_supabase_jwt(f"Bearer {token}")
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_solo_practitioner_has_single_tenant_workspace_scope(self) -> None:

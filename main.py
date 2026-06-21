@@ -335,12 +335,12 @@ class MicrosoftIdentityProvisionRequest(BaseModel):
     tenant_id: str = Field(..., min_length=1, description="Universal Mercy tenant/workspace account ID.")
     firm_id: str | None = Field(None, description="Firm ID for firm accounts. Omit for solo accounts.")
     roles: list[str] = Field(default_factory=lambda: ["attorney"], description="Mercy roles for the user.")
-    status: str = Field("pending", description="active, disabled, or pending.")
+    status: str = Field("pending", description="pending, trialing, active, suspended, or canceled.")
     attorney_seat_limit: int | None = Field(None, description="Firm accounts require at least 2 seats; solo defaults to 1.")
 
 
 class MicrosoftIdentityStatusRequest(BaseModel):
-    status: str = Field(..., description="active, disabled, or pending.")
+    status: str = Field(..., description="pending, trialing, active, suspended, or canceled.")
 
 
 class MatterIntakeRequest(BaseModel):
@@ -579,9 +579,9 @@ def _require_tenant_scope(tenant_user: TenantUser, detail: str) -> None:
 def _require_provisioning_admin(tenant_user: TenantUser) -> None:
     if tenant_user.auth_mode == "local_dev":
         return
-    if any(role in {"admin", "superadmin"} for role in tenant_user.roles):
+    if "superadmin" in tenant_user.roles:
         return
-    raise HTTPException(status_code=403, detail="Microsoft identity provisioning requires an admin or superadmin role.")
+    raise HTTPException(status_code=403, detail="Manual beta provisioning requires a superadmin role.")
 
 
 def _matter_context(matter_id: str | None, tenant_user: TenantUser) -> dict[str, Any]:
