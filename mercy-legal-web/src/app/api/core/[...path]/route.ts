@@ -44,19 +44,28 @@ function forwardedRequestHeaders(request: NextRequest, auth: Awaited<ReturnType<
 }
 
 async function proxyCore(request: NextRequest, context: RouteContext) {
+  const { path = [] } = await context.params;
+  const isHealthRequest = path.length === 1 && path[0] === "health";
   const auth = await getServerMercyAuthContext();
-  if (!auth.token && !localDevAuthDefaultsEnabled()) {
+  if (!isHealthRequest && !auth.token && !localDevAuthDefaultsEnabled()) {
     return NextResponse.json({ detail: "Mercy session is required." }, { status: 401 });
   }
 
-  const { path = [] } = await context.params;
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
-  const response = await fetch(targetUrl(path, request.nextUrl.search), {
-    method: request.method,
-    headers: forwardedRequestHeaders(request, auth),
-    body,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(targetUrl(path, request.nextUrl.search), {
+      method: request.method,
+      headers: forwardedRequestHeaders(request, auth),
+      body,
+      cache: "no-store",
+    });
+  } catch {
+    return NextResponse.json(
+      { detail: "Mercy Core is unreachable. Confirm the FastAPI service is running and MERCY_CORE_API_URL is correct." },
+      { status: 502 },
+    );
+  }
 
   const headers = new Headers();
   response.headers.forEach((value, key) => {

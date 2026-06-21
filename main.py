@@ -56,7 +56,11 @@ from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_eval
 from response_envelope import attach_response_envelope, build_response_envelope
 from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
 from mercy_storage import (
+    attach_vault_document_to_matter,
+    delete_vault_document_record,
+    list_vault_documents,
     list_microsoft_identity_mappings,
+    persistent_storage_configured,
     record_vault_document,
     set_microsoft_identity_mapping_status,
     upsert_microsoft_identity_mapping,
@@ -321,6 +325,10 @@ class MatterCreateRequest(BaseModel):
     client_id: str | None = Field(None, description="Optional client identifier.")
     client_name: str | None = Field(None, description="Optional client display name.")
     matter_type: str | None = Field(None, description="Optional matter type.")
+
+
+class VaultDocumentMatterRequest(BaseModel):
+    matter_id: str = Field(..., min_length=1, description="Target matter ID for this tenant-scoped document.")
 
 
 class MicrosoftExchangeRequest(BaseModel):
@@ -1013,6 +1021,53 @@ async def list_matters(tenant_user: TenantUser = Depends(get_current_tenant_user
     return matters
 
 
+@app.get("/v1/vault/documents")
+async def get_vault_documents(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    documents = list_vault_documents(tenant_context=_tenant_context(tenant_user))
+    return {"documents": documents, "generated_at": datetime.now(UTC).isoformat()}
+
+
+@app.patch("/v1/vault/documents/{document_id}/matter")
+async def attach_vault_document(
+    document_id: str,
+    request: VaultDocumentMatterRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    matter_context = _matter_context(request.matter_id, tenant_user)
+    if not matter_context or str(matter_context.get("matter_id") or "") != request.matter_id:
+        raise HTTPException(status_code=404, detail="Matter not found.")
+    try:
+        document = attach_vault_document_to_matter(
+            document_id,
+            request.matter_id,
+            tenant_context=_tenant_context(tenant_user),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if document is None:
+        raise HTTPException(status_code=404, detail="Vault document not found.")
+    try:
+        attach_matter_document(request.matter_id, document, tenant_context=_tenant_context(tenant_user))
+    except MatterTenantAccessError as exc:
+        raise HTTPException(status_code=404, detail="Matter not found.") from exc
+    safe_document = next(
+        (
+            item
+            for item in list_vault_documents(tenant_context=_tenant_context(tenant_user))
+            if item.get("document_id") == document_id
+        ),
+        None,
+    )
+    record_security_audit(
+        "vault_document_attached",
+        tenant_context=_tenant_context(tenant_user),
+        matter_id=request.matter_id,
+        category="document",
+        metadata={"document_id": document_id},
+    )
+    return {"document": safe_document, "matter_id": request.matter_id}
+
+
 @app.get("/v1/matters/{matter_id}/documents")
 async def get_matter_documents(
     matter_id: str,
@@ -1096,6 +1151,7 @@ async def delete_matter_document(
             deleted_file = True
     except OSError:
         deleted_file = False
+    deleted_record = delete_vault_document_record(document_id, tenant_context=_tenant_context(tenant_user))
     record_security_audit(
         "matter_document_deleted",
         tenant_context=_tenant_context(tenant_user),
@@ -1104,7 +1160,7 @@ async def delete_matter_document(
         metadata={"document_id": document_id, "filename": document.get("filename"), "deleted_file": deleted_file},
     )
     return {
-        "deleted": bool(removed),
+        "deleted": bool(removed or deleted_record),
         "deleted_file": deleted_file,
         "matter_id": matter_id,
         "document_id": document_id,
@@ -1642,6 +1698,11 @@ async def workspace_discovery_upload(
 ) -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Upload a PDF document.")
+    if not matter_id and not persistent_storage_configured():
+        raise HTTPException(
+            status_code=409,
+            detail="Select a matter before uploading when persistent Vault storage is not configured.",
+        )
 
     stored_matter_context = _matter_context(matter_id, tenant_user)
 

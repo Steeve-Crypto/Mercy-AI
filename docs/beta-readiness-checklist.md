@@ -4,33 +4,36 @@ This checklist is the go/no-go gate before inviting real D.C. attorneys or small
 
 Current posture: **not ready for external attorney beta until all Must Pass items are complete**.
 
-## Current Implementation State - 2026-06-18
+## Current Implementation State - 2026-06-21
 
 Mercy is a local/beta-candidate legal workspace with the FastAPI core, tenant-scoped matter/document APIs, Mercy chat, Research, Vault, History, templates, beta status, monitoring, and Office add-in surfaces substantially implemented. The product is not approved for real client-confidential external beta until the remaining blockers below are cleared.
 
 Verified in this update:
 
-- Core `/health` returns `200` locally when the FastAPI backend is running.
-- Browser-side Core calls now route through the Next.js `/api/core/*` proxy; server-side calls continue to use the configured backend URL.
+- Core `/health` is public and does not require tenant or user headers.
+- Browser-side Core calls route through the Next.js `/api/core/*` proxy; server-side calls use normalized `MERCY_CORE_API_URL` configuration.
+- Mercy polls Core health every 15 seconds, so a backend started after the web app can move the status from offline to online without a page reload.
+- Proxy connection failures return an actionable `502` JSON error instead of an opaque route failure.
 - Vault upload remains wired to `/v1/workspace/discovery/upload`.
-- Vault document refresh, preview, and delete actions use existing backend document endpoints under `/v1/matters/{matter_id}/documents`.
+- Tenant Vault listing and unassigned-document attachment use `/v1/vault/documents` and `/v1/vault/documents/{document_id}/matter`.
+- Vault refresh, preview, attachment, and delete operations use durable document IDs and server-authenticated tenant/matter checks.
+- Persistent document rows, chunks, and embedding-job metadata are removed with a supported Vault delete, preventing deleted documents from reappearing after refresh.
 - Mercy and Research handoffs preserve durable document IDs through route query context.
 - Web TypeScript typecheck passes.
 - `main.py` and `scripts/full-smoke-test.py` compile with `py -3 -m py_compile`.
-- One narrowed CI Playwright reliability test passed after updating stale chat selectors and proxy-aware route mocks; the local Windows npm/Playwright process did not exit cleanly before the command timeout.
+- GitHub CI selector failures were corrected separately and CI is reported fixed as of this update.
 
 Implemented but not fully manually verified in-browser:
 
 - Upload document to Vault, refresh metadata, and see the document library update.
 - Preview an uploaded matter document from Vault.
 - Delete a matter-attached document from Vault.
+- Attach an unassigned persisted Vault document to the selected matter.
 - Send a Vault document to Mercy and use a Vault document in Research.
 - Extraction-limited warning path in Vault-to-Mercy use.
-- Full GitHub Actions run after the CI selector/proxy test fixes.
 
 Current blockers:
 
-- Full CI should be re-run on GitHub to confirm the complete Playwright and Office smoke workflow passes in Linux.
 - Local Windows `npm.ps1` can resolve to a broken roaming npm prefix; use `npm.cmd` locally until the Node/npm install is repaired.
 - External beta still needs final auth/session activation hardening, beta entitlement/payment state verification, and full manual smoke.
 - Real-client use remains blocked until data retention, deletion, support, and legal documentation are tenant-approved.
@@ -38,7 +41,7 @@ Current blockers:
 Vault document type support:
 
 - Current support is PDF-only. The frontend upload control accepts `application/pdf`, and the backend rejects non-`.pdf` filenames.
-- Scanned PDFs may be stored, but reliable OCR is not implemented as a first-class extraction path; extraction-limited states require attorney review.
+- Scanned PDFs may be stored. If no extractable text is available for chunking, storage marks the document `extraction_limited`; reliable first-class OCR is not currently guaranteed.
 - DOCX, TXT, RTF, email attachments, and OCR are future features, not current beta promises.
 
 Future feature backlog:

@@ -6,9 +6,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bot, BriefcaseBusiness, Eye, FileText, FolderOpen, Loader2, Search, ShieldCheck, UploadCloud } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
+  attachVaultDocumentToMatter,
   getTemplateGallery,
   deleteMatterDocument,
   listMatterDocuments,
+  listVaultDocuments,
   previewMatterDocument,
   retrieveRag,
   submitFullMatterIntake,
@@ -409,14 +411,26 @@ export function VaultPage({ matters }: VaultPageProps) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [documentOverrides, setDocumentOverrides] = useState<Record<string, CoreMatterDocument[]>>({});
+  const [vaultRecords, setVaultRecords] = useState<CoreMatterDocument[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const vaultDocuments = useMemo<VaultDocumentView[]>(
-    () =>
-      matters.flatMap((matter) =>
-        (documentOverrides[matter.matter_id] ?? matter.documents ?? []).map((document, index) => normalizeVaultDocument(document, index, matter)),
-      ),
-    [documentOverrides, matters],
+    () => {
+      const documents = new Map<string, VaultDocumentView>();
+      vaultRecords.forEach((document, index) => {
+        const linkedMatter = matters.find((matter) => matter.matter_id === document.matter_id);
+        const normalized = normalizeVaultDocument(document, index, linkedMatter);
+        documents.set(normalized.id, normalized);
+      });
+      matters.forEach((matter) => {
+        (documentOverrides[matter.matter_id] ?? matter.documents ?? []).forEach((document, index) => {
+          const normalized = normalizeVaultDocument(document, index, matter);
+          documents.set(normalized.id, normalized);
+        });
+      });
+      return [...documents.values()];
+    },
+    [documentOverrides, matters, vaultRecords],
   );
   const filteredDocuments = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -432,6 +446,10 @@ export function VaultPage({ matters }: VaultPageProps) {
     });
   }, [filter, search, vaultDocuments]);
 
+  useEffect(() => {
+    void refreshVaultDocuments();
+  }, []);
+
   async function upload() {
     if (!file) return;
     setBusy(true);
@@ -446,6 +464,17 @@ export function VaultPage({ matters }: VaultPageProps) {
     if (matterId) {
       await refreshMatterDocuments(matterId);
     }
+    await refreshVaultDocuments();
+  }
+
+  async function refreshVaultDocuments() {
+    const response = await listVaultDocuments();
+    if (!response.ok || !response.data) {
+      setActionError(response.error ?? "Could not load the tenant Vault library.");
+      return null;
+    }
+    setVaultRecords(response.data.documents);
+    return response.data.documents;
   }
 
   async function refreshMatterDocuments(targetMatterId: string) {
@@ -459,7 +488,24 @@ export function VaultPage({ matters }: VaultPageProps) {
     }
     const documents = response.data.documents;
     setDocumentOverrides((current) => ({ ...current, [targetMatterId]: documents }));
+    await refreshVaultDocuments();
     return documents;
+  }
+
+  async function attachDocument(document: VaultDocumentView) {
+    if (!matterId) {
+      setActionError("Select a target matter above before attaching this document.");
+      return;
+    }
+    setActionBusy(`attach:${document.id}`);
+    setActionError(null);
+    const response = await attachVaultDocumentToMatter(document.id, matterId);
+    setActionBusy(null);
+    if (!response.ok || !response.data) {
+      setActionError(response.error ?? "Document attachment failed.");
+      return;
+    }
+    await refreshMatterDocuments(matterId);
   }
 
   async function previewDocument(document: VaultDocumentView) {
@@ -495,6 +541,7 @@ export function VaultPage({ matters }: VaultPageProps) {
     }
     const documents = response.data.documents;
     setDocumentOverrides((current) => ({ ...current, [document.matterId!]: documents }));
+    await refreshVaultDocuments();
   }
 
   const factEntries = useMemo(() => safeObjectEntries(result?.facts), [result]);
@@ -708,13 +755,15 @@ export function VaultPage({ matters }: VaultPageProps) {
                       Open Matter
                     </Link>
                   ) : (
-                    <Link
-                      href="/matters"
+                    <button
+                      type="button"
+                      onClick={() => void attachDocument(document)}
+                      disabled={actionBusy === `attach:${document.id}` || !matterId}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
-                      <FolderOpen className="size-3.5" />
+                      {actionBusy === `attach:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <FolderOpen className="size-3.5" />}
                       Attach to Matter
-                    </Link>
+                    </button>
                   )}
                   {document.matterId ? (
                     <button

@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
-import { executeAgent, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
+import { executeAgent, getCoreHealth, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
 import { documentId, documentName, extractionLimitedWarning, normalizeVaultDocument } from "@/lib/vault-documents";
 import type { WorkHistoryRecord } from "@/lib/work-history-types";
 import { createWorkHistoryClient, listWorkHistoryClient, sourceTypeForRun, workflowTypeFromMode } from "@/lib/work-history-client";
@@ -116,6 +116,8 @@ export function AgentXChatPage({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [workHistory, setWorkHistory] = useState<WorkHistoryRecord[]>([]);
+  const [coreIsOnline, setCoreIsOnline] = useState(coreOnline);
+  const [coreStatusError, setCoreStatusError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
@@ -143,6 +145,22 @@ export function AgentXChatPage({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [busy, messages.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshCoreStatus() {
+      const response = await getCoreHealth();
+      if (cancelled) return;
+      setCoreIsOnline(Boolean(response.ok && response.data?.status === "ok"));
+      setCoreStatusError(response.ok ? null : response.error);
+    }
+    void refreshCoreStatus();
+    const interval = window.setInterval(refreshCoreStatus, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -263,14 +281,17 @@ export function AgentXChatPage({
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950">Mercy</h1>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                Core {coreOnline ? "online" : "offline"}
+              <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreIsOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                Core {coreIsOnline ? "online" : "offline"}
               </span>
               <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
                 <Clock3 className="size-3.5" />
                 History
               </Link>
             </div>
+            {coreStatusError ? (
+              <p className="mt-2 text-xs text-amber-700">{coreStatusError} Confirm the FastAPI core is running on the configured backend URL.</p>
+            ) : null}
           </header>
 
           <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white px-3 py-4 shadow-sm md:px-5">

@@ -13,9 +13,9 @@ Related source-of-truth files:
 const DEFAULT_CORE_URL = "http://127.0.0.1:8000";
 
 export const MERCY_CORE_API_URL =
-  process.env.MERCY_CORE_API_URL ||
-  process.env.NEXT_PUBLIC_MERCY_CORE_API_URL ||
-  DEFAULT_CORE_URL;
+  (process.env.MERCY_CORE_API_URL ||
+    process.env.NEXT_PUBLIC_MERCY_CORE_API_URL ||
+    DEFAULT_CORE_URL).replace(/\/+$/, "");
 
 export type CoreHealth = {
   status: string;
@@ -121,6 +121,16 @@ export type CoreMatterDocumentsEnvelope = {
   matter_id: string;
   documents: CoreMatterDocument[];
   generated_at: string;
+};
+
+export type CoreVaultDocumentsEnvelope = {
+  documents: CoreMatterDocument[];
+  generated_at: string;
+};
+
+export type CoreVaultDocumentAttachEnvelope = {
+  document: CoreMatterDocument;
+  matter_id: string;
 };
 
 export type CoreMatterDocumentDeleteEnvelope = {
@@ -809,6 +819,10 @@ export async function getBetaAnalytics(auth?: CoreAuthContext): Promise<CoreClie
   return coreFetch<CoreBetaAnalytics>("/v1/beta/analytics", undefined, auth);
 }
 
+export async function getCoreHealth(): Promise<CoreClientResult<CoreHealth>> {
+  return coreFetch<CoreHealth>("/health");
+}
+
 export async function getMonitoringMetrics(auth?: CoreAuthContext): Promise<CoreClientResult<CoreMonitoringMetrics>> {
   return coreFetch<CoreMonitoringMetrics>("/v1/monitoring/metrics", undefined, auth);
 }
@@ -931,6 +945,26 @@ export async function listMatterDocuments(
   auth?: CoreAuthContext,
 ): Promise<CoreClientResult<CoreMatterDocumentsEnvelope>> {
   return coreFetch<CoreMatterDocumentsEnvelope>(`/v1/matters/${encodeURIComponent(matterId)}/documents`, undefined, auth);
+}
+
+export async function listVaultDocuments(auth?: CoreAuthContext): Promise<CoreClientResult<CoreVaultDocumentsEnvelope>> {
+  return coreFetch<CoreVaultDocumentsEnvelope>("/v1/vault/documents", undefined, auth);
+}
+
+export async function attachVaultDocumentToMatter(
+  documentId: string,
+  matterId: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<CoreVaultDocumentAttachEnvelope>> {
+  return coreFetch<CoreVaultDocumentAttachEnvelope>(
+    `/v1/vault/documents/${encodeURIComponent(documentId)}/matter`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matter_id: matterId }),
+    },
+    auth,
+  );
 }
 
 export function matterDocumentPreviewUrl(matterId: string, documentId: string): string {

@@ -35,12 +35,15 @@ from dc_knowledge_rag import (
 )
 from mercy_config import get_config
 from mercy_storage import (
+    attach_vault_document_to_matter,
+    delete_vault_document_record,
     DocumentChunkRecord,
     DocumentRecord,
     EmbeddingJobRecord,
     ReliabilitySnapshotRecord,
     RetrievalRunRecord,
     configured_database_url,
+    list_vault_documents,
     record_retrieval_run,
     record_vault_document,
     reset_storage_for_tests,
@@ -316,6 +319,48 @@ class PgVectorStorageFoundationTests(unittest.TestCase):
                     tenant_context={"tenant_id": "tenant-b", "firm_id": "firm-b", "user_id": "user-b"},
                     document_text="Tenant B private document text.",
                 )
+
+    def test_vault_list_attach_and_delete_remain_tenant_scoped(self) -> None:
+        env = DB_ENV_KEYS | {
+            "MERCY_ENV": "prod",
+            "POSTGRES_URL": "sqlite+pysqlite:///:memory:",
+        }
+        tenant_a = {"tenant_id": "tenant-a", "firm_id": "firm-a", "user_id": "user-a"}
+        tenant_b = {"tenant_id": "tenant-b", "firm_id": "firm-b", "user_id": "user-b"}
+        with patch.dict(os.environ, env, clear=False):
+            reset_storage_for_tests()
+            get_config.cache_clear()
+            record_vault_document(
+                {
+                    "document_id": "doc-unassigned",
+                    "matter_id": None,
+                    "filename": "unassigned.pdf",
+                    "mime_type": "application/pdf",
+                    "storage_path": "managed://doc-unassigned",
+                    "sha256": "d" * 64,
+                    "size": 512,
+                    "status": "ready",
+                    "extraction_status": "ready",
+                },
+                tenant_context=tenant_a,
+                document_text="Tenant A private document text for attachment.",
+            )
+
+            self.assertEqual([item["document_id"] for item in list_vault_documents(tenant_context=tenant_a)], ["doc-unassigned"])
+            self.assertEqual(list_vault_documents(tenant_context=tenant_b), [])
+            self.assertIsNone(attach_vault_document_to_matter("doc-unassigned", "matter-a", tenant_context=tenant_b))
+
+            attached = attach_vault_document_to_matter("doc-unassigned", "matter-a", tenant_context=tenant_a)
+            self.assertIsNotNone(attached)
+            self.assertEqual(attached["matter_id"], "matter-a")
+            with session_scope() as session:
+                chunks = session.query(DocumentChunkRecord).filter(DocumentChunkRecord.document_id == "doc-unassigned").all()
+                self.assertTrue(chunks)
+                self.assertTrue(all(chunk.matter_id == "matter-a" for chunk in chunks))
+
+            self.assertFalse(delete_vault_document_record("doc-unassigned", tenant_context=tenant_b))
+            self.assertTrue(delete_vault_document_record("doc-unassigned", tenant_context=tenant_a))
+            self.assertEqual(list_vault_documents(tenant_context=tenant_a), [])
 
     def test_pgvector_adapter_uses_sql_vector_search_on_postgres_path(self) -> None:
         hit = RetrievalHit(

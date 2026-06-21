@@ -108,10 +108,16 @@ POST /v1/workspace/discovery
 POST /v1/workspace/discovery/upload
 POST /v1/workspace/draft
 GET  /v1/workspace/clerk-os
+GET  /v1/vault/documents
+PATCH /v1/vault/documents/{document_id}/matter
+GET  /v1/matters/{matter_id}/documents
+GET  /v1/matters/{matter_id}/documents/{document_id}/preview
+DELETE /v1/matters/{matter_id}/documents/{document_id}
 ```
 
 These endpoints preserve compatibility with the brownfield discovery and drafting workflows.
 `POST /v1/workspace/discovery/upload` currently accepts PDF uploads only; non-PDF filenames are rejected. DOCX, TXT, and OCR ingestion remain future Vault hardening items.
+Vault list, attachment, preview, and delete operations derive tenant/user scope from authenticated server context. Client-supplied tenant, firm, or user IDs are not accepted as Vault operation parameters.
 
 ## Response Envelope
 

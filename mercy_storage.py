@@ -718,6 +718,123 @@ def record_vault_document(
     }
 
 
+def _vault_document_payload(record: DocumentRecord) -> dict[str, Any]:
+    metadata = dict(record.metadata_json or {})
+    return {
+        "document_id": record.document_id,
+        "matter_id": record.matter_id,
+        "filename": record.filename,
+        "mime_type": record.mime_type,
+        "type": metadata.get("type") or record.mime_type,
+        "status": record.status,
+        "extraction_status": record.extraction_status,
+        "uploaded_at": metadata.get("uploaded_at") or record.created_at.isoformat(),
+        "updated_at": record.updated_at.isoformat(),
+        "size": record.size_bytes,
+        "facts_extracted": int(metadata.get("facts_extracted") or 0),
+        "citation_count": int(metadata.get("citation_count") or 0),
+        "page_count": metadata.get("page_count"),
+        "summary": metadata.get("summary") or metadata.get("preview_summary"),
+    }
+
+
+def list_vault_documents(*, tenant_context: dict[str, Any]) -> list[dict[str, Any]]:
+    if not persistent_storage_configured():
+        return []
+    tenant_id = str(tenant_context.get("tenant_id") or "").strip()
+    if not tenant_id:
+        raise RuntimeError("tenant_id is required to list Vault documents.")
+    with session_scope() as session:
+        records = (
+            session.query(DocumentRecord)
+            .filter(DocumentRecord.tenant_id == tenant_id)
+            .order_by(DocumentRecord.updated_at.desc())
+            .all()
+        )
+        return [_vault_document_payload(record) for record in records]
+
+
+def attach_vault_document_to_matter(
+    document_id: str,
+    matter_id: str,
+    *,
+    tenant_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not persistent_storage_configured():
+        return None
+    tenant_id = str(tenant_context.get("tenant_id") or "").strip()
+    if not tenant_id:
+        raise RuntimeError("tenant_id is required to attach a Vault document.")
+    now = datetime.now(UTC)
+    with session_scope() as session:
+        record = (
+            session.query(DocumentRecord)
+            .filter(DocumentRecord.document_id == document_id, DocumentRecord.tenant_id == tenant_id)
+            .one_or_none()
+        )
+        if record is None:
+            return None
+        if record.matter_id and record.matter_id != matter_id:
+            raise RuntimeError("Vault document is already attached to another matter.")
+        metadata = dict(record.metadata_json or {})
+        metadata["matter_id"] = matter_id
+        record.matter_id = matter_id
+        record.metadata_json = metadata
+        record.updated_at = now
+        session.query(DocumentChunkRecord).filter(
+            DocumentChunkRecord.document_id == document_id,
+            DocumentChunkRecord.tenant_id == tenant_id,
+        ).update({DocumentChunkRecord.matter_id: matter_id, DocumentChunkRecord.updated_at: now}, synchronize_session=False)
+        attached = {
+            **metadata,
+            **_vault_document_payload(record),
+            "storage_path": record.storage_key,
+            "storage_provider": record.storage_provider,
+            "sha256": record.sha256,
+        }
+    trace_storage_event(
+        "vault_document_attached",
+        "document_update",
+        tenant_id=tenant_id,
+        matter_id=matter_id,
+        metadata={"document_id": document_id},
+    )
+    return attached
+
+
+def delete_vault_document_record(document_id: str, *, tenant_context: dict[str, Any]) -> bool:
+    if not persistent_storage_configured():
+        return False
+    tenant_id = str(tenant_context.get("tenant_id") or "").strip()
+    if not tenant_id:
+        raise RuntimeError("tenant_id is required to delete a Vault document.")
+    with session_scope() as session:
+        record = (
+            session.query(DocumentRecord)
+            .filter(DocumentRecord.document_id == document_id, DocumentRecord.tenant_id == tenant_id)
+            .one_or_none()
+        )
+        if record is None:
+            return False
+        session.query(DocumentChunkRecord).filter(
+            DocumentChunkRecord.document_id == document_id,
+            DocumentChunkRecord.tenant_id == tenant_id,
+        ).delete(synchronize_session=False)
+        session.query(EmbeddingJobRecord).filter(
+            EmbeddingJobRecord.target_type == "document",
+            EmbeddingJobRecord.target_id == document_id,
+            EmbeddingJobRecord.tenant_id == tenant_id,
+        ).delete(synchronize_session=False)
+        session.delete(record)
+    trace_storage_event(
+        "vault_document_deleted",
+        "document_delete",
+        tenant_id=tenant_id,
+        metadata={"document_id": document_id},
+    )
+    return True
+
+
 def record_retrieval_run(
     *,
     tenant_context: dict[str, Any],
