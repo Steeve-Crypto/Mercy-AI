@@ -31,10 +31,9 @@ test("intake wizard creates a matter and redirects to matter detail", async ({ p
   await page.getByLabel(/attorney review/i).check();
   await page.getByLabel(/Treat this as/i).check();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await Promise.all([
-    page.waitForURL(new RegExp(`/matters/${matterId}$`), { timeout: 90_000 }),
-    page.getByRole("button", { name: /Create Matter & Start Draft/i }).click({ timeout: 30_000 }),
-  ]);
+  await page.getByRole("button", { name: /Create Matter & Start Draft/i }).focus();
+  await page.keyboard.press("Enter");
+  await page.waitForURL(new RegExp(`/matters/${matterId}$`), { timeout: 90_000 });
 
   await waitForAppReady(page, "matter-workspace-ready");
   await expect(page.getByRole("heading", { level: 1, name: matterName, exact: true })).toBeVisible();

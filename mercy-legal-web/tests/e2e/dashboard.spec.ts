@@ -11,5 +11,5 @@ test("dashboard loads and shows attorney quick actions", async ({ page }) => {
   await expect(page.getByPlaceholder(/Ask Mercy/i)).toBeVisible();
   await expect(page.getByRole("combobox", { name: /Matter context/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Run Mercy/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /New Matter/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: "New Matter", exact: true })).toBeVisible();
 });

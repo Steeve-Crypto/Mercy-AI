@@ -25,7 +25,7 @@ test("matter documents tab uploads a PDF and attaches it to chat", async ({ page
 
   await expect(page).toHaveURL(/\/chat\?matterId=.*attachedDocs=.*attached=1/);
   await expect(page.getByText(/Document attached to Agent X/i)).toBeVisible();
-  await expect(page.getByText(pdf.name)).toBeVisible();
+  await expect(page.getByRole("button", { name: `Remove ${pdf.name}`, exact: true })).toBeVisible();
 });
 
 test("matter document context is isolated between matters", async ({ page, request }, testInfo) => {
