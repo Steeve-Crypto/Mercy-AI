@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--mercy-user-id", required=True)
     _add_scope_args(create)
     create.add_argument("--roles", default="attorney", help="Comma-separated Mercy roles.")
-    create.add_argument("--status", default="pending", choices=("active", "disabled", "pending"))
+    create.add_argument("--status", default="pending", choices=("pending", "trialing", "active", "suspended", "canceled"))
 
     update = subparsers.add_parser("update", help="Update roles, scope, email, or status for a mapping.")
     update.add_argument("--microsoft-tenant-id", required=True)
@@ -50,12 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     update.add_argument("--mercy-user-id", required=True)
     _add_scope_args(update)
     update.add_argument("--roles", default="attorney")
-    update.add_argument("--status", default="active", choices=("active", "disabled", "pending"))
+    update.add_argument("--status", default="active", choices=("pending", "trialing", "active", "suspended", "canceled"))
 
     list_cmd = subparsers.add_parser("list", help="List provisioned Microsoft identity mappings.")
     list_cmd.add_argument("--json", action="store_true", help="Print JSON instead of a compact table.")
 
-    disable = subparsers.add_parser("disable", help="Disable a Microsoft identity mapping.")
+    disable = subparsers.add_parser("disable", help="Suspend a Microsoft identity mapping.")
     disable.add_argument("--microsoft-tenant-id", required=True)
     disable.add_argument("--microsoft-object-id", required=True)
 
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_json(mapping)
             return 0
         if args.command == "disable":
-            _print_json(set_microsoft_identity_mapping_status(args.microsoft_tenant_id, args.microsoft_object_id, "disabled"))
+            _print_json(set_microsoft_identity_mapping_status(args.microsoft_tenant_id, args.microsoft_object_id, "suspended"))
             return 0
         if args.command == "list":
             mappings = list_microsoft_identity_mappings()

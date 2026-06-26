@@ -68,7 +68,7 @@ def _supabase_jwt(
     firm_id: str | None = None,
     expires_in: int = 3600,
     roles: list[str] | None = None,
-    account_status: str | None = None,
+    account_status: str | None = "active",
     account_active: bool | None = None,
     issuer: str | None = None,
     audience: str = "authenticated",
@@ -115,6 +115,7 @@ def _supabase_rs256_jwt(
     user_id: str = "rs-user-a",
     tenant_id: str = "rs-tenant-a",
     roles: list[str] | None = None,
+    account_status: str | None = "active",
     issuer: str = "https://mercy-test.supabase.co/auth/v1",
     audience: str = "authenticated",
     expires_in: int = 3600,
@@ -130,6 +131,10 @@ def _supabase_rs256_jwt(
         "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
         "user_metadata": {},
     }
+    if account_status:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["account_status"] = account_status
     headers = {"kid": kid} if kid else None
     return jwt.encode(payload, RS_PRIVATE_KEY, algorithm="RS256", headers=headers)
 
@@ -392,6 +397,10 @@ class AuthTenantGuardTests(unittest.TestCase):
                 token = _supabase_jwt(user_id=f"user-{status}", tenant_id=f"tenant-{status}", account_status=status)
                 with self.assertRaises(Exception):
                     _tenant_user_from_supabase_jwt(f"Bearer {token}")
+
+            missing_status = _supabase_jwt(user_id="missing-status-user", tenant_id="tenant-missing-status", account_status=None)
+            with self.assertRaises(Exception):
+                _tenant_user_from_supabase_jwt(f"Bearer {missing_status}")
 
             token = _supabase_jwt(user_id="deactivated-user", tenant_id="tenant-deactivated", account_status="active", account_active=False)
             with self.assertRaises(Exception):

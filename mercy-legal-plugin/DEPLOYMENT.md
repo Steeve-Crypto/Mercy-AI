@@ -38,6 +38,7 @@ npm run build
 ```
 
 This runs TypeScript check + Vite multi-entry build (taskpane.html, commands.html, support.html, index.html + assets).
+The build fails if `VITE_MERCY_CORE_API_URL` or `VITE_MERCY_WEB_AUTH_URL` is missing, not HTTPS, or still points at localhost.
 
 Output is in `dist/`. The built JS will contain your prod `CORE_API_URL` and `WEB_AUTH_URL`.
 
@@ -52,6 +53,7 @@ npm run manifest:prod -- --url https://addin.mercylegal.example.com
   - `dist/manifest.xml` (Word)
   - `dist/manifest.outlook.xml` (Outlook)
 - The `--url` value becomes the base for taskpane.html, commands, support, and all icon paths.
+- The command fails if the URL is not an HTTPS origin or if a generated manifest still contains localhost.
 
 The source `manifest*.xml` (with localhost) stay untouched for local dev (`npm run dev` + sideloading the source manifests against the running Vite dev server on port 3000).
 
@@ -78,7 +80,7 @@ Recommended hosts for simple static files (no serverless functions needed):
 
 ```powershell
 npm run validate:prod-manifest   # validates dist/manifest.xml (Word)
-# For Outlook you can run the office-addin-manifest tool directly against dist/manifest.outlook.xml
+# Also validates dist/manifest.outlook.xml (Outlook)
 ```
 
 You can also run the smoke script with a hosted URL:

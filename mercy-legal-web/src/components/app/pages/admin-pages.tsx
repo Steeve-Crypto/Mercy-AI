@@ -172,7 +172,7 @@ export function ProvisioningAdminPage() {
       setError(result.error);
       return;
     }
-    setNotice(`Disabled mapping for ${mapping.mercy_user_id}.`);
+    setNotice(`Suspended mapping for ${mapping.mercy_user_id}.`);
     await refresh();
   }
 
@@ -258,8 +258,8 @@ export function ProvisioningAdminPage() {
                     <td className="px-4 py-3">{mapping.roles.join(", ")}</td>
                     <td className="px-4 py-3">{mapping.created_at ?? "-"}</td>
                     <td className="px-4 py-3">
-                      <button type="button" onClick={() => void disable(mapping)} disabled={mapping.status === "suspended" || mapping.status === "disabled"} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
-                        Deactivate
+                      <button type="button" onClick={() => void disable(mapping)} disabled={mapping.status === "suspended"} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                        Suspend
                       </button>
                     </td>
                   </tr>

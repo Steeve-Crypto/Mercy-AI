@@ -34,7 +34,7 @@ class AdminProvisioningTests(unittest.TestCase):
         reset_storage_for_tests()
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed")
-    def test_admin_can_create_list_and_disable_mappings(self) -> None:
+    def test_superadmin_can_create_list_and_suspend_mappings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'admin-provisioning.db'}"
             with patch.dict(
@@ -46,7 +46,7 @@ class AdminProvisioningTests(unittest.TestCase):
                 client = TestClient(app)  # type: ignore[arg-type]
                 create = client.post(
                     "/v1/admin/microsoft-identity-mappings",
-                    headers=_headers("admin"),
+                    headers=_headers("superadmin"),
                     json={
                         "microsoft_tenant_id": "entra-tenant",
                         "microsoft_object_id": "user-oid",
@@ -60,10 +60,10 @@ class AdminProvisioningTests(unittest.TestCase):
                     },
                 )
                 listed = client.get("/v1/admin/microsoft-identity-mappings", headers=_headers("superadmin"))
-                disabled = client.patch(
+                suspended = client.patch(
                     "/v1/admin/microsoft-identity-mappings/entra-tenant/user-oid/status",
-                    headers=_headers("admin"),
-                    json={"status": "disabled"},
+                    headers=_headers("superadmin"),
+                    json={"status": "suspended"},
                 )
                 reset_storage_for_tests()
 
@@ -73,12 +73,12 @@ class AdminProvisioningTests(unittest.TestCase):
         self.assertEqual(create.json()["mapping"]["attorney_seat_limit"], 2)
         self.assertEqual(listed.status_code, 200, listed.text)
         self.assertEqual(len(listed.json()["mappings"]), 1)
-        self.assertEqual(disabled.status_code, 200, disabled.text)
-        self.assertEqual(disabled.json()["mapping"]["status"], "disabled")
+        self.assertEqual(suspended.status_code, 200, suspended.text)
+        self.assertEqual(suspended.json()["mapping"]["status"], "suspended")
         self.assertNotIn("SUPABASE_SERVICE_ROLE_KEY", str(create.json()))
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed")
-    def test_non_admin_cannot_provision_mappings(self) -> None:
+    def test_non_superadmin_cannot_provision_mappings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'admin-provisioning.db'}"
             with patch.dict(
@@ -88,10 +88,12 @@ class AdminProvisioningTests(unittest.TestCase):
             ):
                 reset_storage_for_tests()
                 client = TestClient(app)  # type: ignore[arg-type]
-                response = client.get("/v1/admin/microsoft-identity-mappings", headers=_headers("attorney"))
+                attorney = client.get("/v1/admin/microsoft-identity-mappings", headers=_headers("attorney"))
+                admin = client.get("/v1/admin/microsoft-identity-mappings", headers=_headers("admin"))
                 reset_storage_for_tests()
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(attorney.status_code, 403)
+        self.assertEqual(admin.status_code, 403)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed")
     def test_unauthenticated_user_cannot_provision_mappings(self) -> None:
@@ -122,7 +124,7 @@ class AdminProvisioningTests(unittest.TestCase):
                 client = TestClient(app)  # type: ignore[arg-type]
                 response = client.post(
                     "/v1/admin/microsoft-identity-mappings",
-                    headers=_headers("admin"),
+                    headers=_headers("superadmin"),
                     json={
                         "microsoft_tenant_id": "entra-tenant",
                         "microsoft_object_id": "user-oid",

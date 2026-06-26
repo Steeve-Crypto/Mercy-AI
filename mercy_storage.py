@@ -381,7 +381,7 @@ if TYPE_CHECKING or SQLALCHEMY_AVAILABLE:
     class MicrosoftIdentityMappingRecord(Base):
         __tablename__ = "microsoft_identity_mappings"
         __table_args__ = (
-            CheckConstraint("status IN ('pending', 'trialing', 'active', 'suspended', 'canceled', 'disabled')", name="ck_microsoft_identity_status"),
+            CheckConstraint("status IN ('pending', 'trialing', 'active', 'suspended', 'canceled')", name="ck_microsoft_identity_status"),
             CheckConstraint("account_type IN ('firm', 'solo')", name="ck_microsoft_identity_account_type"),
             CheckConstraint("tenant_id IS NOT NULL AND length(tenant_id) > 0", name="ck_microsoft_identity_tenant_required"),
             CheckConstraint(
@@ -1074,7 +1074,7 @@ def validate_attorney_seat_limit(*, firm_id: str | None, attorney_seat_limit: in
 
 
 ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
-BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled", "disabled"}
+BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled"}
 VALID_ACCOUNT_STATUSES = ACTIVE_ACCOUNT_STATUSES | BLOCKED_ACCOUNT_STATUSES
 
 

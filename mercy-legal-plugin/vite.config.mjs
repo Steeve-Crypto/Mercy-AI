@@ -22,7 +22,7 @@ export default defineConfig(async ({ command }) => {
     },
     build: {
       outDir: "dist",
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, "index.html"),

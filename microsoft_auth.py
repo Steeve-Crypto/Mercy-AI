@@ -18,6 +18,8 @@ from mercy_storage import (
 )
 from observability import trace_event
 
+ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
+
 
 @dataclass(frozen=True)
 class MicrosoftIdentity:
@@ -85,7 +87,7 @@ def _safe_mapping(record: dict[str, Any], identity: MicrosoftIdentity) -> MercyI
 
 def _safe_db_mapping(record: dict[str, Any]) -> MercyIdentityMapping:
     status = str(record.get("status") or "").strip().lower()
-    if status != "active":
+    if status not in ACTIVE_ACCOUNT_STATUSES:
         raise HTTPException(status_code=403, detail="Microsoft identity mapping is not active.")
     firm_id = str(record.get("firm_id") or "").strip() or None
     tenant_id = str(record.get("tenant_id") or "").strip() or None
@@ -177,7 +179,7 @@ def issue_mercy_session_token(identity: MicrosoftIdentity, mapping: MercyIdentit
         raise HTTPException(status_code=500, detail="Supabase JWT verification is not configured.")
     now = datetime.now(UTC)
     exp = now + timedelta(minutes=15)
-    app_metadata: dict[str, Any] = {"roles": list(mapping.roles)}
+    app_metadata: dict[str, Any] = {"roles": list(mapping.roles), "account_status": mapping.status, "workspace_active": True}
     if mapping.tenant_id:
         app_metadata["tenant_id"] = mapping.tenant_id
     if mapping.firm_id:

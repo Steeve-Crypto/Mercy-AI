@@ -57,7 +57,7 @@ def local_dev_auth_bypass_enabled() -> bool:
 def _parse_roles(raw: str | None) -> tuple[str, ...]:
     if not raw:
         return ()
-    return tuple(role.strip() for role in raw.split(",") if role.strip())
+    return tuple(role.strip().lower() for role in raw.split(",") if role.strip())
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -230,9 +230,9 @@ def _roles_from_claims(payload: dict[str, Any]) -> tuple[str, ...]:
     roles: list[str] = []
     for candidate in candidates:
         if isinstance(candidate, list):
-            roles.extend(str(role).strip() for role in candidate if str(role).strip())
+            roles.extend(str(role).strip().lower() for role in candidate if str(role).strip())
         elif isinstance(candidate, str):
-            roles.extend(role.strip() for role in candidate.split(",") if role.strip())
+            roles.extend(role.strip().lower() for role in candidate.split(",") if role.strip())
     return tuple(dict.fromkeys(roles or ["attorney"]))
 
 
@@ -263,23 +263,23 @@ def _firm_from_claims(payload: dict[str, Any]) -> str | None:
 
 
 ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
-BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled", "disabled"}
+BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled"}
+VALID_ACCOUNT_STATUSES = ACTIVE_ACCOUNT_STATUSES | BLOCKED_ACCOUNT_STATUSES
 PLATFORM_BYPASS_ROLES = {"superadmin", "platform_admin", "ops"}
 
 
 def _account_status_from_claims(payload: dict[str, Any]) -> str | None:
     app_metadata = _claim_metadata(payload, "app_metadata")
     user_metadata = _claim_metadata(payload, "user_metadata")
-    return _claim_string(
+    status = _claim_string(
         app_metadata.get("subscription_status"),
         app_metadata.get("account_status"),
-        app_metadata.get("status"),
         user_metadata.get("subscription_status"),
         user_metadata.get("account_status"),
-        user_metadata.get("status"),
         payload.get("subscription_status"),
         payload.get("account_status"),
     )
+    return status.lower() if status else None
 
 
 def _account_active_from_claims(payload: dict[str, Any]) -> bool:
@@ -307,7 +307,12 @@ def _enforce_account_access(roles: tuple[str, ...], status: str | None, active: 
         return
     if not active:
         raise HTTPException(status_code=403, detail="Mercy workspace access is deactivated for this account.")
-    if status and status.strip().lower() not in ACTIVE_ACCOUNT_STATUSES:
+    if not status:
+        raise HTTPException(status_code=403, detail="Mercy workspace access requires an active or trialing account.")
+    normalized_status = status.strip().lower()
+    if normalized_status not in VALID_ACCOUNT_STATUSES:
+        raise HTTPException(status_code=403, detail="Mercy workspace account status is not recognized.")
+    if normalized_status not in ACTIVE_ACCOUNT_STATUSES:
         raise HTTPException(status_code=403, detail="Mercy workspace access requires an active or trialing account.")
 
 

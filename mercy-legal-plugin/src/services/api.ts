@@ -53,8 +53,9 @@ if (isProdBuild) {
     );
   }
   if (WEB_AUTH_URL.includes("127.0.0.1") || WEB_AUTH_URL.includes("localhost")) {
-    console.warn(
-      "Warning: Production build using localhost WEB_AUTH_URL. PKCE sign-in dialog will not work for real users."
+    throw new Error(
+      "Production build of mercy-legal-plugin detected localhost WEB_AUTH_URL. " +
+        "Set VITE_MERCY_WEB_AUTH_URL via .env.production or build environment before `npm run build`."
     );
   }
 }

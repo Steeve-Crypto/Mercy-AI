@@ -87,7 +87,7 @@ class MicrosoftIdentityDbReadinessTests(unittest.TestCase):
         self.assertIn("MERCY_AUTO_INIT_STORAGE_SCHEMA", (ROOT / ".env.example").read_text(encoding="utf-8"))
         self.assertIn("scripts\\\\microsoft_identity_db.py apply", source)
 
-    def test_cli_fallback_create_list_disable_still_works(self) -> None:
+    def test_cli_fallback_create_list_suspend_still_works(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{(Path(temp_dir) / 'cli-provisioning.db').as_posix()}"
             env = os.environ.copy()
@@ -128,7 +128,7 @@ class MicrosoftIdentityDbReadinessTests(unittest.TestCase):
         for result in results:
             self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"tenant_id": "tenant-cli"', results[0].stdout)
-        self.assertIn('"status": "disabled"', results[2].stdout)
+        self.assertIn('"status": "suspended"', results[2].stdout)
 
     def test_canonical_verify_serializes_conflicting_office_validation_steps(self) -> None:
         source = (ROOT / "scripts" / "verify.py").read_text(encoding="utf-8")

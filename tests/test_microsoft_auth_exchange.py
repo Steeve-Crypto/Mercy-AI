@@ -217,8 +217,15 @@ class MicrosoftAuthExchangeTests(unittest.TestCase):
         self.assertEqual(tenant_user.tenant_id, "firm-alpha")
         self.assertTrue(tenant_user.tenant_id_is_firm_fallback)
 
-    def test_disabled_and_pending_mappings_fail_closed(self) -> None:
-        for status in ("disabled", "pending"):
+    def test_inactive_mappings_fail_closed_and_trialing_is_active(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patched_env(self._db_env(temp_dir)), _patched_jwks():
+                self._provision(status="trialing")
+                exchange = exchange_microsoft_token_for_mercy_session(_token())
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {exchange['access_token']}")
+        self.assertEqual(tenant_user.account_status, "trialing")
+
+        for status in ("pending", "suspended", "canceled"):
             with self.subTest(status=status):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     with _patched_env(self._db_env(temp_dir)), _patched_jwks():

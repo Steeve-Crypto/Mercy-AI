@@ -67,14 +67,16 @@ BEGIN
     END IF;
 END $$;
 
+UPDATE microsoft_identity_mappings
+SET status = 'suspended'
+WHERE status = 'disabled';
+
+ALTER TABLE microsoft_identity_mappings DROP CONSTRAINT IF EXISTS ck_microsoft_identity_status;
+ALTER TABLE microsoft_identity_mappings
+ADD CONSTRAINT ck_microsoft_identity_status CHECK (status IN ('pending', 'trialing', 'active', 'suspended', 'canceled'));
+
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ck_microsoft_identity_status'
-    ) THEN
-        ALTER TABLE microsoft_identity_mappings
-        ADD CONSTRAINT ck_microsoft_identity_status CHECK (status IN ('active', 'disabled', 'pending'));
-    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'ck_microsoft_identity_account_type'
     ) THEN

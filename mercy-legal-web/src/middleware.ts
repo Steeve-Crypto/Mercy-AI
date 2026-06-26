@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 const PROTECTED_PREFIXES = ["/mercy", "/dashboard", "/chat", "/history", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
 const ADMIN_ROLES = new Set(["admin", "superadmin", "platform_admin", "ops"]);
 const PLATFORM_BYPASS_ROLES = new Set(["superadmin", "platform_admin", "ops"]);
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+const ACTIVE_ACCOUNT_STATUSES = new Set(["active", "trialing"]);
 
 function supabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -16,14 +16,19 @@ function localDevAuthBypassConfigured() {
 
 function rolesFromMetadata(metadata: Record<string, unknown> | undefined): string[] {
   const rawRoles = metadata?.roles ?? metadata?.role;
-  if (Array.isArray(rawRoles)) return rawRoles.map(String).filter(Boolean);
-  if (typeof rawRoles === "string") return rawRoles.split(",").map((role) => role.trim()).filter(Boolean);
+  if (Array.isArray(rawRoles)) return rawRoles.map((role) => String(role).trim().toLowerCase()).filter(Boolean);
+  if (typeof rawRoles === "string") return rawRoles.split(",").map((role) => role.trim().toLowerCase()).filter(Boolean);
   return [];
 }
 
 function stringFromMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizedStringFromMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = stringFromMetadata(metadata, key);
+  return value ? value.toLowerCase() : null;
 }
 
 function hasWorkspaceAccess(user: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }) {
@@ -35,14 +40,14 @@ function hasWorkspaceAccess(user: { app_metadata?: Record<string, unknown>; user
   const tenantId = stringFromMetadata(app, "tenant_id") || stringFromMetadata(userMeta, "tenant_id");
   const firmId = stringFromMetadata(app, "firm_id") || stringFromMetadata(userMeta, "firm_id");
   const accountType = stringFromMetadata(app, "account_type") || stringFromMetadata(userMeta, "account_type");
-  const subscriptionStatus =
-    stringFromMetadata(app, "subscription_status") ||
-    stringFromMetadata(app, "account_status") ||
-    stringFromMetadata(userMeta, "subscription_status") ||
-    stringFromMetadata(userMeta, "account_status");
+  const accountStatus =
+    normalizedStringFromMetadata(app, "subscription_status") ||
+    normalizedStringFromMetadata(app, "account_status") ||
+    normalizedStringFromMetadata(userMeta, "subscription_status") ||
+    normalizedStringFromMetadata(userMeta, "account_status");
   const workspaceActive = app.workspace_active ?? app.account_active ?? userMeta.workspace_active ?? userMeta.account_active;
 
-  if (!tenantId || !subscriptionStatus || !ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) return false;
+  if (!tenantId || !accountStatus || !ACTIVE_ACCOUNT_STATUSES.has(accountStatus)) return false;
   if (workspaceActive === false || workspaceActive === "false" || workspaceActive === "deactivated") return false;
   if (accountType === "firm" && !firmId) return false;
   return true;
