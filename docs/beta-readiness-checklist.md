@@ -8,6 +8,13 @@ Current posture: **not ready for external attorney beta until all Must Pass item
 
 Mercy is a local/beta-candidate legal workspace with the FastAPI core, tenant-scoped matter/document APIs, Mercy chat, Research, Vault, History, templates, beta status, monitoring, and Office add-in surfaces substantially implemented. The product is not approved for real client-confidential external beta until the remaining blockers below are cleared.
 
+Update - 2026-07-03:
+
+- Local Windows e2e verification no longer depends on the broken roaming `npx` prefix. `mercy-legal-web/scripts/run-e2e-local.mjs` now invokes the workspace Playwright CLI through Node.
+- Verified `npm.cmd run typecheck` in `mercy-legal-web`.
+- Verified `npm.cmd run test:e2e:local -- tests/e2e/dashboard.spec.ts --project=chromium`; the authenticated dashboard smoke passes with the local dev auth harness.
+- Direct `npm`/`npx` can still resolve to a broken roaming npm prefix on this workstation; use `npm.cmd` for local Windows verification until Node/npm is repaired outside the repo.
+
 Verified in this update:
 
 - Core `/health` is public and does not require tenant or user headers.
@@ -34,7 +41,6 @@ Implemented but not fully manually verified in-browser:
 
 Current blockers:
 
-- Local Windows `npm.ps1` can resolve to a broken roaming npm prefix; use `npm.cmd` locally until the Node/npm install is repaired.
 - External beta still needs final auth/session activation hardening, beta entitlement/payment state verification, and full manual smoke.
 - Real-client use remains blocked until data retention, deletion, support, and legal documentation are tenant-approved.
 

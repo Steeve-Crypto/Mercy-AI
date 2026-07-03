@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const args = process.argv.slice(2);
 const playwrightArgs = args.length ? args : ["--workers=4"];
+const playwrightCli = path.join(root, "node_modules", "playwright", "cli.js");
 const runId = process.env.MERCY_E2E_RUN_ID || `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const baseTenantId = process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "playwright-tenant";
 const baseUserId = process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "playwright-user";
@@ -81,16 +82,8 @@ function waitForServer(url, timeoutMs = 120_000) {
   });
 }
 
-function quoteForCmd(value) {
-  const text = String(value);
-  return /[\s"&|<>^]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-const command = process.platform === "win32" ? "cmd.exe" : "npx";
-const commandArgs =
-  process.platform === "win32"
-    ? ["/d", "/s", "/c", ["npx", "playwright", "test", ...playwrightArgs].map(quoteForCmd).join(" ")]
-    : ["playwright", "test", ...playwrightArgs];
+const command = process.execPath;
+const commandArgs = [playwrightCli, "test", ...playwrightArgs];
 
 const server = spawn(
   process.execPath,
