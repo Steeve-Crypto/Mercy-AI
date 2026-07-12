@@ -16,7 +16,7 @@ Mercy now has a strong backend and integration layer:
 - **Agent X**: `agent_network.py` and `hermes_intelligence.py` provide LangGraph-compatible ReACT agents, Hermes reflection/memory hooks, MCP-compatible skill manifests, sandboxed skill execution, and deterministic local fallback.
 - **D.C. Knowledge Base**: seeded official D.C. source records and chunks exist, with PostgreSQL/pgvector support and local fallback.
 - **RAGAS/Regression**: deterministic reports show the current seeded corpus passing local thresholds, including the 200-case advanced regression report.
-- **Office Add-in**: `mercy-legal-plugin/` calls the core for intake and agent execution and redacts offline local storage.
+- **Office Add-ins**: `mercy-legal-plugin/` uses one host-aware Word/Outlook task pane, request-scoped read-only matter context, Agent X execution, shared reliability metadata, redacted offline state, and explicit approval before document or draft changes. Outlook has no send capability. Live Microsoft 365 host validation remains open.
 - **Standalone Web**: `mercy-legal-web/` has a typed core client and live dashboard panels, but the product experience remains basic and needs real auth, route separation, matter-centered workflows, and beta polish.
 
 Legacy root docs may still describe older in-memory/basic behavior. This task file and `plan.md` are the active implementation status source of truth.
@@ -265,9 +265,10 @@ Pull these in priority order. These are logical next steps from the existing bac
    - **Definition of Done**: Research, drafting, templates, clause review, document review, and intake all show consistent route mode, confidence, expert, citations, source status, attorney-review requirement, RAGAS/regression signal where applicable, trace ID, fallback state, and tenant/data posture.
    - **Dependencies**: PD003, PD036, PD048.
 
-29. [ ] PD051 [Office Release] Prepare the production Office add-in release package.
-   - **Target Paths**: `mercy-legal-plugin/manifest.xml`, `mercy-legal-plugin/scripts/`, `mercy-legal-plugin/DEPLOYMENT.md`, `docs/product/office-addin-release-runbook.md`.
-   - **Definition of Done**: HTTPS hosting plan, production manifest generation, sideload instructions, privacy/support URLs, icon/screenshot checklist, auth handoff, and AppSource/test-account notes are documented and validated.
+29. [ ] PD051 [Office Release] Prepare the shared Word and Outlook production add-in release package.
+   - **Target Paths**: `mercy-legal-plugin/manifest.xml`, `mercy-legal-plugin/manifest.outlook.xml`, `mercy-legal-plugin/src/services/office.ts`, `mercy-legal-plugin/src/components/office/`, `mercy-legal-plugin/scripts/`, `mercy-legal-plugin/DEPLOYMENT.md`, `docs/product/office-addin-release-runbook.md`.
+   - **Definition of Done**: HTTPS hosting plan, production Word/Outlook manifest generation, sideload instructions, privacy/support URLs, icon/screenshot checklist, shared auth/tenant/matter handoff, AppSource/test-account notes, explicit Word/Outlook change approval, no-send enforcement, and live Word/Outlook host checks are documented and validated.
+   - **Progress (2026-07-11)**: Added Outlook summary, triage, reply-preview, citation/ethics, and selected-matter capture workflows; normalized permitted message metadata/context; added shared preview/approval UI; removed background Outlook mutation paths from ribbon shortcuts; added static no-send and approval smoke gates; passed TypeScript, ESLint, production build, Microsoft validation for both generated manifests, and `npm run smoke:office`. Live Word/Outlook sideload, enterprise SSO, real tenant persistence, responsive screenshot QA, and production hosting/support URLs remain required, so PD051 stays open.
    - **Dependencies**: PD027, PD041, PD042.
 
 30. [ ] PD052 [Entitlements] Connect Stripe/beta quotas to real tenant capability gates.
@@ -308,7 +309,7 @@ Pull these in priority order. These are logical next steps from the existing bac
   - **Result**: Contract analyzer no longer uses fake risk rows; it reflects the latest live agent or discovery response, guardrail status, review flags, and reliability metadata.
 - [ ] PD010 [Standalone Platform] Connect Stripe/demo checkout to capability metadata.
 
-### Office / Word Add-in
+### Office / Word and Outlook Add-ins
 
 - [X] PD011 [Office Add-in] Route selected text through dedicated clause explanation UI flow.
   - **Result**: Clause explanation remains routed through `/v1/agent/execute`; the taskpane and ribbon now expose selected-clause explanation with rich route, guardrail, citation, grounding, tenant, and attorney-review metadata.

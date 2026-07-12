@@ -39,7 +39,7 @@ export async function readSelectedText(): Promise<string> {
 
 export async function insertTextAtCursor(text: string): Promise<void> {
   if (typeof Word === "undefined") {
-    const inserted = await insertOutlookText(text);
+    const inserted = await writeOutlookDraftText(text);
     if (inserted) {
       return;
     }
@@ -56,7 +56,7 @@ export async function insertTextAtCursor(text: string): Promise<void> {
 
 export async function insertRiskReport(reportText: string): Promise<void> {
   if (typeof Word === "undefined") {
-    const inserted = await insertOutlookText(`\n\n${reportText}`);
+    const inserted = await writeOutlookDraftText(`\n\n${reportText}`);
     if (inserted) {
       return;
     }
@@ -178,7 +178,7 @@ async function readOutlookAsyncText(
   });
 }
 
-async function insertOutlookText(text: string): Promise<boolean> {
+export async function writeOutlookDraftText(text: string): Promise<boolean> {
   const item = typeof Office !== "undefined" ? Office.context?.mailbox?.item : undefined;
   const body = item?.body as
     | {

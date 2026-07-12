@@ -10,7 +10,16 @@ const root = path.resolve(__dirname, "..");
 const args = new Set(process.argv.slice(2));
 
 const manifests = ["manifest.xml", "manifest.outlook.xml"];
-const requiredFiles = ["taskpane.html", "src/main.tsx", "src/App.tsx", "src/services/api.ts", "src/services/word.ts"];
+const requiredFiles = [
+  "taskpane.html",
+  "src/main.tsx",
+  "src/App.tsx",
+  "src/services/api.ts",
+  "src/services/word.ts",
+  "src/services/office.ts",
+  "src/components/office/OfficeContextCard.tsx",
+  "src/components/office/ApprovalActions.tsx",
+];
 const authRouteFiles = [
   "../microsoft_auth.py",
   "../mercy-legal-web/src/app/api/auth/office/start/route.ts",
@@ -37,6 +46,60 @@ function exists(relativePath) {
   }
   console.log(`PASS Found ${relativePath}`);
   return true;
+}
+
+function checkOfficeMatterIsReadOnly() {
+  const source = fs.readFileSync(path.join(root, "src/services/api.ts"), "utf8");
+  if (source.includes('/v1/matter/intake/full')) {
+    fail("Office actions must not call full intake as a preflight because it can overwrite the selected matter.");
+    return;
+  }
+  if (!source.includes("buildOfficeRequestContext") || !source.includes("office-ephemeral-context-1.0")) {
+    fail("Office actions are missing the request-scoped, read-only matter context guard.");
+    return;
+  }
+  console.log("PASS Word and Outlook actions keep selected matter metadata read-only");
+}
+
+function checkAttorneyApprovalBoundary() {
+  const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  const commands = fs.readFileSync(path.join(root, "src/commands.ts"), "utf8");
+  const officeService = fs.readFileSync(path.join(root, "src/services/office.ts"), "utf8");
+  const allOfficeSource = `${app}\n${commands}\n${officeService}`;
+  if (!app.includes("ApprovalActions") || !app.includes("applyApprovedOfficeText")) {
+    fail("Task-pane output is missing the explicit preview and attorney-approval boundary.");
+    return;
+  }
+  if (!commands.includes("confirmOfficeChange")) {
+    fail("Ribbon commands can modify Office content without explicit approval.");
+    return;
+  }
+  if (/\.send\s*\(|ItemSend|OnMessageSend/i.test(allOfficeSource)) {
+    fail("Outlook code must not send messages or register an automatic send event.");
+    return;
+  }
+  console.log("PASS Word replacements and Outlook draft writes require approval; no send capability is present");
+}
+
+function checkOutlookWorkflowFoundation() {
+  const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  const officeService = fs.readFileSync(path.join(root, "src/services/office.ts"), "utf8");
+  const manifest = fs.readFileSync(path.join(root, "manifest.outlook.xml"), "utf8");
+  const requiredWorkflowTokens = ["runSummarize", "runTriage", "runReply", "runSaveToMatter"];
+  const requiredContextTokens = ["subject", "sender", "recipients", "attachmentNames", "outlook-compose"];
+  if (requiredWorkflowTokens.some((token) => !app.includes(token))) {
+    fail("Outlook is missing summary, triage, reply, or matter-save workflow wiring.");
+    return;
+  }
+  if (requiredContextTokens.some((token) => !officeService.includes(token))) {
+    fail("Outlook context capture is missing message metadata or compose/read mode detection.");
+    return;
+  }
+  if (!manifest.includes("Taskpane.Reply.Url") || !manifest.includes("prompt=reply")) {
+    fail("Outlook ribbon draft action does not open the preview-first reply task pane.");
+    return;
+  }
+  console.log("PASS Outlook summary, triage, reply-preview, matter-save, and metadata context are wired");
 }
 
 function validateManifest(manifest) {
@@ -116,18 +179,22 @@ function checkTaskpane(url) {
 function printChecklist() {
   section("Manual Word Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.xml in Word.");
-  console.log("2. Open the Mercy task pane and confirm the native grey sidebar, purple accents, and Mercy branding.");
+  console.log("2. Open the Mercy task pane at a realistic 320-420px width and confirm the compact Mercy context, workflow, response, and approval cards.");
   console.log("3. Confirm auth handoff: Mercy tries Microsoft Office SSO first, then falls back to the Supabase PKCE dialog.");
   console.log("4. Before enterprise pilots, pre-authorize Office client applications for the Entra access_as_user scope.");
   console.log("5. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
-  console.log("6. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
+  console.log("6. Confirm Draft, Redline, and Report show a preview; the document changes only after Replace selection or Append report is approved.");
+  console.log("7. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
 
   section("Manual Outlook Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.outlook.xml in Outlook.");
   console.log("2. Open a message or compose window, then launch Mercy Legal AI from the task pane command.");
-  console.log("3. Select message text and run Analyze; confirm selected text is used or the message body fallback is used gracefully.");
-  console.log("4. Run Draft, Cite, and Ethics against the selected matter context.");
-  console.log("5. Confirm Reliability Panel remains visible for every Mercy response and auth handoff behaves like Word.");
+  console.log("3. Confirm the context card reports read/compose mode, subject, sender/recipients, attachment names, and selection/body source without reading attachment content.");
+  console.log("4. Run Summarize thread and Triage email; confirm facts, deadlines, requests, obligations, risks, and follow-up are reviewable.");
+  console.log("5. Run Draft reply in a read item; confirm Write to draft is disabled and Copy remains available.");
+  console.log("6. Run Draft reply in a reply/compose window; approve Write to draft, confirm only the draft changes, then verify Mercy never sends it.");
+  console.log("7. Select a matter and approve Save to matter; confirm the correspondence event appears only in that tenant/matter history.");
+  console.log("8. Confirm Reliability Panel remains visible for every Mercy response and auth handoff behaves like Word.");
 }
 
 section("Office Add-in Static Smoke");
@@ -141,6 +208,9 @@ for (const file of authRouteFiles) {
     fail(`Missing ${file}`);
   }
 }
+checkOfficeMatterIsReadOnly();
+checkAttorneyApprovalBoundary();
+checkOutlookWorkflowFoundation();
 for (const manifest of manifests) {
   validateManifest(manifest);
   checkWebApplicationInfo(manifest);

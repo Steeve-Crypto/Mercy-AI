@@ -17,7 +17,7 @@
     "official_only": true,
     "source_count": 74
   },
-  "dataset_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmpxb8kmrf3\\golden.jsonl",
+  "dataset_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmppj7ap8ai\\golden.jsonl",
   "dataset_size": 12,
   "eval_version": "advanced-dc-ragas-regression-1.0",
   "failure_analysis": {
@@ -58,12 +58,12 @@
       "count": 0
     }
   },
-  "generated_at": "2026-05-24T21:46:37.541886+00:00",
+  "generated_at": "2026-07-11T06:35:30.697907+00:00",
   "langsmith": {
     "project_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod",
-    "run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=f77f0768-43ad-4dde-9101-314390432e2b",
+    "run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=9c3ca929-2b2e-429d-9be1-9ec85ab64e40",
     "summary_pushed": true,
-    "trace_id": "f77f0768-43ad-4dde-9101-314390432e2b"
+    "trace_id": "9c3ca929-2b2e-429d-9be1-9ec85ab64e40"
   },
   "metrics": [
     "faithfulness",
@@ -141,7 +141,7 @@
     "pass_rate_delta": null,
     "previous_run_available": false
   },
-  "report_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmpxb8kmrf3\\reports\\ragas_regression_20260524_214637.json",
+  "report_path": "C:\\Users\\12404\\AppData\\Local\\Temp\\tmppj7ap8ai\\reports\\ragas_regression_20260711_063530.json",
   "rows": [
     {
       "answer": "For this District of Columbia administrative issue, use Code of the District of Columbia - Title 1: Government Organization. Title 1 chapter 1 locator. Official D.C. source locator for administrative; requires attorney verification before reliance. Difficulty: advanced. Relevance to D.C. solos: high. Verify citation label D.C. Code title 1, ch. 1 against the official source before relying on it.",
@@ -186,7 +186,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0001",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=d536e5eb-9664-4699-8480-3825c6539936",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=2f03a98b-87ba-4feb-86ab-bafeb13baa71",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -218,7 +218,7 @@
         "official_dc_code_title_01"
       ],
       "score": 1.0,
-      "trace_id": "d536e5eb-9664-4699-8480-3825c6539936"
+      "trace_id": "2f03a98b-87ba-4feb-86ab-bafeb13baa71"
     },
     {
       "answer": "For this District of Columbia business issue, use Code of the District of Columbia - Title 25: Alcoholic Beverages. Title 25 chapter 1 locator. Official D.C. source locator for business; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 25, ch. 1 against the official source before relying on it.",
@@ -263,7 +263,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0002",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=02852c21-c0af-4684-83bb-ac62f31fffd4",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=136b774c-fde5-4e71-862c-c6cbff3bd22f",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -295,7 +295,7 @@
         "official_dc_code_title_25"
       ],
       "score": 1.0,
-      "trace_id": "02852c21-c0af-4684-83bb-ac62f31fffd4"
+      "trace_id": "136b774c-fde5-4e71-862c-c6cbff3bd22f"
     },
     {
       "answer": "For this District of Columbia business llc issue, use Code of the District of Columbia - Title 29: Business Organizations. Title 29 chapter 1 locator. Official D.C. source locator for business_llc; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 29, ch. 1 against the official source before relying on it.",
@@ -340,7 +340,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0003",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=c1ce161f-b5a0-41be-94b9-0db87fba5675",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=ed01acea-c729-4677-bec1-540943fec9e5",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -372,7 +372,7 @@
         "official_dc_code_title_29"
       ],
       "score": 1.0,
-      "trace_id": "c1ce161f-b5a0-41be-94b9-0db87fba5675"
+      "trace_id": "ed01acea-c729-4677-bec1-540943fec9e5"
     },
     {
       "answer": "For this District of Columbia civil litigation issue, use Code of the District of Columbia - Title 11: Organization and Jurisdiction of the Courts. Title 11 chapter 1 locator. Official D.C. source locator for civil_litigation; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 11, ch. 1 against the official source before relying on it.",
@@ -417,7 +417,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0004",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=3135a80b-5c1c-4996-953c-d76ea3ec37a8",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=3c6cd6fa-af20-492f-9674-fd76e81245a2",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -449,7 +449,7 @@
         "official_dc_code_title_11"
       ],
       "score": 1.0,
-      "trace_id": "3135a80b-5c1c-4996-953c-d76ea3ec37a8"
+      "trace_id": "3c6cd6fa-af20-492f-9674-fd76e81245a2"
     },
     {
       "answer": "For this District of Columbia civil procedure issue, use Code of the District of Columbia - Title 13: Procedure Generally. Title 13 chapter 1 locator. Official D.C. source locator for civil_procedure; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 13, ch. 1 against the official source before relying on it.",
@@ -494,7 +494,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0005",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=6bf7f7f6-f053-46ce-b310-b0ed15d68a20",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=2d009af5-b2b3-4bed-8d4d-1e5308a01e86",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -526,7 +526,7 @@
         "official_dc_code_title_13"
       ],
       "score": 1.0,
-      "trace_id": "6bf7f7f6-f053-46ce-b310-b0ed15d68a20"
+      "trace_id": "2d009af5-b2b3-4bed-8d4d-1e5308a01e86"
     },
     {
       "answer": "For this District of Columbia consumer issue, use Code of the District of Columbia - Title 36: Trade Practices. Title 36 chapter 1 locator. Official D.C. source locator for consumer; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 36, ch. 1 against the official source before relying on it.",
@@ -571,7 +571,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0006",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=bf749f1a-c9c3-4b2b-8216-ab67d19301c7",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=ef1c1168-94a3-4b25-96ac-bf0f629f7255",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -603,7 +603,7 @@
         "official_dc_code_title_36"
       ],
       "score": 1.0,
-      "trace_id": "bf749f1a-c9c3-4b2b-8216-ab67d19301c7"
+      "trace_id": "ef1c1168-94a3-4b25-96ac-bf0f629f7255"
     },
     {
       "answer": "For this District of Columbia criminal issue, use Code of the District of Columbia - Title 5: Police, Firefighters, Medical Examiner, and Forensic Sciences. Title 5 chapter 1 locator. Official D.C. source locator for criminal; requires attorney verification before reliance. Difficulty: advanced. Relevance to D.C. solos: high. Verify citation label D.C. Code title 5, ch. 1 against the official source before relying on it.",
@@ -648,7 +648,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0007",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=f6d65f67-a881-45a6-80e8-e07d6477b8e4",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=be930218-46d4-4ff9-b38f-3adc20a698f2",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -680,7 +680,7 @@
         "official_dc_code_title_05"
       ],
       "score": 1.0,
-      "trace_id": "f6d65f67-a881-45a6-80e8-e07d6477b8e4"
+      "trace_id": "be930218-46d4-4ff9-b38f-3adc20a698f2"
     },
     {
       "answer": "For this District of Columbia education issue, use Code of the District of Columbia - Title 38: Educational Institutions. Title 38 chapter 1 locator. Official D.C. source locator for education; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 38, ch. 1 against the official source before relying on it.",
@@ -725,7 +725,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0008",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=7b17190b-1a0b-409c-9081-365ac8b0b947",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=6c8f701e-6a69-4e79-ab5c-b248aacd5c1c",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -757,7 +757,7 @@
         "official_dc_code_title_38"
       ],
       "score": 1.0,
-      "trace_id": "7b17190b-1a0b-409c-9081-365ac8b0b947"
+      "trace_id": "6c8f701e-6a69-4e79-ab5c-b248aacd5c1c"
     },
     {
       "answer": "For this District of Columbia employment issue, use Code of the District of Columbia - Title 32: Labor. Title 32 chapter 1 locator. Official D.C. source locator for employment; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 32, ch. 1 against the official source before relying on it.",
@@ -802,7 +802,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0009",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=16e1c97e-81c7-448d-91b2-4d57e8845b05",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=f36f8c2b-c154-4da4-9dc7-ed74b6ca638d",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -834,7 +834,7 @@
         "official_dc_code_title_32"
       ],
       "score": 1.0,
-      "trace_id": "16e1c97e-81c7-448d-91b2-4d57e8845b05"
+      "trace_id": "f36f8c2b-c154-4da4-9dc7-ed74b6ca638d"
     },
     {
       "answer": "For this District of Columbia evidence issue, use District of Columbia Rules of Evidence. Rule 1. Official D.C. source locator for evidence; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Super. Ct. Evidence Rules R. 1 against the official source before relying on it.",
@@ -879,7 +879,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0010",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=bd8ffa80-f827-4737-aaf9-7d8345a3b324",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=6fabc60e-7371-490b-9fa7-e5604db6596c",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -911,7 +911,7 @@
         "official_dc_superior_rules_evidence"
       ],
       "score": 1.0,
-      "trace_id": "bd8ffa80-f827-4737-aaf9-7d8345a3b324"
+      "trace_id": "6fabc60e-7371-490b-9fa7-e5604db6596c"
     },
     {
       "answer": "For this District of Columbia family issue, use Code of the District of Columbia - Title 4: Public Care Systems. Title 4 chapter 1 locator. Official D.C. source locator for family; requires attorney verification before reliance. Difficulty: intermediate. Relevance to D.C. solos: high. Verify citation label D.C. Code title 4, ch. 1 against the official source before relying on it.",
@@ -956,7 +956,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0011",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=c5960133-4893-4a7d-86f2-aaeeaa50be35",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=cac44217-18c4-496a-acaa-4f9200b985a6",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -988,7 +988,7 @@
         "official_dc_code_title_04"
       ],
       "score": 1.0,
-      "trace_id": "c5960133-4893-4a7d-86f2-aaeeaa50be35"
+      "trace_id": "cac44217-18c4-496a-acaa-4f9200b985a6"
     },
     {
       "answer": "For this District of Columbia health issue, use Code of the District of Columbia - Title 7: Human Health Care and Safety. Title 7 chapter 1 locator. Official D.C. source locator for health; requires attorney verification before reliance. Difficulty: basic. Relevance to D.C. solos: high. Verify citation label D.C. Code title 7, ch. 1 against the official source before relying on it.",
@@ -1033,7 +1033,7 @@
       },
       "failure_tags": [],
       "id": "dc-regression-0012",
-      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=084193fb-05af-4e09-84c0-e3fcd43ae4f4",
+      "langsmith_run_url": "https://smith.langchain.com/o/default/projects/p/mercy-legal-core-prod?trace_id=f58b4ae5-ef51-4b21-bebc-b4b8f9c691b1",
       "metrics": {
         "answer_relevancy": 1.0,
         "citation_accuracy": 1.0,
@@ -1065,7 +1065,7 @@
         "official_dc_code_title_07"
       ],
       "score": 1.0,
-      "trace_id": "084193fb-05af-4e09-84c0-e3fcd43ae4f4"
+      "trace_id": "f58b4ae5-ef51-4b21-bebc-b4b8f9c691b1"
     }
   ],
   "thresholds": {

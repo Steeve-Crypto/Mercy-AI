@@ -1,6 +1,6 @@
 # Mercy AI Security Overview
 
-Status date: 2026-05-14
+Status date: 2026-07-10
 
 Mercy AI is designed for D.C. attorneys handling confidential legal workflows. The current beta security posture is practical, tenant-scoped, and audit-focused.
 
@@ -58,3 +58,21 @@ python -m scripts.check_security_compliance
 ```
 
 The check reports required docs, security headers, Python security scan hook availability through Bandit, and Node audit hook availability for the web and Office add-in package roots.
+
+## CI Security Automation
+
+GitHub Actions now separates Mercy's core smoke checks from security review:
+
+- `Mercy QA Smoke` keeps the existing backend/web/Office smoke workflow.
+- `Mercy Security Review` runs Gitleaks, pip-audit, npm audit, GitHub Dependency Review, and Semgrep.
+- `Mercy CodeQL` runs GitHub code scanning for Python and JavaScript/TypeScript.
+
+These checks are intended to protect the existing brownfield surfaces rather than
+introduce new product behavior. PR-Agent/Qodo-style AI review is not configured
+until token scope, prompt-injection exposure, and repository permissions are
+approved.
+
+OSV-Scanner is not configured because the current CI already covers Python and
+Node dependency vulnerability checks with pip-audit, npm audit, and PR
+dependency-diff review. Add OSV only if Mercy adds ecosystems that those checks
+do not cover cleanly or needs a single cross-ecosystem SBOM-style scan.

@@ -1,5 +1,5 @@
 /*
-Purpose: Agent-network client for the Mercy Word add-in.
+Purpose: Agent-network client for the Mercy Word and Outlook add-ins.
 
 All legal work routes through the FastAPI MoE router and LangGraph-compatible
 agent network. The service keeps a small local cache/queue so drafting and
@@ -422,44 +422,104 @@ async function coreFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-async function postCoreIntake(payload: Record<string, unknown>): Promise<CoreIntakeResponse> {
-  // All core API calls (including this one) respect the build-time injected prod config
-  // via getCoreBase() / CORE_API_URL (see definition and coreFetch).
-  return coreFetch<CoreIntakeResponse>("/v1/matter/intake/full", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stringValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(stringValue).filter((item): item is string => Boolean(item)) : [];
+}
+
+function recordValues(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(recordValue).filter((item) => Object.keys(item).length > 0) : [];
+}
+
+function mergeStrings(...values: Array<string[] | undefined>): string[] {
+  return [...new Set(values.flatMap((items) => items ?? []).filter(Boolean))];
+}
+
+function mergeDocumentReferences(
+  current: Array<Record<string, unknown>> = [],
+  request: Array<Record<string, unknown>> = []
+): Array<Record<string, unknown>> {
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const [index, document] of [...current, ...request].entries()) {
+    const identity = stringValue(document.document_id) ?? stringValue(document.id) ?? `office-reference-${index}`;
+    merged.set(identity, document);
+  }
+  return [...merged.values()];
+}
+
+function safeWorkflowFacts(value: unknown): Record<string, unknown> {
+  const facts = recordValue(value);
+  return Object.fromEntries(Object.entries(facts).filter(([key]) => !SENSITIVE_STORAGE_KEYS.has(key.toLowerCase())));
+}
+
+/**
+ * Build request-scoped Office context without mutating the selected matter.
+ *
+ * Office analysis, drafting, and template actions are read-only with respect to
+ * matter metadata. Matter creation and intake remain explicit web/core actions;
+ * document or email content is sent only in the agent request that the attorney
+ * initiated and is never written through the full-intake endpoint as a preflight.
+ */
+function buildOfficeRequestContext(payload: Record<string, unknown>): CoreIntakeResponse {
+  const auth = authContext();
+  const matter = recordValue(payload.matter);
+  const activeDocuments = ACTIVE_MATTER?.documents ?? [];
+  const requestDocuments = recordValues(payload.documents);
+  const documents = mergeDocumentReferences(activeDocuments, requestDocuments);
+  const missingInformation = mergeStrings(ACTIVE_MATTER?.missing_information, stringValues(payload.missing_information));
+  const sensitivityFlags = mergeStrings(ACTIVE_MATTER?.sensitivity_flags, stringValues(payload.sensitivity_flags));
+  const requestedRelief = stringValue(payload.requested_relief) ?? ACTIVE_MATTER?.requested_relief ?? null;
+  const matterName = ACTIVE_MATTER?.name ?? stringValue(matter.matter_name) ?? "Unsaved Office session";
+  const matterContext: CoreMatterContext = {
+    matter_id: ACTIVE_MATTER_ID,
+    name: matterName,
+    client_id: ACTIVE_MATTER?.client_id ?? "office-session-client",
+    tenant_id: ACTIVE_MATTER?.tenant_id ?? auth.tenantId,
+    created_by_user_id: ACTIVE_MATTER?.created_by_user_id ?? auth.userId,
+    client_name: ACTIVE_MATTER?.client_name ?? null,
+    matter_type: ACTIVE_MATTER?.matter_type ?? stringValue(matter.matter_type) ?? "Office document work",
+    jurisdiction: ACTIVE_MATTER?.jurisdiction ?? stringValue(matter.jurisdiction) ?? "District of Columbia",
+    client_role: ACTIVE_MATTER?.client_role ?? stringValue(matter.client_role) ?? null,
+    opposing_parties: [...(ACTIVE_MATTER?.opposing_parties ?? [])],
+    deadlines: [...(ACTIVE_MATTER?.deadlines ?? [])],
+    requested_relief: requestedRelief,
+    key_facts: {
+      ...(ACTIVE_MATTER?.key_facts ?? ACTIVE_MATTER?.facts ?? {}),
+      ...safeWorkflowFacts(payload.key_facts)
+    },
+    documents,
+    sensitivity_flags: sensitivityFlags,
+    missing_information: missingInformation,
+    history: [...(ACTIVE_MATTER?.history ?? [])],
+    last_updated: ACTIVE_MATTER?.last_updated
+  };
+  return {
+    matter_id: ACTIVE_MATTER_ID,
+    matter_context: matterContext,
+    intake_summary: {
+      version: "office-ephemeral-context-1.0",
       matter_id: ACTIVE_MATTER_ID,
-      client: {
-        client_id: "word-addin-client",
-        client_name: "Word add-in client"
-      },
-      matter: {
-        matter_name: "Word document review",
-        matter_type: "document review and drafting",
-        jurisdiction: "District of Columbia",
-        client_role: "client",
-        opposing_parties: ["counterparty pending"]
-      },
-      conflicts: {
-        checked: false,
-        status: "incomplete",
-        opposing_parties: ["counterparty pending"]
-      },
-      scope: {
-        confirmed: false,
-        scope_of_work: "Review active Word document and prepare attorney review notes.",
-        excluded_work: ["final legal advice without attorney approval"],
-        client_responsibilities: ["confirm counterparty identity", "provide complete agreement"]
-      },
-      consent: {
-        sensitivity_flags: ["confidential_word_document"]
-      },
-      surface_context: "office_addin",
-      user_type: "solo",
-      ...payload
-    })
-  });
+      matter_name: matterName,
+      client_name: matterContext.client_name,
+      jurisdiction: matterContext.jurisdiction,
+      client_role: matterContext.client_role,
+      requested_relief: requestedRelief,
+      document_count: documents.length,
+      deadline_count: matterContext.deadlines?.length ?? 0,
+      missing_information_count: missingInformation.length,
+      conflict_status: ACTIVE_MATTER ? "preserved_from_selected_matter" : "not_evaluated_for_unsaved_office_session",
+      scope_status: ACTIVE_MATTER ? "preserved_from_selected_matter" : "not_confirmed_for_unsaved_office_session",
+      ready_for_attorney_review: missingInformation.length === 0,
+      last_updated: matterContext.last_updated ?? null
+    }
+  };
 }
 
 async function postAgent(request: AgentRequest): Promise<CoreAgentResponse> {
@@ -988,7 +1048,7 @@ function schemaProperties(skill?: CoreMcpManifest["skills"][number]): Record<str
 function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcpManifest["skills"][number]): Record<string, unknown> {
   const params: Record<string, unknown> = {};
   const properties = schemaProperties(skill);
-  const normalizedText = activeText || "Selected Word text unavailable; run again with a selection or active document.";
+  const normalizedText = activeText || "Selected Office content unavailable; reopen the Word document or Outlook message and try again.";
   for (const key of Object.keys(properties)) {
     if (key === "law_or_case") {
       params[key] = normalizedText || "D.C. Bar Ethics Op. 388";
@@ -997,7 +1057,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
     } else if (key === "matter_id") {
       params[key] = ACTIVE_MATTER_ID;
     } else if (key === "new_facts") {
-      params[key] = { word_addin_note: normalizedText };
+      params[key] = { office_addin_note: normalizedText };
     } else if (key === "format") {
       params[key] = "docx";
     } else if (key === "matter_context") {
@@ -1010,7 +1070,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
       draft: normalizedText,
       content: normalizedText,
       matter_id: ACTIVE_MATTER_ID,
-      new_facts: { word_addin_note: normalizedText },
+      new_facts: { office_addin_note: normalizedText },
       format: "docx"
     };
   }
@@ -1062,7 +1122,7 @@ export const api = {
 
   async analyzeDocument(documentText: string): Promise<AnalysisResult> {
     try {
-      const intake = await postCoreIntake({
+      const intake = buildOfficeRequestContext({
         requested_relief: "Identify D.C. contract risks and attorney-review next steps.",
         key_facts: {
           workflow: "document_analysis",
@@ -1108,7 +1168,7 @@ export const api = {
 
   async explainClause(selectedText: string): Promise<ChatMessage> {
     try {
-      const intake = await postCoreIntake({
+      const intake = buildOfficeRequestContext({
         requested_relief: "Explain selected clause with D.C. legal risk notes.",
         key_facts: {
           workflow: "selected_clause_explanation",
@@ -1155,7 +1215,7 @@ export const api = {
 
   async draftRevision(instruction: string, context: string): Promise<ChatMessage> {
     try {
-      const intake = await postCoreIntake({
+      const intake = buildOfficeRequestContext({
         requested_relief: instruction,
         key_facts: {
           workflow: "draft_revision",
@@ -1210,8 +1270,8 @@ export const api = {
     const taskBySkill: Record<string, string> = {
       cite_and_verify: `Verify citation status and D.C. grounding for: ${activeText || "selected text"}`,
       check_dc_ethics: "Check D.C. ethics compliance, confidentiality, citation, and attorney-review flags.",
-      update_matter_context: "Update matter context with new Word document facts.",
-      export_to_word: "Draft export to Word using Office.js-ready payload."
+      update_matter_context: "Update matter context with attorney-approved Office document or email context.",
+      export_to_word: "Draft export to Word using an Office.js-ready payload."
     };
     const skillParams = buildSkillParams(skillName, activeText, discoveredSkill);
     const response = await agentExecute(
@@ -1238,7 +1298,7 @@ export const api = {
 
   async generateTemplate(template: CoreTemplateGalleryItem, documentText: string): Promise<AgentActionResult> {
     try {
-      const intake = await postCoreIntake({
+      const intake = buildOfficeRequestContext({
         requested_relief: template.generation_task,
         matter: {
           matter_name: `${template.title} - Word matter`,

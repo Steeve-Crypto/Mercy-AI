@@ -16,6 +16,8 @@ Mercy Legal AI is a D.C.-native legal AI platform. Contributions should preserve
 Read these before major work:
 
 - `README.md`
+- `AGENTS.md`
+- `.agents/skills/mercy-review-next-steps/SKILL.md`
 - `specs/001-migrate-docs-spec/spec.md`
 - `specs/002-legal-ai-integration/plan.md`
 - `specs/002-legal-ai-integration/tasks.md`
@@ -35,6 +37,9 @@ For targeted checks:
 python -m unittest discover -s tests -p "test_*.py"
 python -m scripts.check_security_compliance
 ```
+
+GitHub security automation also runs Gitleaks, pip-audit, npm audit, GitHub
+Dependency Review, Semgrep, and CodeQL on pull requests and main-branch changes.
 
 Web:
 
@@ -79,4 +84,3 @@ All legal workflows must preserve:
 - Source/citation status.
 - Route and guardrail metadata.
 - Tenant/data posture.
-

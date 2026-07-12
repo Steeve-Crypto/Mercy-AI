@@ -263,7 +263,7 @@ def _firm_from_claims(payload: dict[str, Any]) -> str | None:
 
 
 ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
-BLOCKED_ACCOUNT_STATUSES = {"pending", "suspended", "canceled"}
+BLOCKED_ACCOUNT_STATUSES = {"pending", "past_due", "incomplete", "suspended", "canceled"}
 VALID_ACCOUNT_STATUSES = ACTIVE_ACCOUNT_STATUSES | BLOCKED_ACCOUNT_STATUSES
 PLATFORM_BYPASS_ROLES = {"superadmin", "platform_admin", "ops"}
 

@@ -9,7 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const env = loadEnv(mode, root, "");
 
 function requireHttpsProductionUrl(name) {
-  const value = String(env[name] || process.env[name] || "").trim().replace(/\/+$/, "");
+  const value = String(process.env[name] || env[name] || "").trim().replace(/\/+$/, "");
   if (!value) {
     throw new Error(`${name} is required for a production Office add-in build.`);
   }

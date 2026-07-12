@@ -393,7 +393,7 @@ class AuthTenantGuardTests(unittest.TestCase):
                 tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
                 self.assertEqual(tenant_user.account_status, status)
 
-            for status in ("pending", "suspended", "canceled"):
+            for status in ("pending", "past_due", "incomplete", "suspended", "canceled"):
                 token = _supabase_jwt(user_id=f"user-{status}", tenant_id=f"tenant-{status}", account_status=status)
                 with self.assertRaises(Exception):
                     _tenant_user_from_supabase_jwt(f"Bearer {token}")

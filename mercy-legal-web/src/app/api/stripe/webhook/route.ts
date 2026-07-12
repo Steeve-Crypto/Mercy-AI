@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   ) {
     const subscription = event.data.object as Stripe.Subscription;
     const result = await syncStripeSubscriptionStatus(subscription);
-    if (result.mode === "storage_error") {
+    if (result.mode === "storage_error" || result.mode === "auth_error") {
       console.error("Stripe subscription status sync failed", {
         eventId: event.id,
         subscriptionId: subscription.id,

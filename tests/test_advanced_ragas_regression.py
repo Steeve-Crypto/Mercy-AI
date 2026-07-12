@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from evals.ragas_harness import build_full_seeded_corpus, ensure_golden_dataset, run_advanced_regression
-from evals.regression_status import latest_regression_health
+from evals.regression_status import LATEST_REGRESSION_REPORT
 
 
 class AdvancedRagasRegressionTests(unittest.TestCase):
@@ -26,6 +26,7 @@ class AdvancedRagasRegressionTests(unittest.TestCase):
             self.assertTrue(all(case.expected_source_id for case in cases))
 
     def test_regression_subset_writes_report_and_health(self) -> None:
+        latest_before = LATEST_REGRESSION_REPORT.read_bytes() if LATEST_REGRESSION_REPORT.exists() else None
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             report = run_advanced_regression(
@@ -33,8 +34,8 @@ class AdvancedRagasRegressionTests(unittest.TestCase):
                 golden_path=root / "golden.jsonl",
                 report_dir=root / "reports",
                 limit=12,
+                publish_latest=False,
             )
-            health = latest_regression_health()
 
             self.assertTrue(report["passed"])
             self.assertGreaterEqual(report["corpus"]["chunk_count"], 1145)
@@ -42,7 +43,8 @@ class AdvancedRagasRegressionTests(unittest.TestCase):
             self.assertGreaterEqual(report["aggregate"]["faithfulness"], 0.90)
             self.assertGreaterEqual(report["aggregate"]["context_precision"], 0.90)
             self.assertTrue(Path(report["report_path"]).exists())
-            self.assertTrue(health["available"])
+        latest_after = LATEST_REGRESSION_REPORT.read_bytes() if LATEST_REGRESSION_REPORT.exists() else None
+        self.assertEqual(latest_after, latest_before)
 
 
 if __name__ == "__main__":

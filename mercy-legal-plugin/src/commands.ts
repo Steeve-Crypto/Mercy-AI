@@ -5,15 +5,25 @@ type CommandEvent = {
   completed: () => void;
 };
 
+function confirmOfficeChange(title: string, content: string): boolean {
+  if (typeof window === "undefined") return false;
+  const preview = content.trim().slice(0, 1_200);
+  return window.confirm(
+    `${title}\n\nMercy will modify only the open Word selection or Outlook draft after you approve. ` +
+      `Mercy never sends email.\n\nPreview:\n${preview}${content.length > preview.length ? "\n\n[Preview truncated]" : ""}`
+  );
+}
+
 async function runSkillCommand(skillName: string, textProvider: () => Promise<string>, event: CommandEvent) {
   try {
     const text = await textProvider();
     const result = await api.runMcpSkill(skillName, text);
-    await insertTextAtCursor(
-      `\nMercy ${result.title}\n${result.content}\nReliability: ${
+    const output = `\nMercy ${result.title}\n${result.content}\nReliability: ${
         result.core.groundingStatus ?? result.core.guardrailStatus ?? "attorney review required"
-      }. Trace: ${result.core.traceId ?? "not available"}.\n`
-    );
+      }. Trace: ${result.core.traceId ?? "not available"}.\n`;
+    if (confirmOfficeChange(`Approve Mercy ${result.title}`, output)) {
+      await insertTextAtCursor(output);
+    }
   } catch (error) {
     console.error(`Mercy command failed: ${skillName}`, error);
   } finally {
@@ -32,9 +42,10 @@ async function analyzeActiveDocument(event: CommandEvent) {
   try {
     const text = await readDocumentText();
     const result = await api.analyzeDocument(text);
-    await insertRiskReport(
-      `Mercy Legal Document Analysis\n\nScore: ${result.score}/100\n${reliabilityLine(result)}\n\n${result.summary}\n\nAttorney review is required before client use.`
-    );
+    const output = `Mercy Legal Document Analysis\n\nScore: ${result.score}/100\n${reliabilityLine(result)}\n\n${result.summary}\n\nAttorney review is required before client use.`;
+    if (confirmOfficeChange("Approve Mercy analysis report", output)) {
+      await insertRiskReport(output);
+    }
   } catch (error) {
     console.error("Mercy command failed: analyzeActiveDocument", error);
   } finally {
@@ -46,7 +57,10 @@ async function explainSelection(event: CommandEvent) {
   try {
     const text = await readSelectedText();
     const result = await api.explainClause(text);
-    await insertTextAtCursor(`\nMercy clause explanation\n${result.content}\n${reliabilityLine(result)}\n`);
+    const output = `\nMercy clause explanation\n${result.content}\n${reliabilityLine(result)}\n`;
+    if (confirmOfficeChange("Approve Mercy clause explanation", output)) {
+      await insertTextAtCursor(output);
+    }
   } catch (error) {
     console.error("Mercy command failed: explainSelection", error);
   } finally {
@@ -58,7 +72,10 @@ async function draftRevision(event: CommandEvent) {
   try {
     const text = await readSelectedText();
     const result = await api.draftRevision("Prepare an attorney-review revision for the selected text.", text);
-    await insertTextAtCursor(`\nMercy draft revision\n${result.content}\n${reliabilityLine(result)}\n`);
+    const output = `\nMercy draft revision\n${result.content}\n${reliabilityLine(result)}\n`;
+    if (confirmOfficeChange("Approve Mercy draft revision", output)) {
+      await insertTextAtCursor(output);
+    }
   } catch (error) {
     console.error("Mercy command failed: draftRevision", error);
   } finally {

@@ -119,10 +119,12 @@ See the checklist in the original version of this doc. You will submit one of th
 
 Do not upload source `src/`, node_modules, or the dev manifests for production use.
 
-## Preserved Behavior
+## Shared Word and Outlook Behavior
 
 - Offline queue + full redaction of confidential text (see `src/services/api.ts`).
 - Fluent UI ReliabilitySignals panel, MCP skill discovery, envelope metadata, attorney-review disclaimers, etc. — unchanged.
-- All Word + Outlook command surface actions remain identical.
+- Word uses document/selection workflows; Outlook uses message summary, triage, reply preview, citation/ethics review, and explicit matter capture.
+- Word replacement/append and Outlook draft-write actions require approval after preview. Mercy does not expose an Outlook send action or send event.
+- Outlook ribbon shortcuts open the task pane with a workflow prompt so no received message or draft is modified from a background command.
 
-This change only affects packaging, build-time URL injection, and hosting instructions.
+The same hosted bundle detects the active Office host and keeps authentication, tenant context, core routing, reliability metadata, offline recovery, and visual primitives shared.

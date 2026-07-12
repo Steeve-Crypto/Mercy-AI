@@ -73,6 +73,21 @@ def _local_verification_env() -> dict[str, str]:
         "MERCY_SUPABASE_JWKS_URL": "",
         "SUPABASE_JWT_ISSUER": "",
         "MERCY_SUPABASE_JWT_ISSUER": "",
+        "MERCY_RAG_VECTOR_BACKEND": "local",
+        "MERCY_RAG_GRAPH_BACKEND": "local",
+        "MERCY_QDRANT_URL": "",
+        "QDRANT_URL": "",
+        "MERCY_QDRANT_API_KEY": "",
+        "QDRANT_API_KEY": "",
+        "MERCY_NEO4J_URI": "",
+        "NEO4J_URI": "",
+        "MERCY_NEO4J_USER": "",
+        "NEO4J_USER": "",
+        "MERCY_NEO4J_PASSWORD": "",
+        "NEO4J_PASSWORD": "",
+        "VITE_MERCY_CORE_API_URL": "https://verify-core.mercy.invalid",
+        "VITE_MERCY_WEB_AUTH_URL": "https://verify-app.mercy.invalid",
+        "VITE_MERCY_ENV": "verify",
     }
 
 

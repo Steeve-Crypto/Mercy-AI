@@ -139,6 +139,7 @@ def run_advanced_regression(
     report_dir: str | Path = DEFAULT_REPORT_DIR,
     top_k: int = 8,
     limit: int | None = None,
+    publish_latest: bool = True,
 ) -> dict[str, Any]:
     if corpus != "full":
         raise ValueError("PD044 regression currently supports --corpus=full only.")
@@ -202,8 +203,12 @@ def run_advanced_regression(
     }
     destination = report_path / f"ragas_regression_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
     destination.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-    LATEST_REGRESSION_REPORT.parent.mkdir(parents=True, exist_ok=True)
-    LATEST_REGRESSION_REPORT.write_text(json.dumps({**report, "report_path": str(destination)}, indent=2, sort_keys=True), encoding="utf-8")
+    if publish_latest:
+        LATEST_REGRESSION_REPORT.parent.mkdir(parents=True, exist_ok=True)
+        LATEST_REGRESSION_REPORT.write_text(
+            json.dumps({**report, "report_path": str(destination)}, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     trace_event(
         name="advanced_ragas_regression_summary",
         surface_context="advanced_ragas_regression",

@@ -1,8 +1,8 @@
 # Mercy Office Add-in Release Runbook
 
-This runbook covers development, sideloading, and production release preparation for the Mercy Legal AI Microsoft Word add-in.
+This runbook covers development, sideloading, and production release preparation for the Mercy Legal AI Microsoft Word and Outlook add-ins.
 
-Current posture: the add-in is integrated with the FastAPI core and Agent X for local/beta use. Production release still requires HTTPS hosting, auth handoff, manifest finalization, privacy/support assets, and beta validation.
+Current posture: one host-aware task-pane bundle is integrated with the FastAPI core and Agent X for local/beta use. Word document workflows and Outlook email workflows share auth, tenant/matter context, reliability metadata, offline recovery, and visual primitives. Production release still requires real HTTPS hosting, tenant-approved data policy, live-host smoke testing, privacy/support assets, and AppSource/reviewer preparation.
 
 ## Primary Add-in Path
 
@@ -16,10 +16,13 @@ The legacy `word_plugin/` directory is a local scaffold and should not be treate
 
 | Path | Purpose |
 | --- | --- |
-| `manifest.xml` | Local/development Office manifest. |
+| `manifest.xml` | Local/development Word manifest. |
+| `manifest.outlook.xml` | Local/development Outlook read/compose manifest. |
 | `src/App.tsx` | Taskpane application shell. |
-| `src/services/api.ts` | Core API client, intake calls, Agent X execution, offline redaction/cache behavior. |
-| `src/services/word.ts` | Office.js document/selection helpers. |
+| `src/services/api.ts` | Core API client, request-scoped matter context, Agent X execution, and redacted offline behavior. |
+| `src/services/office.ts` | Shared host detection, Word/Outlook context normalization, copy, and approved-write boundary. |
+| `src/services/word.ts` | Low-level Word selection/document and Outlook body/draft Office.js helpers. |
+| `src/components/office/` | Shared context and explicit approval UI. |
 | `src/commands.ts` | Ribbon command handlers. |
 | `scripts/generate-production-manifest.mjs` | Production manifest generation. |
 | `DEPLOYMENT.md` | Existing add-in deployment notes. |
@@ -43,6 +46,18 @@ Validate manifest:
 
 ```powershell
 npm run validate:manifest
+```
+
+Validate Outlook directly during local work:
+
+```powershell
+.\node_modules\.bin\office-addin-manifest.cmd validate manifest.outlook.xml
+```
+
+Run the shared static safety/workflow smoke:
+
+```powershell
+npm run smoke:office
 ```
 
 Build:
@@ -77,7 +92,7 @@ Development variables:
 VITE_MERCY_CORE_API_URL=http://127.0.0.1:8000
 VITE_MERCY_API_TOKEN=
 VITE_MERCY_TENANT_ID=local-dev-tenant
-VITE_MERCY_USER_ID=word-addin-user
+VITE_MERCY_USER_ID=office-addin-user
 ```
 
 Production/beta variables must point to HTTPS services:
@@ -92,8 +107,8 @@ Do not ship production manifests pointing at `127.0.0.1`, localhost, or HTTP tas
 
 Before external beta:
 
-- [ ] Manifest validates with `npm run validate:manifest`.
-- [ ] Production manifest validates with `npm run validate:prod-manifest`.
+- [ ] Word manifest validates with `npm run validate:manifest`.
+- [ ] Word and Outlook production manifests validate with `npm run validate:prod-manifest`.
 - [ ] Taskpane URL uses HTTPS.
 - [ ] Command URLs use HTTPS.
 - [ ] Icon URLs use HTTPS.
@@ -101,35 +116,37 @@ Before external beta:
 - [ ] Privacy policy URL is valid and public.
 - [ ] Terms URL is valid and public.
 - [ ] Display name and description clearly identify Mercy Legal AI.
-- [ ] Capabilities match actual Word workflows.
+- [ ] Word manifest capabilities match actual document workflows.
+- [ ] Outlook manifest capabilities match actual message-read and compose workflows.
+- [ ] No Outlook `ItemSend`, `OnMessageSend`, or programmatic send capability is present.
 - [ ] Test account instructions exist for reviewers.
 
 ## Sideloading Checklist
 
 For beta testers:
 
-1. Confirm Microsoft Word supports sideloading for the tester account/environment.
-2. Provide the validated manifest.
+1. Confirm Microsoft Word and Outlook support sideloading for the tester account/environment.
+2. Provide the validated `manifest.xml` and `manifest.outlook.xml` files for the hosts in scope.
 3. Provide the HTTPS taskpane URL.
 4. Provide sign-in or beta token instructions.
 5. Confirm the tester can open the taskpane.
-6. Confirm the add-in can read selected text.
-7. Confirm a core-backed action succeeds.
-8. Confirm insertion or copy fallback works.
-9. Confirm reliability metadata appears.
+6. In Word, confirm selection/document context is read and Draft/Redline/Report remain previews until the attorney approves replacement or append.
+7. In Outlook read mode, confirm subject, sender/recipients, attachment names, and permitted selection/body context are displayed; attachment bodies are not silently fetched.
+8. In Outlook compose mode, confirm Draft reply remains a preview until `Write to draft` is approved and that Mercy never sends the message.
+9. Confirm summary, triage, citation/ethics review, selected-matter capture, copy fallback, and reliability metadata work.
 
 ## Core Integration Requirements
 
 The add-in must continue to call the shared core:
 
-- `/v1/matter/intake/full`
+- `/v1/matters`
 - `/v1/agent/execute`
 - `/v1/agent/skills`
 - `/v1/templates/gallery`
 - `/v1/beta/status`
 - `/v1/beta/feedback`
 
-The add-in should not implement independent legal reasoning. It should capture Word context, call the core, and display the core response envelope.
+The add-in must not implement independent legal reasoning. It captures permitted Word or Outlook context, builds request-scoped read-only matter metadata, calls the core, and displays the core response envelope. Matter creation and intake remain explicit web/core actions; Office analysis must not mutate matter intake as a preflight.
 
 ## Offline and Local Storage Requirements
 
@@ -139,7 +156,7 @@ The add-in already includes redaction behavior in `src/services/api.ts`. Preserv
 - Do not store raw document text in localStorage.
 - Do not store generated legal content in offline cache.
 - Queue only redacted metadata.
-- Tell users to rerun actions with the active document open after reconnecting.
+- Tell users to rerun actions with the active document or message open after reconnecting.
 
 ## Privacy and Support Requirements
 
@@ -180,5 +197,5 @@ Do not distribute the add-in to real D.C. attorneys until:
 - Sideload flow is tested.
 - Offline redaction is verified.
 - Selected-text analysis, drafting, citation verification, and insertion/copy fallback are tested.
-- `docs/beta-readiness-checklist.md` passes for Word beta items.
-
+- Outlook summary, triage, reply preview, draft-write approval, matter capture, and no-send boundaries are tested.
+- `docs/beta-readiness-checklist.md` passes for both Word and Outlook beta items.

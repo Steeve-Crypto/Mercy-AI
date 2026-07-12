@@ -15,8 +15,10 @@ export type PendingSignup = {
   jurisdictionFocus: string;
 };
 
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
-const DB_SUBSCRIPTION_STATUSES = new Set(["pending", "active", "past_due", "canceled", "incomplete"]);
+export const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+const DB_SUBSCRIPTION_STATUSES = new Set(["pending", "trialing", "active", "past_due", "canceled", "incomplete", "suspended"]);
+
+type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 
 function supabaseAdminConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -51,10 +53,104 @@ function stableId(prefix: string, seed: string, sessionId: string) {
 }
 
 function dbSubscriptionStatus(status: string | null | undefined) {
-  if (status === "trialing") return "active";
-  if (status === "unpaid" || status === "paused") return "past_due";
-  if (status === "active" || status === "past_due" || status === "canceled" || status === "incomplete") return status;
+  if (status === "active" || status === "trialing" || status === "past_due" || status === "canceled" || status === "incomplete" || status === "suspended") {
+    return status;
+  }
+  if (status === "unpaid") return "past_due";
+  if (status === "paused") return "suspended";
+  if (status === "incomplete_expired") return "incomplete";
   return "pending";
+}
+
+function checkoutSubscriptionStatus(session: Stripe.Checkout.Session) {
+  const expandedSubscription =
+    typeof session.subscription === "object" && session.subscription ? (session.subscription as Stripe.Subscription) : null;
+  if (expandedSubscription?.status) {
+    return dbSubscriptionStatus(expandedSubscription.status);
+  }
+  if (session.payment_status === "paid") return "active";
+  if (session.payment_status === "no_payment_required") return "trialing";
+  return "incomplete";
+}
+
+function workspaceActiveForStatus(status: string) {
+  return ACTIVE_SUBSCRIPTION_STATUSES.has(status);
+}
+
+function metadataBooleanActive(...values: unknown[]) {
+  for (const value of values) {
+    if (value === false) return false;
+    if (typeof value === "string" && ["false", "0", "no", "disabled", "deactivated"].includes(value.trim().toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function canonicalAppMetadata({
+  tenantId,
+  firmId,
+  accountType,
+  roles,
+  seats,
+  subscriptionStatus,
+  customerId,
+  subscriptionId,
+}: {
+  tenantId: string;
+  firmId: string | null;
+  accountType: SignupAccountType;
+  roles: string[];
+  seats: number;
+  subscriptionStatus: string;
+  customerId: string | null;
+  subscriptionId: string | null;
+}) {
+  const workspaceActive = workspaceActiveForStatus(subscriptionStatus);
+  return {
+    tenant_id: tenantId,
+    firm_id: firmId,
+    account_type: accountType,
+    roles,
+    attorney_seat_limit: seats,
+    subscription_status: subscriptionStatus,
+    account_status: subscriptionStatus,
+    workspace_active: workspaceActive,
+    account_active: workspaceActive,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscriptionId,
+  };
+}
+
+async function updateUserAccountMetadata(
+  supabase: SupabaseAdmin,
+  userId: string,
+  appMetadata: Record<string, unknown>,
+  userMetadata?: Record<string, unknown>,
+) {
+  const { data, error: readError } = await supabase.auth.admin.getUserById(userId);
+  if (readError) {
+    return { error: readError.message };
+  }
+  const currentAppMetadata = (data.user?.app_metadata || {}) as Record<string, unknown>;
+  const currentUserMetadata = (data.user?.user_metadata || {}) as Record<string, unknown>;
+  const updatePayload: {
+    app_metadata: Record<string, unknown>;
+    user_metadata?: Record<string, unknown>;
+  } = {
+    app_metadata: {
+      ...currentAppMetadata,
+      ...appMetadata,
+    },
+  };
+  if (userMetadata) {
+    updatePayload.user_metadata = {
+      ...currentUserMetadata,
+      ...userMetadata,
+    };
+  }
+  const { error } = await supabase.auth.admin.updateUserById(userId, updatePayload);
+  return { error: error?.message || null };
 }
 
 export function normalizeSignup(input: Partial<PendingSignup>): PendingSignup {
@@ -148,7 +244,7 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
     return { mode: "invalid" as const, error: validationError };
   }
 
-  const subscriptionStatus = session.payment_status === "paid" ? "active" : "incomplete";
+  const subscriptionStatus = checkoutSubscriptionStatus(session);
   if (!ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
     return { mode: "skipped" as const, subscriptionStatus };
   }
@@ -167,16 +263,16 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
       ? existing.firmId || stableId("firm", slugify(signup.firmName || signup.tenantName, "firm"), session.id)
       : null;
 
-  const appMetadata = {
-    tenant_id: tenantId,
-    firm_id: firmId,
-    account_type: signup.accountType,
+  const appMetadata = canonicalAppMetadata({
+    tenantId,
+    firmId,
+    accountType: signup.accountType,
     roles,
-    attorney_seat_limit: signup.seats,
-    subscription_status: subscriptionStatus,
-    stripe_customer_id: customerId,
-    stripe_subscription_id: subscriptionId,
-  };
+    seats: signup.seats,
+    subscriptionStatus,
+    customerId,
+    subscriptionId,
+  });
   const userMetadata = {
     full_name: signup.fullName,
     firm_name: signup.firmName || null,
@@ -244,12 +340,9 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
     return { mode: "storage_error" as const, error: memberError.message };
   }
 
-  const { error: authError } = await supabase.auth.admin.updateUserById(signup.userId, {
-    app_metadata: appMetadata,
-    user_metadata: userMetadata,
-  });
+  const { error: authError } = await updateUserAccountMetadata(supabase, signup.userId, appMetadata, userMetadata);
   if (authError) {
-    return { mode: "auth_error" as const, error: authError.message };
+    return { mode: "auth_error" as const, error: authError };
   }
 
   return { mode: "provisioned" as const, tenantId, firmId };
@@ -257,7 +350,6 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
 
 export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscription) {
   const supabase = getSupabaseAdmin();
-  const userId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : "";
   if (!supabase) {
     return { mode: "skipped" as const };
   }
@@ -267,6 +359,18 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
     return { mode: "skipped" as const };
   }
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null;
+  const { data: tenant, error: tenantReadError } = await supabase
+    .from("mercy_tenants")
+    .select("tenant_id,firm_id,account_type,attorney_seat_limit,stripe_customer_id,stripe_subscription_id")
+    .eq("stripe_subscription_id", subscription.id)
+    .maybeSingle();
+  if (tenantReadError) {
+    return { mode: "storage_error" as const, error: tenantReadError.message };
+  }
+  if (!tenant?.tenant_id) {
+    return { mode: "skipped" as const, status, reason: "tenant_not_found" };
+  }
+
   const { error: tenantError } = await supabase
     .from("mercy_tenants")
     .update({
@@ -279,17 +383,127 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
     return { mode: "storage_error" as const, error: tenantError.message };
   }
 
-  if (userId) {
-    const { data } = await supabase.auth.admin.getUserById(userId);
-    const currentAppMetadata = data.user?.app_metadata || {};
-    await supabase.auth.admin.updateUserById(userId, {
-      app_metadata: {
-        ...currentAppMetadata,
-        subscription_status: status,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subscription.id,
-      },
-    });
+  const { data: members, error: memberError } = await supabase
+    .from("mercy_tenant_members")
+    .select("user_id,roles,status")
+    .eq("tenant_id", tenant.tenant_id);
+  if (memberError) {
+    return { mode: "storage_error" as const, error: memberError.message };
   }
-  return { mode: "synced" as const, status };
+
+  const metadataUserId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : "";
+  const userIds = new Set<string>();
+  for (const member of members || []) {
+    if (member.status === "active" && typeof member.user_id === "string" && member.user_id.trim()) {
+      userIds.add(member.user_id.trim());
+    }
+  }
+  if (metadataUserId) {
+    userIds.add(metadataUserId);
+  }
+
+  const accountType = tenant.account_type === "firm" ? "firm" : "solo";
+  const firmId = typeof tenant.firm_id === "string" && tenant.firm_id.trim() ? tenant.firm_id.trim() : null;
+  const seats = Number(tenant.attorney_seat_limit || (accountType === "firm" ? 2 : 1));
+  const fallbackRoles = accountType === "firm" ? ["admin", "firm_admin", "attorney"] : ["admin", "attorney"];
+  for (const userId of userIds) {
+    const member = (members || []).find((item) => item.user_id === userId);
+    const roles = Array.isArray(member?.roles) && member.roles.length ? member.roles.map(String).filter(Boolean) : fallbackRoles;
+    const { error } = await updateUserAccountMetadata(
+      supabase,
+      userId,
+      canonicalAppMetadata({
+        tenantId: tenant.tenant_id,
+        firmId,
+        accountType,
+        roles,
+        seats,
+        subscriptionStatus: status,
+        customerId,
+        subscriptionId: subscription.id,
+      }),
+    );
+    if (error) {
+      return { mode: "auth_error" as const, error };
+    }
+  }
+  return { mode: "synced" as const, status, updatedUsers: userIds.size };
+}
+
+export async function getPaidSignupActivationStatus(userId: string, checkoutSessionId?: string | null) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return { mode: "not_configured" as const, active: false };
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+  if (userError || !userData.user) {
+    return { mode: "auth_error" as const, active: false, error: userError?.message || "Supabase user was not found." };
+  }
+
+  let metadata = (userData.user.app_metadata || {}) as Record<string, unknown>;
+  const statusFromMetadata = String(metadata.subscription_status || metadata.account_status || "").toLowerCase();
+  const tenantFromMetadata = typeof metadata.tenant_id === "string" && metadata.tenant_id.trim() ? metadata.tenant_id.trim() : null;
+
+  if ((!tenantFromMetadata || !ACTIVE_SUBSCRIPTION_STATUSES.has(statusFromMetadata)) && checkoutSessionId) {
+    const { data: tenant, error: tenantError } = await supabase
+      .from("mercy_tenants")
+      .select("tenant_id,firm_id,account_type,attorney_seat_limit,subscription_status,stripe_customer_id,stripe_subscription_id,created_by_user_id")
+      .eq("stripe_checkout_session_id", checkoutSessionId)
+      .maybeSingle();
+    if (tenantError) {
+      return { mode: "storage_error" as const, active: false, error: tenantError.message };
+    }
+    if (tenant?.tenant_id && tenant.created_by_user_id === userId) {
+      const { data: member } = await supabase
+        .from("mercy_tenant_members")
+        .select("roles,status")
+        .eq("tenant_id", tenant.tenant_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      const tenantStatus = dbSubscriptionStatus(String(tenant.subscription_status || ""));
+      const accountType = tenant.account_type === "firm" ? "firm" : "solo";
+      const roles =
+        Array.isArray(member?.roles) && member.roles.length
+          ? member.roles.map(String).filter(Boolean)
+          : accountType === "firm"
+            ? ["admin", "firm_admin", "attorney"]
+            : ["admin", "attorney"];
+      if (member?.status === "active" && ACTIVE_SUBSCRIPTION_STATUSES.has(tenantStatus)) {
+        const firmId = typeof tenant.firm_id === "string" && tenant.firm_id.trim() ? tenant.firm_id.trim() : null;
+        const { error } = await updateUserAccountMetadata(
+          supabase,
+          userId,
+          canonicalAppMetadata({
+            tenantId: tenant.tenant_id,
+            firmId,
+            accountType,
+            roles,
+            seats: Number(tenant.attorney_seat_limit || (accountType === "firm" ? 2 : 1)),
+            subscriptionStatus: tenantStatus,
+            customerId: typeof tenant.stripe_customer_id === "string" ? tenant.stripe_customer_id : null,
+            subscriptionId: typeof tenant.stripe_subscription_id === "string" ? tenant.stripe_subscription_id : null,
+          }),
+        );
+        if (error) {
+          return { mode: "auth_error" as const, active: false, error };
+        }
+        const refreshed = await supabase.auth.admin.getUserById(userId);
+        metadata = (refreshed.data.user?.app_metadata || metadata) as Record<string, unknown>;
+      }
+    }
+  }
+
+  const subscriptionStatus = String(metadata.subscription_status || metadata.account_status || "").toLowerCase();
+  const tenantId = typeof metadata.tenant_id === "string" && metadata.tenant_id.trim() ? metadata.tenant_id.trim() : null;
+  const firmId = typeof metadata.firm_id === "string" && metadata.firm_id.trim() ? metadata.firm_id.trim() : null;
+  const workspaceActive = metadataBooleanActive(metadata.workspace_active, metadata.account_active);
+  return {
+    mode: "status" as const,
+    active: Boolean(tenantId && workspaceActive && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)),
+    tenantId,
+    firmId,
+    subscriptionStatus: subscriptionStatus || null,
+    workspaceActive,
+  };
 }

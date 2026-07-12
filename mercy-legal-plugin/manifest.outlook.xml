@@ -84,8 +84,8 @@
                     <bt:Image size="32" resid="Icon.32x32" />
                     <bt:Image size="80" resid="Icon.80x80" />
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>analyzeActiveDocument</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Summarize.Url" />
                   </Action>
                 </Control>
                 <Control xsi:type="Button" id="MercyLegal.MailCiteAndVerify">
@@ -99,8 +99,8 @@
                     <bt:Image size="32" resid="Icon.32x32" />
                     <bt:Image size="80" resid="Icon.80x80" />
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>citeAndVerify</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Cite.Url" />
                   </Action>
                 </Control>
                 <Control xsi:type="Button" id="MercyLegal.MailCheckEthics">
@@ -114,8 +114,8 @@
                     <bt:Image size="32" resid="Icon.32x32" />
                     <bt:Image size="80" resid="Icon.80x80" />
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>checkDcEthics</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Ethics.Url" />
                   </Action>
                 </Control>
               </Group>
@@ -151,8 +151,8 @@
                     <bt:Image size="32" resid="Icon.32x32" />
                     <bt:Image size="80" resid="Icon.80x80" />
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>draftRevision</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Reply.Url" />
                   </Action>
                 </Control>
               </Group>
@@ -169,22 +169,26 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html" />
+        <bt:Url id="Taskpane.Summarize.Url" DefaultValue="https://localhost:3000/taskpane.html?prompt=summarize" />
+        <bt:Url id="Taskpane.Cite.Url" DefaultValue="https://localhost:3000/taskpane.html?prompt=cite" />
+        <bt:Url id="Taskpane.Ethics.Url" DefaultValue="https://localhost:3000/taskpane.html?prompt=ethics" />
+        <bt:Url id="Taskpane.Reply.Url" DefaultValue="https://localhost:3000/taskpane.html?prompt=reply" />
         <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/commands.html" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="MercyLegal.GroupLabel" DefaultValue="Mercy Legal" />
         <bt:String id="MercyLegal.OpenTaskpane.Label" DefaultValue="Open Mercy Legal" />
-        <bt:String id="ML.Analyze.Label" DefaultValue="Analyze Message" />
-        <bt:String id="ML.Draft.Label" DefaultValue="Draft Revision" />
-        <bt:String id="MercyLegal.CiteAndVerify.Label" DefaultValue="Verify Cite" />
-        <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Ethics Check" />
+        <bt:String id="ML.Analyze.Label" DefaultValue="Summarize" />
+        <bt:String id="ML.Draft.Label" DefaultValue="Draft Reply" />
+        <bt:String id="MercyLegal.CiteAndVerify.Label" DefaultValue="Review Sources" />
+        <bt:String id="MercyLegal.CheckEthics.Label" DefaultValue="Review Risks" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="ML.MailOpen.Tip" DefaultValue="Launch Mercy Legal AI for the selected Outlook message or draft." />
-        <bt:String id="ML.MailAnalyze.Tip" DefaultValue="Analyze the active Outlook message through /v1/agent/execute with D.C. guardrails and attorney-review metadata." />
-        <bt:String id="ML.MailCite.Tip" DefaultValue="Run citation verification on the active Outlook message through Mercy Legal AI." />
-        <bt:String id="ML.MailEthics.Tip" DefaultValue="Check the active Outlook message for D.C. ethics, confidentiality, citation, and attorney-review flags." />
-        <bt:String id="ML.MailDraft.Tip" DefaultValue="Draft attorney-review language from the active Outlook draft context." />
+        <bt:String id="ML.MailAnalyze.Tip" DefaultValue="Open a preview-first summary of the permitted message context with D.C. reliability metadata." />
+        <bt:String id="ML.MailCite.Tip" DefaultValue="Open Mercy to review legal propositions, citations, and official-source verification needs." />
+        <bt:String id="ML.MailEthics.Tip" DefaultValue="Open Mercy to review confidentiality, privilege, scope, supervision, and D.C. ethics risks." />
+        <bt:String id="ML.MailDraft.Tip" DefaultValue="Open a reply preview. Mercy writes only to the open draft after approval and never sends email." />
       </bt:LongStrings>
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">

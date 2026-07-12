@@ -101,6 +101,21 @@ As an attorney drafting in Word, I want the Mercy add-in to analyze selected tex
 2. **Given** the user requests insertion, **When** Word insertion is available, **Then** Mercy inserts the approved text and records the action; otherwise it provides copyable output with the same metadata.
 3. **Given** the shared core is unavailable, **When** the add-in handles the request, **Then** preview fallback is clearly labeled and legal output remains bounded.
 
+### User Story 7 - Triage and Draft Inside Microsoft Outlook (Priority: P1)
+
+As a D.C. attorney managing client correspondence, I want Mercy to summarize and triage permitted email context, draft a matter-aware reply, and capture approved correspondence to a matter without sending or changing anything unless I explicitly approve it.
+
+**Why this priority**: Email is a core legal-work surface and the beta objective treats Outlook as equal to the web application and Word add-in.
+
+**Independent Test**: Open the add-in in both message-read and compose/reply modes, then verify context capture, summary/triage, reply preview, reliability metadata, explicit draft-write approval, selected-matter capture, and the absence of any send capability.
+
+**Acceptance Scenarios**:
+
+1. **Given** an attorney opens a received message, **When** Mercy summarizes or triages it, **Then** Mercy uses only the message/thread context Outlook exposes, reports material facts, deadlines, requests, obligations, risks, and follow-up items, and does not modify the item.
+2. **Given** Mercy prepares a reply, **When** the attorney is reading a received message, **Then** the result remains copyable preview output and draft modification is unavailable.
+3. **Given** Mercy prepares a reply in a compose or reply window, **When** the attorney approves `Write to draft`, **Then** only the open draft changes; Mercy never sends the message.
+4. **Given** a tenant-scoped matter is selected, **When** the attorney approves correspondence capture, **Then** the permitted email context and selected Mercy output are added only to that matter history.
+
 ### Edge Cases
 
 - The request has no matter, no selected text, and no document context: Mercy routes to intake or asks for the minimum context needed.
@@ -111,6 +126,7 @@ As an attorney drafting in Word, I want the Mercy add-in to analyze selected tex
 - The evaluation dataset contains privileged real-client data: Mercy rejects it unless anonymized or explicitly approved for the evaluation environment.
 - Observability traces include sensitive matter text: Mercy redacts or summarizes payloads and preserves only required metadata.
 - Word APIs are unavailable or insertion fails: Mercy provides copy fallback and does not drop guardrail metadata.
+- Outlook exposes read-only context or denies compose access: Mercy keeps output copyable, disables draft writing, and never attempts a send or irreversible mailbox action.
 - Premium-only workflows are requested from an ungated context: Mercy identifies the gating status and avoids performing restricted work.
 
 ## Requirements *(mandatory)*
@@ -290,6 +306,12 @@ Workflow selection prompt:
 - **FR-038**: The add-in MUST support matter selection or matter creation handoff so Word work product can be tied to the same context used by the Standalone Platform.
 - **FR-039**: The add-in MUST display D.C. clause library entries with title, category, risk level, jurisdiction note, source status, and insertion action.
 - **FR-040**: The add-in MUST handle Word API unavailability, empty selection, oversized document text, offline core, failed insertion, and missing entitlement with clear user recovery paths.
+- **FR-041**: The production Outlook add-in MUST use the same shared router, auth/session, tenant/matter context, core response envelope, reliability UI, and redacted offline infrastructure as Word.
+- **FR-042**: Outlook read workflows MUST support message/thread summarization and structured triage of material facts, deadlines, requests, obligations, risks, attachment gaps, and follow-up items using only permitted context.
+- **FR-043**: Outlook drafting MUST produce a preview first. Read mode MUST remain non-modifying; compose/reply mode MAY write only to the open draft after explicit attorney approval.
+- **FR-044**: Mercy MUST NOT expose programmatic email sending, `ItemSend`, `OnMessageSend`, or another irreversible mailbox action in the beta.
+- **FR-045**: Approved Outlook correspondence capture MUST require a selected matter and preserve firm, tenant, user, source/provenance, and attorney-review metadata in matter history.
+- **FR-046**: Outlook MUST handle missing permissions, unavailable body/selection context, read versus compose mode, offline core, timeout, malformed context, failed draft write, and retry/copy recovery with clear user-facing states.
 
 Office add-in workflow contract:
 
@@ -314,7 +336,7 @@ Office add-in workflow contract:
 - **Golden Dataset Case**: A test case containing prompt, context, expected route, allowed sources, expected answer traits, prohibited claims, required guardrails, and scoring notes.
 - **Observability Trace**: A redacted or metadata-focused record of a request path, route decision, retrieval plan, selected capability, output status, safety status, and evaluation link.
 - **Client Intake Record**: Structured matter-opening data covering parties, role, jurisdiction, posture, deadlines, relief, facts, documents, sensitivity, missing inputs, and next workflow.
-- **Office Add-in Action**: A Word-side user action such as explain, review, revise, draft, insert, replace, append, report, or copy, linked to route and guardrail metadata.
+- **Office Add-in Action**: A Word or Outlook user action such as explain, review, revise, draft, summarize, triage, copy, approved insert/replace/append/draft-write, or selected-matter capture, linked to route, source, approval, and guardrail metadata.
 
 ### Legal AI Safety & Data Handling *(mandatory for Mercy features)*
 
@@ -339,13 +361,14 @@ Office add-in workflow contract:
 - **SC-008**: Intake users can create a usable matter context for common D.C. small-firm workflows in under 5 minutes when they have basic facts and documents available.
 - **SC-009**: 100% of Word add-in generated outputs preserve route, source, guardrail, fallback, and human-review metadata whether inserted, appended, copied, or reported.
 - **SC-010**: 100% of traces and evaluation records that include client-sensitive content are either redacted, anonymized, explicitly approved for that environment, or rejected before storage.
+- **SC-011**: 100% of Outlook-generated replies remain previews until attorney approval; no Mercy code path sends a message, and read-mode items cannot be modified.
 
 ## Assumptions
 
 - The feature is one integrated specification package, not six separate Spec Kit features, because this command creates a single feature directory per invocation.
 - The existing Shared Intelligence Core remains the system of record for routing, matter context, drafting, discovery, guardrails, and source metadata.
 - `mercy-legal-web` is the production Standalone Platform candidate, while `standalone_platform` remains a local smoke-test surface.
-- `mercy-legal-plugin` is the production Office add-in candidate, while `word_plugin` remains a lightweight local taskpane scaffold.
+- `mercy-legal-plugin` is the production Word and Outlook add-in candidate with one shared host-aware foundation, while `word_plugin` remains a lightweight local taskpane scaffold.
 - RAGAS and LangSmith are user-requested product requirements for evaluation and observability; their project-specific wiring will be detailed in planning and tasks.
 - D.C. source coverage starts with official, public, and user-provided sources before adding broader commercial or proprietary legal datasets.
 - Source verification and citation finalization remain attorney-supervised until official verification workflows are production-hardened.

@@ -33,7 +33,12 @@ def _jwt(tenant_id: str = "verify-tenant-a", user_id: str = "verify-user-a", rol
         "sub": user_id,
         "iat": now,
         "exp": now + 3600,
-        "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
+        "app_metadata": {
+            "tenant_id": tenant_id,
+            "roles": roles or ["attorney"],
+            "subscription_status": "trialing",
+            "workspace_active": True,
+        },
     }
     signing_input = f"{_b64url(header)}.{_b64url(payload)}"
     signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256).digest()

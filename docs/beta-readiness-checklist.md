@@ -15,6 +15,14 @@ Update - 2026-07-03:
 - Verified `npm.cmd run test:e2e:local -- tests/e2e/dashboard.spec.ts --project=chromium`; the authenticated dashboard smoke passes with the local dev auth harness.
 - Direct `npm`/`npx` can still resolve to a broken roaming npm prefix on this workstation; use `npm.cmd` for local Windows verification until Node/npm is repaired outside the repo.
 
+Update - 2026-07-11 (shared Office safety and Outlook workflow slice):
+
+- The existing `mercy-legal-plugin/` bundle now detects Word versus Outlook and keeps shared auth, tenant/matter selection, core routing, reliability metadata, offline recovery, and visual primitives.
+- Outlook exposes summary, legal-email triage, reply preview, source/ethics review, and explicit selected-matter capture using permitted message context and attachment metadata.
+- Word replacements/appends and Outlook draft writes now have preview/approval UI. Ribbon fallbacks also require confirmation. There is no Outlook send API, `ItemSend`, or `OnMessageSend` handler.
+- The Word and Outlook production manifests validated through Microsoft's manifest service; Office TypeScript, ESLint, production build, and `npm run smoke:office` passed.
+- Live Word/Outlook sideload testing is still required. Static validation does not prove Office host APIs, enterprise SSO, or tenant persistence work in a real Microsoft 365 account.
+
 Verified in this update:
 
 - Core `/health` is public and does not require tenant or user headers.
@@ -89,16 +97,30 @@ Go/no-go: **Must pass**.
 ## 3. Office Add-in Readiness
 
 - [ ] The taskpane is hosted over HTTPS.
-- [ ] Production manifest validates.
-- [ ] Manifest uses production taskpane, command, icon, support, terms, and privacy URLs.
-- [ ] Sideload instructions are tested.
-- [ ] Add-in can connect to the same core and tenant model as the web app.
+- [ ] Both production manifests validate and are tested in supported Word and Outlook hosts.
+- [ ] Manifests use production taskpane, command, icon, support, terms, and privacy URLs.
+- [ ] Word and Outlook sideload instructions are tested.
+- [ ] Both hosts connect to the same core, auth/session, firm, tenant, user, and matter model as the web app.
+- [ ] Offline queue/cache stores only redacted metadata and never raw confidential document or email text.
+
+Word:
+
 - [ ] Add-in can analyze selected text or active document text.
 - [ ] Add-in can draft revisions and preserve route/source/guardrail metadata.
-- [ ] Offline queue/cache stores only redacted metadata and never raw confidential text.
-- [ ] Word insertion failures provide copy fallback with the same attorney-review warnings.
+- [ ] Draft, redline, insertion, replacement, and report append remain previews until the attorney explicitly approves the exact output.
+- [ ] Word insertion failures provide copy fallback with the same attorney-review warnings and provenance.
 
-Go/no-go: **Must pass for Word beta**.
+Outlook:
+
+- [ ] Add-in can read the selected email and permitted message/thread context without silently fetching attachment bodies.
+- [ ] Summary and triage identify material facts, deadlines, requests, obligations, risks, and follow-up items with inference warnings.
+- [ ] Draft replies preserve matter context, source/provenance metadata, and attorney-review language.
+- [ ] Read mode cannot modify received email; compose mode writes only to the open draft after explicit approval.
+- [ ] Mercy exposes no automatic send control, send event, or irreversible mailbox action.
+- [ ] Approved correspondence capture is persisted only to the selected tenant/matter and appears in matter history.
+- [ ] Permission, offline, backend-unavailable, timeout, malformed-context, and recovery states are tested in Outlook.
+
+Go/no-go: **Must pass for Word and Outlook beta**.
 
 ## 4. Core API Readiness
 

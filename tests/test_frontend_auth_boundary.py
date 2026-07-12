@@ -39,6 +39,20 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
         self.assertIn("firmId: firmFromUser(user)", source)
         self.assertIn("Firm/customer context is valid for account-level flows", source)
 
+    def test_paid_signup_activation_refreshes_session_after_verified_stripe_session(self) -> None:
+        route = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "signup" / "activation" / "route.ts").read_text(encoding="utf-8")
+        success_client = (ROOT / "mercy-legal-web" / "src" / "components" / "auth" / "signup-success-client.tsx").read_text(encoding="utf-8")
+        provisioning = (ROOT / "mercy-legal-web" / "src" / "lib" / "signup" / "provisioning.ts").read_text(encoding="utf-8")
+        webhook = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "stripe" / "webhook" / "route.ts").read_text(encoding="utf-8")
+
+        self.assertIn('stripe.checkout.sessions.retrieve(checkoutSessionId!, { expand: ["subscription"] })', route)
+        self.assertIn("stripeSessionUserId(session) !== user.id", route)
+        self.assertIn("provisionPaidSignup(session)", route)
+        self.assertIn("supabase?.auth.refreshSession()", success_client)
+        self.assertIn("account_status: subscriptionStatus", provisioning)
+        self.assertIn("workspace_active: workspaceActive", provisioning)
+        self.assertIn('result.mode === "storage_error" || result.mode === "auth_error"', webhook)
+
 
 if __name__ == "__main__":
     unittest.main()

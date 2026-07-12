@@ -1,6 +1,6 @@
 # Mercy AI SOC 2 Type 1 Readiness Checklist
 
-Status date: 2026-05-14
+Status date: 2026-07-10
 
 Mercy AI is in practical SOC 2 Type 1 preparation for a limited beta with D.C. solo and small-firm attorneys. This checklist is not a SOC 2 report and does not claim certification.
 
@@ -48,6 +48,11 @@ Mercy AI is in practical SOC 2 Type 1 preparation for a limited beta with D.C. s
 | Check | Current Status | Evidence / Notes |
 | --- | --- | --- |
 | Compliance CLI | Implemented | Run `python -m scripts.check_security_compliance`. |
+| Secrets scanning | Implemented | GitHub Actions runs Gitleaks on pull requests, `main`, weekly schedule, and manual dispatch. |
+| Dependency vulnerability scanning | Implemented | GitHub Actions runs pip-audit for Python requirements and npm audit for web, Office add-in, and legacy Word smoke package roots. |
+| Pull request dependency review | Implemented | GitHub Dependency Review blocks high-severity vulnerable dependency diffs and disallowed strong-copyleft licenses on pull requests. |
+| Semgrep static analysis | Implemented | GitHub Actions runs Semgrep `--config auto` with `.semgrepignore` excluding generated/local artifacts. |
+| CodeQL code scanning | Implemented | GitHub Actions runs CodeQL security-and-quality queries for Python and JavaScript/TypeScript. |
 | Python static security hook | Hooked | CLI detects and can run Bandit when installed. |
 | Node dependency audit hook | Hooked | CLI detects `npm audit --json` for web and add-in package roots. |
 | Headers and CORS configuration | Implemented | CLI verifies the control module exposes configured headers and origin policy guidance. |

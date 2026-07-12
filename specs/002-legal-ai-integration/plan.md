@@ -11,7 +11,7 @@ Mercy now follows a "One Brain, Multiple Surfaces" model:
 
 1. **FastAPI Shared Intelligence Core** in root Python modules owns routing, matter context, response envelopes, D.C. guardrails, RAG retrieval, evaluation, observability, intake, and agent execution.
 2. **Standalone Platform** in `mercy-legal-web/` consumes core state and metadata from a typed Next.js client, including beta launch status, quota, feedback, and template workflows.
-3. **Office / Word Add-in** in `mercy-legal-plugin/` routes legal tasks through `/v1/agent/execute`, discovers MCP-compatible skills, displays route/reliability metadata, exposes the shared D.C. template gallery and limited beta status, and now redacts local offline storage.
+3. **Office / Word and Outlook Add-ins** in `mercy-legal-plugin/` share one host-aware task pane and route legal tasks through `/v1/agent/execute`. Word supports document analysis/drafting; Outlook supports message summary, triage, reply preview, citation/ethics review, and explicit matter capture. Both display route/reliability metadata, share auth and tenant/matter context, redact offline storage, and require approval before Word changes or Outlook draft writes. Mercy exposes no Outlook send capability.
 4. **Legal Discovery AI** in `legal_discovery_ai/` remains the brownfield discovery engine integrated through `bridge.py`.
 
 The implementation is functional for local development and controlled beta-candidate workflows. Production hardening has auth, tenant isolation, persistent matter storage, D.C. RAG persistence, a D.C. knowledge seeding pipeline, LangGraph runtime activation, LiteLLM-backed provider integration, stronger eval thresholds, Office add-in core integration, limited beta infrastructure, monitoring, and SOC 2 preparation in place.
@@ -24,10 +24,10 @@ The main remaining blocker is no longer the legal AI core. It is **frontend prod
 **Primary Dependencies**: FastAPI, Pydantic, Uvicorn, LiteLLM for multi-provider LLM calls, Next.js 15, React 19 for `mercy-legal-web`, Vite 5, React 18, Fluent UI, Office.js tooling for `mercy-legal-plugin`, CrewAI package under `legal_discovery_ai`.
 **Storage**: SQLAlchemy-backed PostgreSQL + pgvector persistent store via `POSTGRES_URL` or `SUPABASE_URL` for matters, official D.C. RAG sources/chunks, and LangGraph checkpoints; local in-memory fallback is allowed only for explicit `MERCY_ENV=local` development.
 **Testing**: Python `unittest` modules under `tests/`; `npm run typecheck`, `npm run build`, and `npm run lint` for TypeScript surfaces; Office manifest validation via `npm run validate:manifest`.
-**Target Platform**: Local Windows development, FastAPI core, Next.js web app, Microsoft Word add-in.
+**Target Platform**: Local Windows development, FastAPI core, Next.js web app, Microsoft Word and Outlook add-ins.
 **Project Type**: Brownfield multi-surface legal AI product with Python API core plus two TypeScript frontend surfaces.
 **Performance Goals**: Local API and UI flows should remain responsive for solo/small-firm workflows; current implementation favors correctness, auditability, and safe fallback over latency optimization.
-**Constraints**: D.C.-native scope, attorney review on all legal output, citation/record verification, no raw confidential Word content persisted locally, local nonpersistent matter posture until production storage is designed.
+**Constraints**: D.C.-native scope, attorney review on all legal output, citation/record verification, no raw confidential Word or Outlook content persisted locally, no automated email sending, and local nonpersistent matter posture until production storage is designed.
 **Scale/Scope**: MVP single-user/local or small-firm workflows; production multi-tenant use is not yet approved.
 
 ## Constitution Check
@@ -70,9 +70,12 @@ Standalone Platform
     src/app/dashboard/
     src/components/dashboard/
 
-Office / Word Add-in
+Office / Word and Outlook Add-ins
   mercy-legal-plugin/
     src/services/api.ts
+    src/services/office.ts
+    src/services/word.ts
+    src/components/office/
     src/components/metadata/
     src/components/skills/
     src/components/risk/
@@ -80,6 +83,7 @@ Office / Word Add-in
     src/components/document/
     src/commands.ts
     manifest.xml
+    manifest.outlook.xml
 
 Brownfield discovery package
   legal_discovery_ai/
@@ -108,10 +112,32 @@ Local smoke surfaces
 | Production Monitoring | `monitoring.py` aggregates LangSmith/local traces, beta quota state, LiteLLM cost events, RAGAS/grounding health, guardrail triggers, error rates, and alert readiness through `/v1/monitoring/*` plus a CLI. | Monitoring state is lightweight and process-local unless connected to persistent logs or an external observability backend. |
 | Advanced RAGAS Regression | `evals/ragas_harness.py` rebuilds the PD038 full seeded official D.C. corpus, generates a 200-case D.C. golden set, runs custom legal RAGAS metrics, writes regression reports, and surfaces latest health through RAG status and monitoring. | Metrics are deterministic and metadata-grounded; external RAGAS/model judges can be layered on when CI secrets and model access are approved. |
 | Agent Network | `agent_network.py` exposes `/v1/agent/skills` and `/v1/agent/execute`; agents and MCP-compatible skill metadata exist and report active LLM provider/model status. | MCP compatibility is manifest/schema-level, not a served MCP transport. |
-| Office Add-in | `mercy-legal-plugin/` routes analysis, drafting, citation, ethics, matter update, and export actions through the core. | Offline storage is now redacted, but queued actions need the user to rerun with the active document for source content. |
+| Office Add-ins | `mercy-legal-plugin/` routes Word analysis/drafting and Outlook summary/triage/reply/matter-capture actions through the core with shared auth, tenant context, reliability UI, redacted offline state, and explicit change approval. | Live Microsoft 365 sideload testing remains required; queued actions need the user to rerun with the active document or message, and Outlook attachment bodies are not first-class ingestion inputs. |
 | Standalone Web | `mercy-legal-web/` has a typed core client and displays envelope/matter metadata. | Several dashboard panels still use demo/mock data. |
 
 **Current frontend correction**: the Standalone Web now uses live core client calls for several workflows and no longer depends solely on mock dashboard state, but it remains basic as a product. It still needs real auth/session handling, clean route grouping, a matter-centered workflow, stronger document/source UX, entitlement integration, and beta polish before real D.C. attorneys should be invited.
+
+## Public Product Benchmark and Mercy Classification (verified 2026-07-11)
+
+These are quality and workflow benchmarks, not designs to copy. Public evidence used for the current comparison:
+
+- Harvey documents Assistant, Vault, Workflow Agents, History, Library, exact-source links, and global search in its [Getting Started guide](https://help.harvey.ai/articles/getting-started-with-harvey), plus Word drafting/playbooks and Outlook summary/reply/Vault routing on its [Ecosystem page](https://www.harvey.ai/platform/ecosystem) and [Microsoft 365 overview](https://www.harvey.ai/blog/how-harvey-integrates-with-microsoft-365-applications).
+- Legora documents its connected Assistant, Tabular Review, Workflows, legal research, and cited answers on its [product overview](https://legora.com/product); agentic Word drafting/redlining/playbooks/actions on its [Word Add-in page](https://legora.com/product/word-add-in); and thread summary, reply drafting, and matter/document capture on its [Outlook Add-in page](https://legora.com/product/outlook-add-in).
+
+| Capability | Mercy classification | Repository evidence and beta implication |
+|---|---|---|
+| Shared legal assistant and routed agents | Implemented but needing improvement | FastAPI router/Agent X are mature; web and Office presentation, cancellation, reusable workflows, and progress detail remain less polished than the benchmark. |
+| Matter-centered workspace | Partially implemented | Authenticated route groups, matter pages, intake, Vault, Research, Mercy, History, and settings exist, but the complete live-host attorney journey and beta data posture remain unproven. |
+| Document/Vault ingestion and retrieval | Implemented but needing improvement | Tenant-scoped PDF upload, attach, preview, delete, and retrieval exist; OCR, additional formats, retention approval, richer review, and Office attachment ingestion remain open. |
+| D.C. legal research and citations | Implemented but needing improvement | D.C. RAG, response envelopes, reliability UI, and regression evidence exist; seeded/candidate metadata is not yet equivalent to current verified official body text with pinpoint/currentness assurance. |
+| Reusable firm/matter knowledge and history | Partially implemented | Matter context, templates, work history, and approved Office matter capture exist; collaboration, firm playbooks, approval history, and organization-wide reusable knowledge need productization. |
+| Word drafting/review | Implemented but needing improvement | Core-backed analysis, drafting, redline, citation/ethics, report, preview, and explicit change approval exist; live Word sideload, formatting fidelity, comparison, and production auth must still be verified. |
+| Outlook summary/triage/reply | Partially implemented | Host-aware context, message summary, structured triage, reply preview, citation/ethics, matter capture, approved draft writing, and no-send enforcement are wired; live Outlook and persistence verification remain open. |
+| Large-set tabular review/playbook automation | Valuable after beta | The backend can run agents and discovery workflows, but benchmark-style review tables and firm playbook builders are not required before the core D.C. solo/small-firm journeys are reliable. |
+| Autonomous email sending or irreversible mailbox automation | Not appropriate for current positioning | Mercy intentionally has no send API or send event; the attorney must review and send from Outlook. |
+| Auth, tenant isolation, and governance | Implemented but needing improvement | Core guards, Supabase/Microsoft handoff, tenant headers, audit controls, and redaction exist; production activation, live cross-tenant tests, retention/backups, and customer-approved policies remain beta blockers. |
+
+The benchmark reinforces Mercy's differentiated priority: a smaller, D.C.-grounded matter workspace with unusually visible source status, provenance, and attorney-control boundaries, rather than premature breadth across enterprise collaboration or unsupported Office hosts.
 
 ## Data Model Summary
 
@@ -293,12 +319,13 @@ This is the next active phase after PD045. The goal is to turn Mercy from a stro
    - Standardize the reliability panel across all web workflows.
    - Show route mode, expert, confidence, fallback state, citations, source verification, guardrail status, RAGAS/regression status where relevant, trace ID, tenant isolation, and data posture.
 
-6. **Office add-in release readiness**
+6. **Word and Outlook add-in release readiness**
    - Finalize HTTPS hosting plan.
-   - Generate and validate production manifest.
+   - Generate and validate production Word and Outlook manifests.
    - Prepare sideload instructions and AppSource notes.
    - Confirm privacy, terms, support URL, icons, screenshots, and test-account requirements.
    - Connect auth/matter selection cleanly to the same core and tenant model as the web app.
+   - Verify Word selection/document actions and Outlook read/compose actions in live hosts, including explicit approval and the no-send boundary.
 
 7. **Entitlements and beta operations**
    - Connect Stripe checkout and beta quotas to tenant capability metadata.
@@ -316,7 +343,7 @@ This is the next active phase after PD045. The goal is to turn Mercy from a stro
 - **PD048**: Build the coherent matter workspace workflow.
 - **PD049**: Make document review and source-anchor UX attorney-ready.
 - **PD050**: Standardize reliability metadata UI across workflows.
-- **PD051**: Prepare Office add-in production release package.
+- **PD051**: Prepare the shared Word and Outlook production release package and live-host validation.
 - **PD052**: Connect Stripe/beta quotas to tenant capability gates.
 - **PD053**: Upgrade D.C. source verification from seeded/candidate metadata toward verified official text and current citation status.
 - **PD054**: Add end-to-end beta workflow verification.
@@ -327,7 +354,7 @@ Mercy should not invite real D.C. attorneys until:
 
 - A beta user can sign in and land in an authenticated tenant workspace.
 - A beta user can create a matter, complete intake, run research, draft/analyze, and view reliability metadata without developer assistance.
-- The Office add-in can connect to the same core and tenant context over HTTPS.
+- The Word and Outlook add-ins can connect to the same core and tenant context over HTTPS; Word changes and Outlook draft writes require approval, and Mercy never sends email.
 - Data retention, deletion, audit, and support expectations are documented.
 - The product clearly labels AI output, source status, and attorney-review requirements.
 - The canonical verification sequence plus beta workflow checks pass.
