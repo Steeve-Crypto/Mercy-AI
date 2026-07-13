@@ -130,10 +130,12 @@ For beta testers:
 3. Provide the HTTPS taskpane URL.
 4. Provide sign-in or beta token instructions.
 5. Confirm the tester can open the taskpane.
-6. In Word, confirm selection/document context is read and Draft/Redline/Report remain previews until the attorney approves replacement or append.
+6. In Word, confirm selection/document context is read and Draft/Redline/Report remain previews until the attorney approves replacement or append. Run `Update Matter`, approve the selected-text capture, and confirm a dedicated Word context event appears without changing the document.
 7. In Outlook read mode, confirm subject, sender/recipients, attachment names, and permitted selection/body context are displayed; attachment bodies are not silently fetched.
 8. In Outlook compose mode, confirm Draft reply remains a preview until `Write to draft` is approved and that Mercy never sends the message.
 9. Confirm summary, triage, citation/ethics review, selected-matter capture, copy fallback, and reliability metadata work.
+10. For `Save to matter`, review the capture preview, approve it, and verify a dedicated Outlook correspondence event appears in the selected matter history only.
+11. Repeat `Save to matter` with the core offline. Confirm Mercy reports that nothing was saved, queues no mutation, and does not replay the write after reconnecting.
 
 ## Core Integration Requirements
 
@@ -156,6 +158,7 @@ The add-in already includes redaction behavior in `src/services/api.ts`. Preserv
 - Do not store raw document text in localStorage.
 - Do not store generated legal content in offline cache.
 - Queue only redacted metadata.
+- Never queue, cache, or replay state-changing matter capture. The attorney must reconnect, keep the source item open, and approve the capture again.
 - Tell users to rerun actions with the active document or message open after reconnecting.
 
 ## Privacy and Support Requirements

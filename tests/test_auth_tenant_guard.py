@@ -799,6 +799,118 @@ class AuthTenantGuardTests(unittest.TestCase):
         self.assertEqual(document_ids, {"matter-b-doc"})
         self.assertNotIn("matter-a-secret-doc", str(context))
 
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_outlook_capture_roundtrip_is_visible_only_to_owning_tenant(self) -> None:
+        matter_id = _matter_id("outlook-history-roundtrip")
+        with _patched_env(os.environ, {"MERCY_ENV": "local", "MERCY_AUTH_MODE": "dev", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            created = client.post(
+                "/v1/matter/intake",
+                headers=_headers("tenant-a", "outlook-user"),
+                json={
+                    "matter_id": matter_id,
+                    "matter_name": "Outlook History Roundtrip",
+                    "surface_context": "unit_test_auth",
+                },
+            )
+            with (
+                patch("main.check_quota"),
+                patch("main.record_usage", return_value={"strong_model_remaining": 49}),
+            ):
+                captured = client.post(
+                    "/v1/agent/execute",
+                    headers=_headers("tenant-a", "outlook-user"),
+                    json={
+                        "task": "Update intake matter context with attorney-approved Outlook correspondence.",
+                        "matter_id": matter_id,
+                        "surface_context": "office_addin",
+                        "params": {
+                            "new_facts": {
+                                "office_addin_note": "Subject: Scheduling order\nDeadline: July 20.",
+                                "office_capture": {
+                                    "surface": "outlook",
+                                    "capture_kind": "correspondence",
+                                    "attorney_approved": True,
+                                    "approval_method": "explicit_save_to_matter_action",
+                                },
+                            },
+                            "auth_context": {"tenant_id": "forged-tenant", "user_id": "forged-user"},
+                        },
+                    },
+                )
+            same_tenant = client.get(f"/v1/matters/{matter_id}", headers=_headers("tenant-a", "outlook-user"))
+            cross_tenant = client.get(f"/v1/matters/{matter_id}", headers=_headers("tenant-b", "other-user"))
+
+        events = [
+            event
+            for event in same_tenant.json().get("history", [])
+            if event.get("event") == "office_correspondence_saved"
+        ]
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(captured.status_code, 200)
+        self.assertEqual(captured.json()["agent_result"]["status"], "pass")
+        self.assertEqual(same_tenant.status_code, 200)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["tenant_id"], "tenant-a")
+        self.assertEqual(events[0]["actor_user_id"], "outlook-user")
+        self.assertEqual(cross_tenant.status_code, 404)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_outlook_capture_cannot_create_or_cross_update_a_matter(self) -> None:
+        owner_matter_id = _matter_id("outlook-owner-matter")
+        missing_matter_id = _matter_id("outlook-missing-matter")
+        capture_payload = {
+            "office_addin_note": "This content must not be stored.",
+            "office_capture": {
+                "surface": "outlook",
+                "capture_kind": "correspondence",
+                "attorney_approved": True,
+                "approval_method": "explicit_save_to_matter_action",
+            },
+        }
+        with _patched_env(os.environ, {"MERCY_ENV": "local", "MERCY_AUTH_MODE": "dev", "MERCY_API_TOKEN": "test-token"}):
+            client = TestClient(app)  # type: ignore[arg-type]
+            client.post(
+                "/v1/matter/intake",
+                headers=_headers("tenant-a"),
+                json={"matter_id": owner_matter_id, "matter_name": "Owner Matter", "surface_context": "unit_test_auth"},
+            )
+            with (
+                patch("main.check_quota"),
+                patch("main.record_usage", return_value={"strong_model_remaining": 49}),
+            ):
+                cross_tenant = client.post(
+                    "/v1/agent/execute",
+                    headers=_headers("tenant-b"),
+                    json={
+                        "task": "Update intake matter context with approved Outlook correspondence.",
+                        "matter_id": owner_matter_id,
+                        "surface_context": "office_addin",
+                        "matter_context": {"auth_context": {"tenant_id": "tenant-a", "user_id": "forged-owner"}},
+                        "params": {"new_facts": capture_payload},
+                    },
+                )
+                missing = client.post(
+                    "/v1/agent/execute",
+                    headers=_headers("tenant-b"),
+                    json={
+                        "task": "Update intake matter context with approved Outlook correspondence.",
+                        "matter_id": missing_matter_id,
+                        "surface_context": "office_addin",
+                        "params": {"new_facts": capture_payload},
+                    },
+                )
+            owner_read = client.get(f"/v1/matters/{owner_matter_id}", headers=_headers("tenant-a"))
+            missing_read = client.get(f"/v1/matters/{missing_matter_id}", headers=_headers("tenant-b"))
+
+        self.assertEqual(cross_tenant.status_code, 404)
+        self.assertEqual(missing.status_code, 200)
+        self.assertEqual(missing.json()["agent_result"]["status"], "block")
+        self.assertEqual(missing_read.status_code, 404)
+        self.assertFalse(
+            any(event.get("event") == "office_correspondence_saved" for event in owner_read.json().get("history", []))
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

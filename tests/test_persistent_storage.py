@@ -49,6 +49,56 @@ class PersistentStorageTests(unittest.TestCase):
                     reloaded_store.get(matter_id, tenant_context=TENANT_B)
                 reset_storage_for_tests()
 
+    def test_approved_outlook_history_survives_persistent_store_reload(self) -> None:
+        from agent_network import update_matter_context as update_matter_context_skill
+        import mercy_context
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'mercy-office-history-test.db'}"
+            tenant_context = {
+                "firm_id": "firm-office",
+                "tenant_id": "tenant-office",
+                "user_id": "user-office",
+                "auth_mode": "unit_test",
+            }
+            other_tenant = {"tenant_id": "tenant-office-other", "user_id": "user-other", "auth_mode": "unit_test"}
+            with patch.dict(os.environ, {"POSTGRES_URL": db_url, "MERCY_ENV": "prod", "MERCY_AUTH_MODE": ""}, clear=False):
+                reset_storage_for_tests()
+                store = DatabaseMatterStore()
+                created = store.create("Persistent Outlook matter", client_name="Office Client", tenant_context=tenant_context)
+                matter_id = created["matter_id"]
+
+                with patch.object(mercy_context, "MATTERS", store):
+                    result = update_matter_context_skill(
+                        matter_id,
+                        {
+                            "office_addin_note": "Subject: Filing deadline\nDeadline: July 20.",
+                            "office_capture": {
+                                "surface": "outlook",
+                                "capture_kind": "correspondence",
+                                "attorney_approved": True,
+                                "approval_method": "explicit_save_to_matter_action",
+                            },
+                        },
+                        auth_context=tenant_context,
+                    )
+
+                self.assertEqual(result["provenance"]["storage_mode"], "persistent_tenant_scoped")
+                reset_storage_for_tests()
+                reloaded_store = DatabaseMatterStore()
+                stored = reloaded_store.get(matter_id, tenant_context=tenant_context)
+                events = [event for event in stored["history"] if event.get("event") == "office_correspondence_saved"]
+
+                self.assertEqual(len(events), 1)
+                self.assertEqual(events[0]["tenant_id"], "tenant-office")
+                self.assertEqual(events[0]["firm_id"], "firm-office")
+                self.assertEqual(events[0]["account_id"], "firm-office")
+                self.assertEqual(events[0]["provenance"]["capture_method"], "explicit_save_to_matter_action")
+                self.assertFalse(events[0]["provenance"]["attachment_bodies_included"])
+                with self.assertRaises(MatterTenantAccessError):
+                    reloaded_store.get(matter_id, tenant_context=other_tenant)
+                reset_storage_for_tests()
+
     def test_rag_ingestion_persists_chunks_and_retrieves_by_tenant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_url = f"sqlite+pysqlite:///{Path(temp_dir) / 'mercy-rag-test.db'}"

@@ -23,6 +23,15 @@ Update - 2026-07-11 (shared Office safety and Outlook workflow slice):
 - The Word and Outlook production manifests validated through Microsoft's manifest service; Office TypeScript, ESLint, production build, and `npm run smoke:office` passed.
 - Live Word/Outlook sideload testing is still required. Static validation does not prove Office host APIs, enterprise SSO, or tenant persistence work in a real Microsoft 365 account.
 
+Update - 2026-07-13 (approved Outlook matter-history persistence):
+
+- `Save to matter` now previews the permitted capture and requires a separate approval before any write. State-changing capture is live-only: it is never cached, queued, or replayed after reconnect, and an offline or failed request is explicitly reported as not saved.
+- Word `Update Matter` now follows the same live-only boundary: selected text is previewed and approved, stored as a dedicated `office_document_context_saved` history event, and never changes the Word document.
+- Success is shown only when the core returns a passing `update_matter_context` skill result whose provenance confirms `office_correspondence_saved`.
+- The core requires an existing selected matter and stores sanitized correspondence in a dedicated history event rather than generic key facts. The event records the distinct firm/account and tenant/workspace IDs, actor, approval method, Office/Outlook provenance, attorney-review posture, and that attachment bodies were not included.
+- Automated checks cover in-memory readback, persistent SQLite reload, same-tenant API readback, cross-tenant 404/block behavior, unknown-matter no-create behavior, Office non-replay policy, Office lint/build/smoke, both manifest validations, and web typecheck.
+- Live Outlook sideload and a real hosted database/account remain required before the Office release gate is complete.
+
 Verified in this update:
 
 - Core `/health` is public and does not require tenant or user headers.
@@ -109,6 +118,7 @@ Word:
 - [ ] Add-in can draft revisions and preserve route/source/guardrail metadata.
 - [ ] Draft, redline, insertion, replacement, and report append remain previews until the attorney explicitly approves the exact output.
 - [ ] Word insertion failures provide copy fallback with the same attorney-review warnings and provenance.
+- [ ] Approved Word context capture appears only in the selected tenant/matter history and does not modify the document.
 
 Outlook:
 

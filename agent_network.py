@@ -15,7 +15,7 @@ from mercy_storage import persistent_storage_configured, record_langgraph_checkp
 from observability import trace_event, trace_span
 from prompts.registry import get_prompt_registry, prompt_registry_status
 from ragas_eval import METRICS as RAGAS_METRICS
-from security_controls import sanitize_payload
+from security_controls import record_security_audit, sanitize_payload
 
 try:
     from langgraph.graph import END, StateGraph  # type: ignore
@@ -402,28 +402,124 @@ def update_matter_context(
     auth_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     with trace_span("mcp_update_matter_context", "agent_network", "agent_skill", matter_reference=matter_id) as span:
+        existing_matter = get_matter_context(matter_id, tenant_context=auth_context)
+        if existing_matter is None:
+            raise LookupError("The selected matter does not exist or is no longer available.")
+        facts_to_persist = dict(new_facts)
+        office_note = facts_to_persist.get("office_addin_note")
+        office_capture = facts_to_persist.get("office_capture")
+        capture_surface = str((office_capture or {}).get("surface") or "").strip().lower() if isinstance(office_capture, dict) else ""
+        capture_kind = str((office_capture or {}).get("capture_kind") or "").strip().lower() if isinstance(office_capture, dict) else ""
+        approval_method = str((office_capture or {}).get("approval_method") or "").strip().lower() if isinstance(office_capture, dict) else ""
+        approved_capture_marker = (
+            isinstance(office_note, str)
+            and bool(office_note.strip())
+            and isinstance(office_capture, dict)
+            and office_capture.get("attorney_approved") is True
+        )
+        approved_outlook_capture = (
+            approved_capture_marker
+            and capture_surface == "outlook"
+            and capture_kind == "correspondence"
+            and approval_method == "explicit_save_to_matter_action"
+        )
+        approved_word_capture = (
+            approved_capture_marker
+            and capture_surface == "word"
+            and capture_kind == "document_context"
+            and approval_method == "explicit_update_matter_action"
+        )
+        approved_office_capture = approved_outlook_capture or approved_word_capture
+        if (office_note is not None or office_capture is not None) and not approved_office_capture:
+            raise PermissionError(
+                "Office matter capture requires an explicit approved Word or Outlook action and cannot be persisted otherwise."
+            )
+        timestamp = datetime.now(UTC).isoformat()
+        if approved_office_capture:
+            tenant_id = str((auth_context or {}).get("tenant_id") or "")
+            user_id = str((auth_context or {}).get("user_id") or "")
+            firm_id = str((auth_context or {}).get("firm_id") or "") or None
+            history_event_name = "office_correspondence_saved" if approved_outlook_capture else "office_document_context_saved"
+            history_detail = (
+                "Attorney-approved Outlook correspondence context was saved to this matter."
+                if approved_outlook_capture
+                else "Attorney-approved Word document context was saved to this matter."
+            )
+            facts_to_persist.pop("office_addin_note", None)
+            facts_to_persist.pop("office_capture", None)
+            history_event = {
+                "event": history_event_name,
+                "timestamp": timestamp,
+                "source": "office_addin",
+                "surface": capture_surface,
+                "capture_kind": capture_kind,
+                "attorney_approved": True,
+                "approval_method": approval_method,
+                "content": office_note,
+                "content_format": "plain_text",
+                "content_length": len(office_note),
+                "content_truncated": office_note.endswith("...[TRUNCATED]"),
+                "detail": history_detail,
+                "data_scope": "selected_tenant_matter_history",
+                "attorney_review_required": True,
+                "tenant_id": tenant_id,
+                "firm_id": firm_id,
+                "account_id": firm_id or tenant_id,
+                "actor_user_id": user_id,
+                "provenance": {
+                    "surface_context": "office_addin",
+                    "office_host": capture_surface,
+                    "capture_method": approval_method,
+                    "attachment_bodies_included": False,
+                },
+            }
+        else:
+            history_event = {
+                "event": "agent_network_mcp_update",
+                "timestamp": timestamp,
+                "source": "update_matter_context",
+            }
+
+        update_payload: dict[str, Any] = {
+            "matter_id": matter_id,
+            "source": "agent_network_mcp_skill",
+            "history": [history_event],
+        }
+        if facts_to_persist:
+            update_payload["key_facts"] = facts_to_persist
+            update_payload["facts"] = facts_to_persist
+
         updated = persist_matter_context(
-            {
-                "matter_id": matter_id,
-                "key_facts": new_facts,
-                "facts": new_facts,
-                "source": "agent_network_mcp_skill",
-                "history": [
-                    {
-                        "event": "agent_network_mcp_update",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "source": "update_matter_context",
-                    }
-                ],
-            },
+            update_payload,
             tenant_context=auth_context,
         )
+        if approved_office_capture:
+            record_security_audit(
+                history_event["event"],
+                tenant_context=auth_context,
+                matter_id=matter_id,
+                category="matter_context",
+                metadata={
+                    "surface": capture_surface,
+                    "capture_kind": capture_kind,
+                    "attorney_approved": True,
+                    "content_length": history_event["content_length"],
+                    "content_truncated": history_event["content_truncated"],
+                    "data_scope": history_event["data_scope"],
+                },
+            )
+        storage_mode = "persistent_tenant_scoped" if persistent_storage_configured() else "local_memory_nonpersistent"
         result = {
             "skill_name": "update_matter_context",
             "status": "pass",
             "matter_context": updated,
             "citations": [],
-            "provenance": {"matter_id": matter_id, "storage_mode": "local_nonpersistent_by_default"},
+            "provenance": {
+                "matter_id": matter_id,
+                "storage_mode": storage_mode,
+                "history_event": history_event["event"],
+                "attorney_approved": approved_office_capture,
+            },
             "grounding_policy": _grounding_policy("pass"),
             "human_review_required": True,
         }
@@ -432,6 +528,9 @@ def update_matter_context(
             "matter_id": matter_id,
             "tenant_id": (auth_context or {}).get("tenant_id"),
             "user_id": (auth_context or {}).get("user_id"),
+            "history_event": history_event["event"],
+            "attorney_approved": approved_office_capture,
+            "storage_mode": storage_mode,
         }
         return result
 
@@ -849,6 +948,17 @@ class IntakeAgent(BaseLegalAgent):
             new_facts=new_facts,
             auth_context=_auth_context_from(state["matter_context"], state["params"]),
         )
+        if update_result.get("status") == "block":
+            return {
+                "agent": self.name,
+                "status": "block",
+                "matter_context": None,
+                "skills_used": ["update_matter_context"],
+                "skill_results": [update_result],
+                "citations": [],
+                "grounding_policy": update_result.get("grounding_policy") or _grounding_policy("block"),
+                "error": update_result.get("error"),
+            }
         return {
             "agent": self.name,
             "status": update_result["status"],

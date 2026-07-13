@@ -121,6 +121,27 @@ type AgentRequest = {
   user_type?: string;
 };
 
+type McpSkillExecutionOptions = {
+  officeCapture?:
+    | {
+        surface: "outlook";
+        capture_kind: "correspondence";
+        attorney_approved: true;
+        approval_method: "explicit_save_to_matter_action";
+      }
+    | {
+        surface: "word";
+        capture_kind: "document_context";
+        attorney_approved: true;
+        approval_method: "explicit_update_matter_action";
+      };
+};
+
+type AgentExecutionPolicy = {
+  allowOfflineQueue?: boolean;
+  cacheResponse?: boolean;
+};
+
 type QueuedAgentRequest = {
   id: string;
   createdAt: string;
@@ -151,6 +172,7 @@ const SENSITIVE_STORAGE_KEYS = new Set([
   "text",
   "word_addin_note"
 ]);
+const NON_REPLAYABLE_AGENT_ACTIONS = new Set(["update_matter_context"]);
 
 const SAFE_STORAGE_STRING_KEYS = new Set([
   "format",
@@ -364,6 +386,9 @@ function storageSafeResponse(response: CoreAgentResponse): CoreAgentResponse {
 }
 
 function queueRequest(action: string, cacheKeyValue: string, request: AgentRequest): void {
+  if (NON_REPLAYABLE_AGENT_ACTIONS.has(action)) {
+    return;
+  }
   const queue = readJson<QueuedAgentRequest[]>(QUEUE_KEY, []);
   const safe = storageSafeRequest(action, request);
   queue.push({
@@ -375,6 +400,14 @@ function queueRequest(action: string, cacheKeyValue: string, request: AgentReque
     redaction: safe.redaction
   });
   writeJson(QUEUE_KEY, queue.slice(-20));
+}
+
+function discardNonReplayableQueuedMutations(): void {
+  const queue = readJson<QueuedAgentRequest[]>(QUEUE_KEY, []);
+  const replayable = queue.filter((item) => !NON_REPLAYABLE_AGENT_ACTIONS.has(item.action));
+  if (replayable.length !== queue.length) {
+    writeJson(QUEUE_KEY, replayable);
+  }
 }
 
 function cachedAgent(cacheKeyValue: string): CoreAgentResponse | null {
@@ -562,10 +595,21 @@ function withCacheState(
   };
 }
 
-async function agentExecute(action: string, request: AgentRequest, fallbackText: string): Promise<CoreAgentResponse> {
+async function agentExecute(
+  action: string,
+  request: AgentRequest,
+  fallbackText: string,
+  policy: AgentExecutionPolicy = {}
+): Promise<CoreAgentResponse> {
   purgeUnsafeStoredAgentData();
+  discardNonReplayableQueuedMutations();
+  const allowOfflineQueue = policy.allowOfflineQueue !== false && !NON_REPLAYABLE_AGENT_ACTIONS.has(action);
+  const cacheResponse = policy.cacheResponse !== false && !NON_REPLAYABLE_AGENT_ACTIONS.has(action);
   const key = cacheKey(action, request);
   if (!isOnline()) {
+    if (!allowOfflineQueue) {
+      throw new Error("Core offline. This state-changing matter action was not queued; reconnect and approve it again.");
+    }
     queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
@@ -576,15 +620,20 @@ async function agentExecute(action: string, request: AgentRequest, fallbackText:
 
   try {
     const response = await postAgent(request);
-    saveCachedAgent(key, response);
+    if (cacheResponse) {
+      saveCachedAgent(key, response);
+    }
     return withCacheState(response, "live");
   } catch (error) {
+    const reason = error instanceof Error ? error.message : "Agent request failed";
+    if (!allowOfflineQueue) {
+      throw new Error(`Mercy core did not confirm the matter write. Nothing was queued. ${reason}`);
+    }
     queueRequest(action, key, request);
     const cached = cachedAgent(key);
     if (cached) {
       return withCacheState(cached, "cached", true);
     }
-    const reason = error instanceof Error ? error.message : "Agent request failed";
     return withCacheState(fallbackAgentResponse(action, request.task, `${fallbackText}\n\nOffline queue: ${reason}`), "queued", true);
   }
 }
@@ -1045,10 +1094,19 @@ function schemaProperties(skill?: CoreMcpManifest["skills"][number]): Record<str
   return properties && typeof properties === "object" ? properties : {};
 }
 
-function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcpManifest["skills"][number]): Record<string, unknown> {
+function buildSkillParams(
+  skillName: string,
+  activeText: string,
+  skill?: CoreMcpManifest["skills"][number],
+  options?: McpSkillExecutionOptions
+): Record<string, unknown> {
   const params: Record<string, unknown> = {};
   const properties = schemaProperties(skill);
   const normalizedText = activeText || "Selected Office content unavailable; reopen the Word document or Outlook message and try again.";
+  const officeFacts = {
+    office_addin_note: normalizedText,
+    ...(options?.officeCapture ? { office_capture: options.officeCapture } : {})
+  };
   for (const key of Object.keys(properties)) {
     if (key === "law_or_case") {
       params[key] = normalizedText || "D.C. Bar Ethics Op. 388";
@@ -1057,7 +1115,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
     } else if (key === "matter_id") {
       params[key] = ACTIVE_MATTER_ID;
     } else if (key === "new_facts") {
-      params[key] = { office_addin_note: normalizedText };
+      params[key] = officeFacts;
     } else if (key === "format") {
       params[key] = "docx";
     } else if (key === "matter_context") {
@@ -1070,7 +1128,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
       draft: normalizedText,
       content: normalizedText,
       matter_id: ACTIVE_MATTER_ID,
-      new_facts: { office_addin_note: normalizedText },
+      new_facts: officeFacts,
       format: "docx"
     };
   }
@@ -1079,6 +1137,7 @@ function buildSkillParams(skillName: string, activeText: string, skill?: CoreMcp
 
 export async function syncOfflineAgentQueue(): Promise<number> {
   purgeUnsafeStoredAgentData();
+  discardNonReplayableQueuedMutations();
   if (!isOnline()) {
     return 0;
   }
@@ -1103,6 +1162,7 @@ export async function syncOfflineAgentQueue(): Promise<number> {
 
 export function queuedAgentRequestCount(): number {
   purgeUnsafeStoredAgentData();
+  discardNonReplayableQueuedMutations();
   return readJson<QueuedAgentRequest[]>(QUEUE_KEY, []).length;
 }
 
@@ -1264,7 +1324,7 @@ export const api = {
     }
   },
 
-  async runMcpSkill(skillName: string, activeText: string): Promise<AgentActionResult> {
+  async runMcpSkill(skillName: string, activeText: string, options?: McpSkillExecutionOptions): Promise<AgentActionResult> {
     const manifest = await skillManifest();
     const discoveredSkill = manifest?.skills.find((skill) => skill.name === skillName);
     const taskBySkill: Record<string, string> = {
@@ -1273,7 +1333,7 @@ export const api = {
       update_matter_context: "Update matter context with attorney-approved Office document or email context.",
       export_to_word: "Draft export to Word using an Office.js-ready payload."
     };
-    const skillParams = buildSkillParams(skillName, activeText, discoveredSkill);
+    const skillParams = buildSkillParams(skillName, activeText, discoveredSkill, options);
     const response = await agentExecute(
       skillName,
       {
@@ -1287,7 +1347,8 @@ export const api = {
         },
         params: skillParams
       },
-      `Preview fallback: ${skillName} queued for sync.`
+      `Preview fallback: ${skillName} queued for sync.`,
+      skillName === "update_matter_context" ? { allowOfflineQueue: false, cacheResponse: false } : undefined
     );
     return {
       title: skillName.replace(/_/g, " "),

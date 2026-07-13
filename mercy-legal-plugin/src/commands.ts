@@ -14,6 +14,15 @@ function confirmOfficeChange(title: string, content: string): boolean {
   );
 }
 
+function confirmMatterCapture(title: string, content: string): boolean {
+  if (typeof window === "undefined") return false;
+  const preview = content.trim().slice(0, 1_200);
+  return window.confirm(
+    `${title}\n\nMercy will save this selected Word text only to the active tenant/matter history after approval. ` +
+      `The Word document will not be changed.\n\nPreview:\n${preview}${content.length > preview.length ? "\n\n[Preview truncated]" : ""}`
+  );
+}
+
 async function runSkillCommand(skillName: string, textProvider: () => Promise<string>, event: CommandEvent) {
   try {
     const text = await textProvider();
@@ -91,8 +100,40 @@ function checkDcEthics(event: CommandEvent) {
   void runSkillCommand("check_dc_ethics", readDocumentText, event);
 }
 
-function updateMatterContext(event: CommandEvent) {
-  void runSkillCommand("update_matter_context", readSelectedText, event);
+async function updateMatterContext(event: CommandEvent) {
+  try {
+    const text = await readSelectedText();
+    if (!text.trim()) {
+      throw new Error("Select the Word text you want to save to the active matter.");
+    }
+    if (!confirmMatterCapture("Approve Mercy matter context update", text)) {
+      return;
+    }
+    const result = await api.runMcpSkill("update_matter_context", text, {
+      officeCapture: {
+        surface: "word",
+        capture_kind: "document_context",
+        attorney_approved: true,
+        approval_method: "explicit_update_matter_action"
+      }
+    });
+    const captureResult = result.core.skillResults?.find((skill) => skill.skill_name === "update_matter_context");
+    if (
+      result.core.cacheStatus !== "live" ||
+      captureResult?.status !== "pass" ||
+      captureResult.provenance?.history_event !== "office_document_context_saved"
+    ) {
+      throw new Error("The Mercy core did not confirm a Word document-context history event.");
+    }
+    window.alert("Selected Word context was saved to the active Mercy matter. The document was not changed.");
+  } catch (error) {
+    console.error("Mercy command failed: updateMatterContext", error);
+    if (typeof window !== "undefined") {
+      window.alert(error instanceof Error ? error.message : "Mercy could not save the selected Word context.");
+    }
+  } finally {
+    event.completed();
+  }
 }
 
 function exportToWord(event: CommandEvent) {

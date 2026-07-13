@@ -126,5 +126,7 @@ Do not upload source `src/`, node_modules, or the dev manifests for production u
 - Word uses document/selection workflows; Outlook uses message summary, triage, reply preview, citation/ethics review, and explicit matter capture.
 - Word replacement/append and Outlook draft-write actions require approval after preview. Mercy does not expose an Outlook send action or send event.
 - Outlook ribbon shortcuts open the task pane with a workflow prompt so no received message or draft is modified from a background command.
+- Outlook matter capture requires a preview confirmation and a live passing core response. It is never queued, cached, or replayed, and success requires the core to confirm a dedicated `office_correspondence_saved` event for the selected tenant/matter.
+- Word `Update Matter` uses the same live-only policy and confirms `office_document_context_saved`; it records approved selected text in matter history without inserting or replacing document content.
 
 The same hosted bundle detects the active Office host and keeps authentication, tenant context, core routing, reliability metadata, offline recovery, and visual primitives shared.

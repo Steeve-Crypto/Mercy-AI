@@ -66,6 +66,8 @@ export function formatActivityEvent(value: unknown): string {
     document_attached: "Document attached",
     research_run: "Research run completed",
     agent_request_completed: "Mercy request completed",
+    office_correspondence_saved: "Outlook correspondence saved",
+    office_document_context_saved: "Word context saved",
   };
   return labels[event] ?? titleCase(event);
 }
@@ -80,6 +82,12 @@ export function formatActivityDetail(event: unknown, detail: unknown): string {
   if (normalized === "document_uploaded") return "Document was uploaded to this matter.";
   if (normalized === "document_attached") return "Document was attached to this matter.";
   if (normalized === "research_run") return "Research results were added to this matter.";
+  if (normalized === "office_correspondence_saved") {
+    return "Attorney-approved Outlook correspondence context was saved to this matter.";
+  }
+  if (normalized === "office_document_context_saved") {
+    return "Attorney-approved Word document context was saved to this matter.";
+  }
   return "Matter history updated.";
 }
 

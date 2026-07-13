@@ -485,7 +485,38 @@ export function App() {
         formatOfficeContext(context, 12_000),
         lastResponse ? `\nMercy output (${lastResponse.title}):\n${lastResponse.content.slice(0, 8_000)}` : ""
       ].filter(Boolean).join("\n");
-      const result = await api.runMcpSkill("update_matter_context", historyEntry);
+      const preview = historyEntry.slice(0, 1_200);
+      const approved = window.confirm(
+        "Approve save to matter\n\nMercy will add this permitted Outlook context to the selected tenant/matter history. " +
+          "Nothing will be sent or changed in Outlook.\n\nPreview:\n" +
+          `${preview}${historyEntry.length > preview.length ? "\n\n[Preview truncated]" : ""}`
+      );
+      if (!approved) {
+        setNotice("Save canceled. Nothing was added to the matter.");
+        return;
+      }
+      const result = await api.runMcpSkill("update_matter_context", historyEntry, {
+        officeCapture: {
+          surface: "outlook",
+          capture_kind: "correspondence",
+          attorney_approved: true,
+          approval_method: "explicit_save_to_matter_action"
+        }
+      });
+      if (result.core.cacheStatus !== "live") {
+        throw new Error(
+          "Correspondence was not saved. Reconnect to the Mercy core, keep this Outlook item open, and approve Save to matter again."
+        );
+      }
+      const captureResult = result.core.skillResults?.find((skill) => skill.skill_name === "update_matter_context");
+      if (
+        captureResult?.status !== "pass" ||
+        captureResult.provenance?.history_event !== "office_correspondence_saved"
+      ) {
+        throw new Error(
+          "The Mercy core did not confirm an approved Outlook history event. Nothing is reported as saved; refresh the matter and try again."
+        );
+      }
       setResult({ ...result, title: "Saved to matter" });
       setNotice("Correspondence saved to the selected matter");
     } catch (error) {

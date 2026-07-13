@@ -64,8 +64,11 @@ function checkOfficeMatterIsReadOnly() {
 function checkAttorneyApprovalBoundary() {
   const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
   const commands = fs.readFileSync(path.join(root, "src/commands.ts"), "utf8");
+  const apiService = fs.readFileSync(path.join(root, "src/services/api.ts"), "utf8");
   const officeService = fs.readFileSync(path.join(root, "src/services/office.ts"), "utf8");
-  const allOfficeSource = `${app}\n${commands}\n${officeService}`;
+  const wordService = fs.readFileSync(path.join(root, "src/services/word.ts"), "utf8");
+  const outlookManifest = fs.readFileSync(path.join(root, "manifest.outlook.xml"), "utf8");
+  const allOfficeSource = `${app}\n${commands}\n${apiService}\n${officeService}\n${wordService}\n${outlookManifest}`;
   if (!app.includes("ApprovalActions") || !app.includes("applyApprovedOfficeText")) {
     fail("Task-pane output is missing the explicit preview and attorney-approval boundary.");
     return;
@@ -74,11 +77,54 @@ function checkAttorneyApprovalBoundary() {
     fail("Ribbon commands can modify Office content without explicit approval.");
     return;
   }
+  if (
+    !commands.includes("confirmMatterCapture") ||
+    !commands.includes("office_document_context_saved") ||
+    commands.includes('runSkillCommand("update_matter_context"')
+  ) {
+    fail("The Word Update Matter command does not use an approved, live-only history capture boundary.");
+    return;
+  }
   if (/\.send\s*\(|ItemSend|OnMessageSend/i.test(allOfficeSource)) {
     fail("Outlook code must not send messages or register an automatic send event.");
     return;
   }
   console.log("PASS Word replacements and Outlook draft writes require approval; no send capability is present");
+}
+
+function checkOutlookMatterCaptureBoundary() {
+  const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  const apiService = fs.readFileSync(path.join(root, "src/services/api.ts"), "utf8");
+  const requiredApprovalTokens = [
+    "Approve save to matter",
+    "explicit_save_to_matter_action",
+    "Save canceled. Nothing was added to the matter.",
+  ];
+  if (requiredApprovalTokens.some((token) => !app.includes(token))) {
+    fail("Outlook matter capture is missing exact-output approval or cancel-without-write messaging.");
+    return;
+  }
+  if (!apiService.includes("office_capture") || !apiService.includes("attorney_approved")) {
+    fail("Outlook matter capture does not send structured approval provenance to the core.");
+    return;
+  }
+  if (
+    !apiService.includes('NON_REPLAYABLE_AGENT_ACTIONS = new Set(["update_matter_context"])') ||
+    !apiService.includes("allowOfflineQueue: false") ||
+    !apiService.includes("discardNonReplayableQueuedMutations")
+  ) {
+    fail("State-changing Outlook matter capture can be cached, queued, or replayed without fresh approval.");
+    return;
+  }
+  if (!app.includes("Correspondence was not saved") || !app.includes('cacheStatus !== "live"')) {
+    fail("Outlook matter capture can claim success for an offline, queued, or failed write.");
+    return;
+  }
+  if (!app.includes('history_event !== "office_correspondence_saved"') || !app.includes('captureResult?.status !== "pass"')) {
+    fail("Outlook matter capture does not verify the core-confirmed history event before reporting success.");
+    return;
+  }
+  console.log("PASS Outlook matter capture requires preview-based approval, is live-only, and verifies the saved history event");
 }
 
 function checkOutlookWorkflowFoundation() {
@@ -184,7 +230,8 @@ function printChecklist() {
   console.log("4. Before enterprise pilots, pre-authorize Office client applications for the Entra access_as_user scope.");
   console.log("5. Select matter context from the matter selector, then run Analyze, Draft, Cite, and Ethics.");
   console.log("6. Confirm Draft, Redline, and Report show a preview; the document changes only after Replace selection or Append report is approved.");
-  console.log("7. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
+  console.log("7. Select safe sample text and run Update Matter; approve the capture, confirm the document is unchanged, and verify the Word context event appears only in the selected matter history.");
+  console.log("8. For each response, confirm Reliability Panel shows route, confidence, guardrails, citations, attorney review, LangSmith trace, and D.C. grounding.");
 
   section("Manual Outlook Smoke Checklist");
   console.log("1. Run npm run dev in mercy-legal-plugin and sideload manifest.outlook.xml in Outlook.");
@@ -194,7 +241,8 @@ function printChecklist() {
   console.log("5. Run Draft reply in a read item; confirm Write to draft is disabled and Copy remains available.");
   console.log("6. Run Draft reply in a reply/compose window; approve Write to draft, confirm only the draft changes, then verify Mercy never sends it.");
   console.log("7. Select a matter and approve Save to matter; confirm the correspondence event appears only in that tenant/matter history.");
-  console.log("8. Confirm Reliability Panel remains visible for every Mercy response and auth handoff behaves like Word.");
+  console.log("8. With the core offline, retry Save to matter; confirm Mercy reports not saved, queues nothing, and reconnecting does not replay the write.");
+  console.log("9. Confirm Reliability Panel remains visible for every Mercy response and auth handoff behaves like Word.");
 }
 
 section("Office Add-in Static Smoke");
@@ -210,6 +258,7 @@ for (const file of authRouteFiles) {
 }
 checkOfficeMatterIsReadOnly();
 checkAttorneyApprovalBoundary();
+checkOutlookMatterCaptureBoundary();
 checkOutlookWorkflowFoundation();
 for (const manifest of manifests) {
   validateManifest(manifest);
