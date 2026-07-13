@@ -4,7 +4,7 @@ import hashlib
 import os
 import re
 import time
-from collections import defaultdict, deque
+from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -153,12 +153,31 @@ def security_headers() -> dict[str, str]:
 
 
 class InMemoryRateLimiter:
-    def __init__(self) -> None:
-        self._events: dict[str, deque[float]] = defaultdict(deque)
+    def __init__(self, *, max_buckets: int = 10_000) -> None:
+        self._events: dict[str, deque[float]] = {}
+        self._last_seen: dict[str, float] = {}
+        self._max_buckets = max(1, max_buckets)
+        self._checks = 0
+
+    def _remove_bucket(self, key: str) -> None:
+        self._events.pop(key, None)
+        self._last_seen.pop(key, None)
+
+    def _maintain_bucket_bound(self, now: float, window_seconds: int, incoming_key: str) -> None:
+        self._checks += 1
+        if self._checks % 256 == 0:
+            stale_keys = [key for key, last_seen in self._last_seen.items() if now - last_seen > window_seconds]
+            for key in stale_keys:
+                self._remove_bucket(key)
+        if incoming_key not in self._events and len(self._events) >= self._max_buckets:
+            oldest_key = min(self._last_seen, key=self._last_seen.__getitem__)
+            self._remove_bucket(oldest_key)
 
     def check(self, key: str, *, limit: int, window_seconds: int = 60) -> tuple[bool, int]:
         now = time.monotonic()
-        bucket = self._events[key]
+        self._maintain_bucket_bound(now, window_seconds, key)
+        bucket = self._events.setdefault(key, deque())
+        self._last_seen[key] = now
         while bucket and now - bucket[0] > window_seconds:
             bucket.popleft()
         if len(bucket) >= limit:
@@ -169,6 +188,15 @@ class InMemoryRateLimiter:
 
 
 RATE_LIMITER = InMemoryRateLimiter()
+
+
+def request_rate_limit_key(*, client_host: str, path: str, authorization: str | None) -> str:
+    """Use an authenticated session key when present, otherwise isolate anonymous clients by address."""
+    scheme, separator, credential = (authorization or "").strip().partition(" ")
+    if separator and scheme.lower() == "bearer" and credential.strip():
+        fingerprint = hashlib.sha256(credential.strip().encode("utf-8")).hexdigest()[:16]
+        return f"session:{fingerprint}:{path}"
+    return f"client:{client_host}:{path}"
 
 
 def check_rate_limit(key: str, *, limit: int | None = None, window_seconds: int = 60) -> tuple[bool, int]:
@@ -185,7 +213,7 @@ def security_compliance_status() -> dict[str, Any]:
             "https": "HSTS headers enabled; MERCY_REQUIRE_HTTPS=true rejects non-HTTPS /v1 traffic behind a proxy",
             "encryption_at_rest": "PostgreSQL provider encryption required; see docs/compliance/security_overview.md",
             "pii_redaction": "LLM and RAG inputs/outputs pass through sanitization hooks",
-            "rate_limiting": f"/v1/* limited by tenant and IP, default {DEFAULT_RATE_LIMIT_PER_MINUTE}/minute",
+            "rate_limiting": f"/v1/* limited by client address for bearer-less traffic or bearer fingerprint for authenticated traffic, default {DEFAULT_RATE_LIMIT_PER_MINUTE}/minute",
             "delete_all_data": "DELETE /v1/account/data soft-deletes tenant matters and purges tenant-scoped transient RAG/checkpoint records",
             "cors": "Explicit origin allow-list via MERCY_ALLOWED_ORIGINS",
         },

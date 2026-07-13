@@ -302,6 +302,7 @@ This is the next active phase after PD045. The goal is to turn Mercy from a stro
    - Protect authenticated app routes with middleware.
    - Pass tenant ID, user ID, roles, and bearer credentials to the FastAPI core.
    - Remove local/dev tenant defaults from production execution paths.
+   - Treat Supabase `app_metadata` as the only production authorization source; keep user-editable `user_metadata` display-only and fail closed on missing/malformed tenant, role, account, active-state, or entitlement claims.
 
 3. **Matter-centered attorney workflow**
    - Create/select matter.

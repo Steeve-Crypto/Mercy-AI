@@ -35,6 +35,8 @@ export default defineConfig({
     env: {
       MERCY_ENV: process.env.MERCY_ENV || "local",
       MERCY_AUTH_MODE: process.env.MERCY_AUTH_MODE || "dev",
+      NEXT_PUBLIC_MERCY_ENV: process.env.NEXT_PUBLIC_MERCY_ENV || "local",
+      NEXT_PUBLIC_MERCY_AUTH_MODE: process.env.NEXT_PUBLIC_MERCY_AUTH_MODE || "dev",
       MERCY_API_TOKEN: process.env.MERCY_API_TOKEN || "playwright-local-token",
       MERCY_CORE_API_TOKEN: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN || "playwright-local-token",
       MERCY_TENANT_ID: process.env.MERCY_TENANT_ID || "playwright-tenant",

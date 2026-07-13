@@ -32,6 +32,14 @@ Update - 2026-07-13 (approved Outlook matter-history persistence):
 - Automated checks cover in-memory readback, persistent SQLite reload, same-tenant API readback, cross-tenant 404/block behavior, unknown-matter no-create behavior, Office non-replay policy, Office lint/build/smoke, both manifest validations, and web typecheck.
 - Live Outlook sideload and a real hosted database/account remain required before the Office release gate is complete.
 
+Update - 2026-07-13 (production auth claim hardening):
+
+- Web middleware, server sessions, browser sessions, the Core proxy, Stripe billing portal, and FastAPI now share a fail-closed Supabase authorization boundary. Tenant, firm, allowlisted roles, account type, subscription status, active state, and Stripe customer identity come only from server-owned `app_metadata`.
+- User-editable `user_metadata` remains available for display fields but cannot create a workspace, select another tenant, reactivate a blocked account, add a platform role, or choose a Stripe customer. Self-service profile editing no longer submits role changes.
+- Missing roles, malformed active flags, unknown account types, and firm accounts without a firm claim are denied. Post-auth redirects accept only internal paths, and preliminary API rate limits no longer trust a caller-supplied tenant header.
+- Automated regressions cover metadata-only and conflicting-metadata attacks, inactive-account override attempts, trusted tenant/firm precedence, platform-admin denial, malformed claims, Stripe customer provenance, and safe redirects. Static assertions cover the production Core proxy wiring; hosted behavioral proxy verification remains part of PD047. The targeted Core/web auth suite and pure Playwright claim tests pass.
+- Current paid signup and Microsoft-issued Mercy sessions already write canonical `app_metadata`. Before live beta, legacy users must be backfilled and forced to refresh/re-authenticate; live Stripe suspension/role-removal revocation timing still requires hosted verification.
+
 Verified in this update:
 
 - Core `/health` is public and does not require tenant or user headers.
@@ -58,7 +66,7 @@ Implemented but not fully manually verified in-browser:
 
 Current blockers:
 
-- External beta still needs final auth/session activation hardening, beta entitlement/payment state verification, and full manual smoke.
+- External beta still needs live auth/session activation, legacy-claim backfill if applicable, token refresh/revocation timing, beta entitlement/payment verification, and full manual smoke.
 - Real-client use remains blocked until data retention, deletion, support, and legal documentation are tenant-approved.
 
 Vault document type support:

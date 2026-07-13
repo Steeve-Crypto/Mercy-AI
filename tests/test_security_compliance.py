@@ -8,7 +8,7 @@ os.environ.setdefault("MERCY_ENV", "local")
 os.environ.setdefault("MERCY_AUTH_MODE", "dev")
 
 from scripts.check_security_compliance import build_report
-from security_controls import sanitize_payload, sanitize_text, security_headers
+from security_controls import InMemoryRateLimiter, request_rate_limit_key, sanitize_payload, sanitize_text, security_headers
 
 try:
     from fastapi.testclient import TestClient
@@ -31,6 +31,25 @@ def _headers(tenant_id: str = "security-tenant", user_id: str = "security-user")
 
 
 class SecurityComplianceTests(unittest.TestCase):
+    def test_rate_limit_keys_isolate_anonymous_clients_and_normalize_bearers(self) -> None:
+        anonymous_a = request_rate_limit_key(client_host="198.51.100.10", path="/v1/auth/microsoft/exchange", authorization=None)
+        anonymous_b = request_rate_limit_key(client_host="198.51.100.11", path="/v1/auth/microsoft/exchange", authorization=None)
+        bearer_a = request_rate_limit_key(client_host="198.51.100.10", path="/v1/matters", authorization="Bearer token-a")
+        bearer_a_spaced = request_rate_limit_key(client_host="203.0.113.7", path="/v1/matters", authorization=" bearer   token-a ")
+
+        self.assertNotEqual(anonymous_a, anonymous_b)
+        self.assertEqual(bearer_a, bearer_a_spaced)
+        self.assertNotIn("token-a", bearer_a)
+
+    def test_rate_limiter_evicts_oldest_bucket_at_configured_bound(self) -> None:
+        limiter = InMemoryRateLimiter(max_buckets=2)
+        limiter.check("oldest", limit=10)
+        limiter.check("newer", limit=10)
+        limiter.check("newest", limit=10)
+
+        self.assertEqual(len(limiter._events), 2)
+        self.assertNotIn("oldest", limiter._events)
+
     def test_sanitize_text_redacts_common_pii(self) -> None:
         sanitized = sanitize_text("Call Jane at jane@example.com or 202-555-0199. SSN 123-45-6789.")
 

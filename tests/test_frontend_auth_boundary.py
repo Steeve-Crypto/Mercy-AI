@@ -35,9 +35,39 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
         source = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "session.ts").read_text(encoding="utf-8")
 
         self.assertIn("firmId: string | null", source)
-        self.assertIn("function firmFromUser", source)
-        self.assertIn("firmId: firmFromUser(user)", source)
-        self.assertIn("Firm/customer context is valid for account-level flows", source)
+        self.assertIn("trustedAccountClaims(user)", source)
+        self.assertIn("firmId: claims.firmId", source)
+        self.assertNotIn("user.user_metadata?.tenant_id", source)
+        self.assertNotIn("user.user_metadata?.firm_id", source)
+
+    def test_web_authorization_uses_one_server_owned_claim_parser(self) -> None:
+        trusted_claims = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "trusted-claims.ts").read_text(encoding="utf-8")
+        middleware = (ROOT / "mercy-legal-web" / "src" / "middleware.ts").read_text(encoding="utf-8")
+        provider = (ROOT / "mercy-legal-web" / "src" / "components" / "auth" / "session-provider.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("authorization claims only from Supabase app_metadata", trusted_claims)
+        self.assertNotIn("user_metadata", trusted_claims.split("export function trustedAccountClaims", 1)[1])
+        self.assertIn("hasTrustedWorkspaceAccess(user)", middleware)
+        self.assertIn("trustedAccountClaims(user)", provider)
+        self.assertIn("supabase.auth.getUser", provider)
+        self.assertNotIn("supabase.auth.getSession", provider)
+        self.assertNotIn("user.user_metadata?.roles", provider)
+
+    def test_billing_portal_uses_only_authenticated_server_owned_customer(self) -> None:
+        route = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "billing" / "portal" / "route.ts").read_text(encoding="utf-8")
+
+        self.assertIn("getServerMercySessionUser", route)
+        self.assertIn("sessionUser.stripeCustomerId", route)
+        self.assertNotIn("request.json", route)
+        self.assertNotIn("customerId ||", route)
+
+    def test_self_service_profile_cannot_submit_authorization_role(self) -> None:
+        settings = (ROOT / "mercy-legal-web" / "src" / "components" / "app" / "pages" / "settings-account-page.tsx").read_text(encoding="utf-8")
+        core_client = (ROOT / "mercy-legal-web" / "src" / "lib" / "core-client.ts").read_text(encoding="utf-8")
+
+        self.assertNotIn("role: profile.role", settings)
+        self.assertIn("Managed by Mercy workspace provisioning.", settings)
+        self.assertIn('Omit<Partial<CoreUserProfile>, "user_id" | "tenant_id" | "role">', core_client)
 
     def test_paid_signup_activation_refreshes_session_after_verified_stripe_session(self) -> None:
         route = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "signup" / "activation" / "route.ts").read_text(encoding="utf-8")

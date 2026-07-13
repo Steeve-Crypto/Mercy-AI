@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { trustedAccountClaims } from "@/lib/auth/trusted-claims";
 
 type MercySession = {
   userId: string;
@@ -39,53 +40,34 @@ const LOCAL_DEV_SESSION: MercySession = {
   accessToken: process.env.NEXT_PUBLIC_MERCY_API_TOKEN || null,
 };
 
+const EMPTY_SESSION: MercySession = {
+  userId: "",
+  email: null,
+  name: "Mercy Attorney",
+  tenantId: "",
+  firmId: null,
+  roles: [],
+  firm: null,
+  dcBarNumber: null,
+  accessToken: null,
+};
+
 const SessionContext = createContext<SessionContextValue>({
-  session: LOCAL_DEV_SESSION,
+  session: EMPTY_SESSION,
   loading: true,
   configured: false,
   signOut: async () => undefined,
 });
 
-function rolesFromUser(user: User): string[] {
-  const rawRoles = user.app_metadata?.roles ?? user.user_metadata?.roles ?? user.app_metadata?.role ?? user.user_metadata?.role;
-  if (Array.isArray(rawRoles)) return rawRoles.map(String).filter(Boolean);
-  if (typeof rawRoles === "string") return rawRoles.split(",").map((role) => role.trim()).filter(Boolean);
-  return ["attorney"];
-}
-
-function stringFromMetadata(...values: unknown[]): string | null {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
-}
-
-function firmFromUser(user: User): string | null {
-  return stringFromMetadata(
-    user.app_metadata?.firm_id,
-    user.app_metadata?.firmId,
-    user.user_metadata?.firm_id,
-    user.user_metadata?.firmId,
-  );
-}
-
 function sessionFromSupabase(user: User, accessToken: string | null): MercySession {
-  const firmId = firmFromUser(user);
-  const tenantId = String(
-    user.app_metadata?.tenant_id ??
-      user.app_metadata?.tenantId ??
-      user.user_metadata?.tenant_id ??
-      user.user_metadata?.tenantId ??
-      firmId ??
-      user.id,
-  );
+  const claims = trustedAccountClaims(user);
   return {
     userId: user.id,
     email: user.email ?? null,
     name: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Mercy Attorney"),
-    tenantId,
-    firmId,
-    roles: rolesFromUser(user),
+    tenantId: claims.tenantId ?? claims.firmId ?? "",
+    firmId: claims.firmId,
+    roles: claims.roles,
     firm: typeof user.user_metadata?.firm_name === "string" ? user.user_metadata.firm_name : null,
     dcBarNumber:
       typeof user.user_metadata?.dc_bar_number === "string"
@@ -98,7 +80,11 @@ function sessionFromSupabase(user: User, accessToken: string | null): MercySessi
 }
 
 function persistMercyContext(session: MercySession, persistToken: boolean) {
-  window.localStorage.setItem("mercy.auth.tenantId", session.tenantId);
+  if (session.tenantId) {
+    window.localStorage.setItem("mercy.auth.tenantId", session.tenantId);
+  } else {
+    window.localStorage.removeItem("mercy.auth.tenantId");
+  }
   if (session.firmId) {
     window.localStorage.setItem("mercy.auth.firmId", session.firmId);
   } else {
@@ -113,10 +99,18 @@ function persistMercyContext(session: MercySession, persistToken: boolean) {
   }
 }
 
+function clearMercyContext() {
+  window.localStorage.removeItem("mercy.auth.token");
+  window.localStorage.removeItem("mercy.auth.tenantId");
+  window.localStorage.removeItem("mercy.auth.firmId");
+  window.localStorage.removeItem("mercy.auth.userId");
+  window.localStorage.removeItem("mercy.auth.roles");
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<MercySession>(LOCAL_DEV_SESSION);
   const localDevDefaults = localDevAuthDefaultsEnabled();
+  const [session, setSession] = useState<MercySession>(localDevDefaults ? LOCAL_DEV_SESSION : EMPTY_SESSION);
   const [loading, setLoading] = useState(configured && !localDevDefaults);
 
   useEffect(() => {
@@ -135,21 +129,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
 
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (data.session?.user) {
-        const nextSession = sessionFromSupabase(data.session.user, data.session.access_token);
+    let authRevision = 0;
+
+    const applyVerifiedSession = async (accessToken?: string) => {
+      const revision = ++authRevision;
+      const { data, error } = await supabase.auth.getUser(accessToken);
+      if (!mounted || revision !== authRevision) return;
+      if (!error && data.user) {
+        const nextSession = sessionFromSupabase(data.user, null);
         setSession(nextSession);
         persistMercyContext(nextSession, false);
+      } else {
+        setSession(EMPTY_SESSION);
+        clearMercyContext();
       }
       setLoading(false);
-    });
+    };
+
+    void applyVerifiedSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, authSession) => {
-      if (!authSession?.user) return;
-      const nextSession = sessionFromSupabase(authSession.user, authSession.access_token);
-      setSession(nextSession);
-      persistMercyContext(nextSession, false);
+      if (!authSession?.user) {
+        authRevision += 1;
+        setSession(EMPTY_SESSION);
+        clearMercyContext();
+        setLoading(false);
+        return;
+      }
+      void applyVerifiedSession(authSession.access_token);
     });
 
     return () => {
@@ -166,11 +173,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signOut: async () => {
         const supabase = createSupabaseBrowserClient();
         await supabase?.auth.signOut();
-        window.localStorage.removeItem("mercy.auth.token");
-        window.localStorage.removeItem("mercy.auth.tenantId");
-        window.localStorage.removeItem("mercy.auth.firmId");
-        window.localStorage.removeItem("mercy.auth.userId");
-        window.localStorage.removeItem("mercy.auth.roles");
+        clearMercyContext();
         window.location.href = "/sign-in";
       },
     }),

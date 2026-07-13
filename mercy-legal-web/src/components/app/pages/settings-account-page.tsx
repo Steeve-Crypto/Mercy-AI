@@ -17,7 +17,6 @@ type ProfileDraft = {
   email: string;
   firm: string;
   dcBarNumber: string;
-  role: string;
 };
 
 type Toast = {
@@ -34,9 +33,8 @@ export function SettingsAccountPage() {
       email: session.email ?? "",
       firm: session.firm ?? "",
       dcBarNumber: session.dcBarNumber ?? "",
-      role: session.roles[0] ?? "attorney",
     }),
-    [session.dcBarNumber, session.email, session.firm, session.name, session.roles],
+    [session.dcBarNumber, session.email, session.firm, session.name],
   );
   const [profile, setProfile] = useState(initialProfile);
   const [theme, setTheme] = useState<"system" | "light">("system");
@@ -67,7 +65,6 @@ export function SettingsAccountPage() {
           email: response.data.email ?? initialProfile.email,
           firm: response.data.firm_name ?? initialProfile.firm,
           dcBarNumber: response.data.dc_bar_number ?? initialProfile.dcBarNumber,
-          role: response.data.role ?? initialProfile.role,
         });
         setProfileLoaded(true);
       }
@@ -99,7 +96,7 @@ export function SettingsAccountPage() {
     return () => {
       mounted = false;
     };
-  }, [initialProfile.dcBarNumber, initialProfile.email, initialProfile.firm, initialProfile.name, initialProfile.role, isAdmin, session.email, session.name, session.roles, session.userId]);
+  }, [initialProfile.dcBarNumber, initialProfile.email, initialProfile.firm, initialProfile.name, isAdmin, session.email, session.name, session.roles, session.userId]);
 
   function addToast(tone: Toast["tone"], message: string) {
     const toast = { id: crypto.randomUUID(), tone, message };
@@ -126,7 +123,6 @@ export function SettingsAccountPage() {
       email: profile.email,
       firm_name: profile.firm,
       dc_bar_number: profile.dcBarNumber,
-      role: profile.role,
       preferences: { theme },
     });
     setSaving(false);
@@ -229,7 +225,13 @@ export function SettingsAccountPage() {
                 <Field label="Work email" type="email" value={profile.email} onChange={(value) => setProfile((current) => ({ ...current, email: value }))} />
                 <Field label="Firm" value={profile.firm} placeholder="Firm or solo practice name" onChange={(value) => setProfile((current) => ({ ...current, firm: value }))} />
                 <Field label="D.C. Bar number" value={profile.dcBarNumber} placeholder="Optional" onChange={(value) => setProfile((current) => ({ ...current, dcBarNumber: value }))} />
-                <Field label="Role" value={profile.role} placeholder="attorney" onChange={(value) => setProfile((current) => ({ ...current, role: value }))} />
+                <div className="block text-sm font-medium text-mercy-navy">
+                  Role
+                  <div className="mt-2 min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700" aria-readonly="true">
+                    {session.roles.length ? session.roles.join(", ") : "Not provisioned"}
+                  </div>
+                  <span className="mt-1 block text-xs font-normal text-slate-500">Managed by Mercy workspace provisioning.</span>
+                </div>
               </div>
             )}
 

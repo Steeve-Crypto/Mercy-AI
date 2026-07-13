@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import { ArrowLeft, CheckCircle2, Scale, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { safeInternalNextPath } from "@/lib/auth/safe-next";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 type AuthShellProps = {
@@ -27,7 +28,7 @@ export function AuthShell({ mode }: AuthShellProps) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    const next = searchParams.get("next") || "/dashboard";
+    const next = safeInternalNextPath(searchParams.get("next"));
 
     if (!isSupabaseConfigured()) {
       router.push(next as Route);
@@ -48,8 +49,6 @@ export function AuthShell({ mode }: AuthShellProps) {
           options: {
             data: {
               firm_name: firmName,
-              tenant_id: firmName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || undefined,
-              roles: ["attorney"],
             },
           },
         })

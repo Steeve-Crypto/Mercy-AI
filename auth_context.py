@@ -216,95 +216,96 @@ def _claim_string(*values: Any) -> str | None:
     return None
 
 
+def _metadata_string_alias(
+    payload: dict[str, Any],
+    *keys: str,
+    label: str,
+    normalize: bool = False,
+) -> str | None:
+    app_metadata = _claim_metadata(payload, "app_metadata")
+    values = [value.strip() for key in keys if isinstance((value := app_metadata.get(key)), str) and value.strip()]
+    compared = [value.lower() for value in values] if normalize else values
+    if len(set(compared)) > 1:
+        raise HTTPException(status_code=401, detail=f"JWT Mercy {label} claims conflict.")
+    return compared[0] if compared else None
+
+
 def _roles_from_claims(payload: dict[str, Any]) -> tuple[str, ...]:
     app_metadata = _claim_metadata(payload, "app_metadata")
-    user_metadata = _claim_metadata(payload, "user_metadata")
-    candidates = (
-        app_metadata.get("roles"),
-        user_metadata.get("roles"),
-        app_metadata.get("role"),
-        user_metadata.get("role"),
-        payload.get("roles"),
-        payload.get("role"),
-    )
-    roles: list[str] = []
-    for candidate in candidates:
+    def parse(candidate: Any) -> tuple[str, ...]:
+        roles: list[str] = []
         if isinstance(candidate, list):
             roles.extend(str(role).strip().lower() for role in candidate if str(role).strip())
         elif isinstance(candidate, str):
             roles.extend(role.strip().lower() for role in candidate.split(",") if role.strip())
-    return tuple(dict.fromkeys(roles or ["attorney"]))
+        return tuple(dict.fromkeys(role for role in roles if role in MERCY_AUTHORIZATION_ROLES))
+
+    primary_roles = parse(app_metadata.get("roles"))
+    legacy_roles = parse(app_metadata.get("role"))
+    if "roles" in app_metadata and "role" in app_metadata and set(primary_roles) != set(legacy_roles):
+        return ()
+    return primary_roles if "roles" in app_metadata else legacy_roles
 
 
 def _tenant_from_claims(payload: dict[str, Any]) -> str | None:
-    app_metadata = _claim_metadata(payload, "app_metadata")
-    user_metadata = _claim_metadata(payload, "user_metadata")
-    return _claim_string(
-        app_metadata.get("tenant_id"),
-        app_metadata.get("tenantId"),
-        user_metadata.get("tenant_id"),
-        user_metadata.get("tenantId"),
-        payload.get("tenant_id"),
-        payload.get("tenantId"),
-    )
+    return _metadata_string_alias(payload, "tenant_id", "tenantId", label="tenant")
 
 
 def _firm_from_claims(payload: dict[str, Any]) -> str | None:
-    app_metadata = _claim_metadata(payload, "app_metadata")
-    user_metadata = _claim_metadata(payload, "user_metadata")
-    return _claim_string(
-        app_metadata.get("firm_id"),
-        app_metadata.get("firmId"),
-        user_metadata.get("firm_id"),
-        user_metadata.get("firmId"),
-        payload.get("firm_id"),
-        payload.get("firmId"),
-    )
+    return _metadata_string_alias(payload, "firm_id", "firmId", label="firm")
 
 
 ACTIVE_ACCOUNT_STATUSES = {"active", "trialing"}
 BLOCKED_ACCOUNT_STATUSES = {"pending", "past_due", "incomplete", "suspended", "canceled"}
 VALID_ACCOUNT_STATUSES = ACTIVE_ACCOUNT_STATUSES | BLOCKED_ACCOUNT_STATUSES
-PLATFORM_BYPASS_ROLES = {"superadmin", "platform_admin", "ops"}
+MERCY_AUTHORIZATION_ROLES = {
+    "attorney",
+    "paralegal",
+    "owner",
+    "admin",
+    "firm_admin",
+    "superadmin",
+    "platform_admin",
+    "ops",
+}
+VALID_ACCOUNT_TYPES = {"solo", "firm"}
+
+
+def _account_type_from_claims(payload: dict[str, Any]) -> str | None:
+    return _metadata_string_alias(payload, "account_type", "accountType", label="account type", normalize=True)
 
 
 def _account_status_from_claims(payload: dict[str, Any]) -> str | None:
-    app_metadata = _claim_metadata(payload, "app_metadata")
-    user_metadata = _claim_metadata(payload, "user_metadata")
-    status = _claim_string(
-        app_metadata.get("subscription_status"),
-        app_metadata.get("account_status"),
-        user_metadata.get("subscription_status"),
-        user_metadata.get("account_status"),
-        payload.get("subscription_status"),
-        payload.get("account_status"),
+    return _metadata_string_alias(
+        payload,
+        "subscription_status",
+        "account_status",
+        label="account status",
+        normalize=True,
     )
-    return status.lower() if status else None
 
 
 def _account_active_from_claims(payload: dict[str, Any]) -> bool:
     app_metadata = _claim_metadata(payload, "app_metadata")
-    user_metadata = _claim_metadata(payload, "user_metadata")
-    for value in (
+    values = tuple(value for value in (
         app_metadata.get("workspace_active"),
         app_metadata.get("account_active"),
         app_metadata.get("active"),
-        user_metadata.get("workspace_active"),
-        user_metadata.get("account_active"),
-        user_metadata.get("active"),
-        payload.get("workspace_active"),
-        payload.get("account_active"),
-    ):
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str) and value.strip().lower() in {"false", "0", "no", "disabled", "deactivated"}:
-            return False
+    ) if value is not None)
+    if not values:
+        return False
+    for value in values:
+        if value is True:
+            continue
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "enabled", "active"}:
+                continue
+        return False
     return True
 
 
 def _enforce_account_access(roles: tuple[str, ...], status: str | None, active: bool) -> None:
-    if any(role in PLATFORM_BYPASS_ROLES for role in roles):
-        return
     if not active:
         raise HTTPException(status_code=403, detail="Mercy workspace access is deactivated for this account.")
     if not status:
@@ -326,6 +327,15 @@ def _tenant_user_from_supabase_jwt(authorization: str | None) -> TenantUser:
     if not tenant_id_claim and not firm_id:
         raise HTTPException(status_code=401, detail="JWT tenant or firm claim is required.")
     roles = _roles_from_claims(payload)
+    if not roles:
+        raise HTTPException(status_code=401, detail="JWT Mercy role claim is required.")
+    account_type = _account_type_from_claims(payload)
+    if not account_type or account_type not in VALID_ACCOUNT_TYPES:
+        raise HTTPException(status_code=401, detail="JWT Mercy account type is not recognized.")
+    if account_type == "firm" and not firm_id:
+        raise HTTPException(status_code=401, detail="Firm accounts require a firm claim.")
+    if account_type == "solo" and firm_id:
+        raise HTTPException(status_code=401, detail="Solo accounts cannot include a firm claim.")
     account_status = _account_status_from_claims(payload)
     account_active = _account_active_from_claims(payload)
     _enforce_account_access(roles, account_status, account_active)

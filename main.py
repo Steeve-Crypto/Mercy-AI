@@ -54,7 +54,7 @@ from observability import configure_langsmith_environment, observability_dashboa
 from otel_observability import configure_fastapi_otel, observed_system_map, otel_enabled
 from ragas_eval import DEFAULT_DATASET_PATH, DEFAULT_REPORT_PATH, run_ragas_evaluation
 from response_envelope import attach_response_envelope, build_response_envelope
-from security_controls import check_rate_limit, record_security_audit, sanitize_payload, sanitize_text, security_compliance_status, security_headers
+from security_controls import check_rate_limit, record_security_audit, request_rate_limit_key, sanitize_payload, sanitize_text, security_compliance_status, security_headers
 from mercy_storage import (
     attach_vault_document_to_matter,
     delete_vault_document_record,
@@ -272,9 +272,14 @@ async def security_controls_middleware(request: Request, call_next: Any) -> Resp
             proto = request.headers.get("x-forwarded-proto") or request.url.scheme
             if proto != "https" and request.client and request.client.host not in {"127.0.0.1", "localhost"}:
                 return JSONResponse({"detail": "HTTPS is required for Mercy API traffic."}, status_code=400)
-        tenant_hint = request.headers.get("x-mercy-tenant-id") or request.headers.get("x-tenant-id") or "anonymous"
         client_host = request.client.host if request.client else "unknown"
-        allowed, retry_after = check_rate_limit(f"{tenant_hint}:{client_host}:{request.url.path}")
+        authorization = request.headers.get("authorization", "")
+        rate_limit_key = request_rate_limit_key(
+            client_host=client_host,
+            path=request.url.path,
+            authorization=authorization,
+        )
+        allowed, retry_after = check_rate_limit(rate_limit_key)
         if not allowed:
             record_security_audit(
                 "rate_limit_exceeded",

@@ -878,7 +878,9 @@ export async function getUserProfile(auth?: CoreAuthContext): Promise<CoreClient
   return coreFetch<CoreUserProfile>("/v1/user/profile", undefined, auth);
 }
 
-export async function updateUserProfile(payload: Partial<CoreUserProfile>, auth?: CoreAuthContext): Promise<CoreClientResult<CoreUserProfile>> {
+export type CoreUserProfileUpdate = Omit<Partial<CoreUserProfile>, "user_id" | "tenant_id" | "role">;
+
+export async function updateUserProfile(payload: CoreUserProfileUpdate, auth?: CoreAuthContext): Promise<CoreClientResult<CoreUserProfile>> {
   return coreFetch<CoreUserProfile>(
     "/v1/user/profile",
     {

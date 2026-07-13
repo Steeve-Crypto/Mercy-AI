@@ -248,6 +248,7 @@ Pull these in priority order. These are logical next steps from the existing bac
 25. [ ] PD047 [Frontend Auth] Add production-ready web auth and tenant/session propagation.
    - **Target Paths**: `mercy-legal-web/src/app/`, `mercy-legal-web/src/middleware.ts`, `mercy-legal-web/src/lib/core-client.ts`, auth components, deployment docs.
    - **Definition of Done**: Protected app routes require a real session outside local dev; tenant ID, user ID, roles, and API auth are passed to the core without relying on localStorage defaults in production; sign-in/sign-up pages are no longer placeholders.
+   - **Progress (2026-07-13)**: Removed authorization trust from user-editable Supabase `user_metadata` across middleware, server/browser sessions, Core JWT parsing, billing, and profile role editing. Canonical `app_metadata` is now the only production source for tenant, firm, allowlisted roles, account type, subscription/active state, and Stripe customer identity; missing or malformed claims fail closed. The Core proxy requires an active trusted workspace, post-auth redirects are internal-only, rate limits ignore tenant-header rotation, and targeted Python plus Playwright spoof regressions pass. Live hosted activation, legacy claim backfill/session refresh, and entitlement revocation timing remain required, so PD047 stays open.
    - **Dependencies**: PD029, PD046.
 
 26. [ ] PD048 [Frontend Matter Workflow] Replace the dashboard-shell feel with a coherent attorney matter workspace.

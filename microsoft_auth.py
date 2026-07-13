@@ -179,7 +179,12 @@ def issue_mercy_session_token(identity: MicrosoftIdentity, mapping: MercyIdentit
         raise HTTPException(status_code=500, detail="Supabase JWT verification is not configured.")
     now = datetime.now(UTC)
     exp = now + timedelta(minutes=15)
-    app_metadata: dict[str, Any] = {"roles": list(mapping.roles), "account_status": mapping.status, "workspace_active": True}
+    app_metadata: dict[str, Any] = {
+        "roles": list(mapping.roles),
+        "account_type": "firm" if mapping.firm_id else "solo",
+        "account_status": mapping.status,
+        "workspace_active": True,
+    }
     if mapping.tenant_id:
         app_metadata["tenant_id"] = mapping.tenant_id
     if mapping.firm_id:

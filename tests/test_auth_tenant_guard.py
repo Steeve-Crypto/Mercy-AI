@@ -69,9 +69,13 @@ def _supabase_jwt(
     expires_in: int = 3600,
     roles: list[str] | None = None,
     account_status: str | None = "active",
-    account_active: bool | None = None,
+    account_active: bool | str | None = True,
     issuer: str | None = None,
     audience: str = "authenticated",
+    user_metadata: dict[str, object] | None = None,
+    account_type: str | None = None,
+    include_account_type: bool = True,
+    legacy_role: str | None = None,
 ) -> str:
     now = int(time.time())
     header = {"alg": "HS256", "typ": "JWT"}
@@ -81,7 +85,7 @@ def _supabase_jwt(
         "iat": now,
         "exp": now + expires_in,
         "app_metadata": {"roles": roles or ["attorney"]},
-        "user_metadata": {"name": "JWT User"},
+        "user_metadata": user_metadata or {"name": "JWT User"},
     }
     if tenant_id:
         app_metadata = payload["app_metadata"]
@@ -99,6 +103,14 @@ def _supabase_jwt(
         app_metadata = payload["app_metadata"]
         assert isinstance(app_metadata, dict)
         app_metadata["workspace_active"] = account_active
+    if include_account_type:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["account_type"] = account_type or ("firm" if firm_id else "solo")
+    if legacy_role is not None:
+        app_metadata = payload["app_metadata"]
+        assert isinstance(app_metadata, dict)
+        app_metadata["role"] = legacy_role
     if issuer:
         payload["iss"] = issuer
     signing_input = f"{_b64url(header)}.{_b64url(payload)}"
@@ -128,7 +140,12 @@ def _supabase_rs256_jwt(
         "sub": user_id,
         "iat": now,
         "exp": now + expires_in,
-        "app_metadata": {"tenant_id": tenant_id, "roles": roles or ["attorney"]},
+        "app_metadata": {
+            "tenant_id": tenant_id,
+            "roles": roles or ["attorney"],
+            "account_type": "solo",
+            "workspace_active": True,
+        },
         "user_metadata": {},
     }
     if account_status:
@@ -186,6 +203,134 @@ class AuthTenantGuardTests(unittest.TestCase):
         payload = created.json()
         self.assertEqual(payload["tenant_id"], "jwt-tenant-a")
         self.assertEqual(payload["created_by_user_id"], "jwt-user-a")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_supabase_user_metadata_cannot_create_trusted_workspace_identity(self) -> None:
+        token = _supabase_jwt(
+            user_id="unprovisioned-user",
+            tenant_id=None,
+            account_status=None,
+            user_metadata={
+                "tenant_id": "victim-tenant",
+                "firm_id": "victim-firm",
+                "roles": ["superadmin"],
+                "account_status": "active",
+                "workspace_active": True,
+            },
+        )
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            client = TestClient(app)  # type: ignore[arg-type]
+            response = client.post("/v1/matters", headers=_jwt_headers(token), json={"name": "Forbidden matter"})
+
+        self.assertEqual(response.status_code, 401)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
+    def test_supabase_user_metadata_cannot_override_trusted_tenant_firm_or_roles(self) -> None:
+        token = _supabase_jwt(
+            user_id="trusted-attorney",
+            tenant_id="tenant-a",
+            firm_id="firm-a",
+            roles=["attorney"],
+            account_status="active",
+            account_type="firm",
+            user_metadata={
+                "tenant_id": "tenant-b",
+                "firm_id": "firm-b",
+                "roles": ["superadmin"],
+                "account_status": "active",
+            },
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env = {
+                "MERCY_ENV": "prod",
+                "MERCY_AUTH_MODE": "supabase",
+                "SUPABASE_JWT_SECRET": "unit-supabase-secret",
+                "POSTGRES_URL": f"sqlite+pysqlite:///{Path(temp_dir) / 'metadata-conflict.db'}",
+            }
+            with _patched_env(os.environ, env):
+                reset_storage_for_tests()
+                tenant_user = _tenant_user_from_supabase_jwt(f"Bearer {token}")
+                client = TestClient(app)  # type: ignore[arg-type]
+                created = client.post("/v1/matters", headers=_jwt_headers(token), json={"name": "Trusted matter"})
+                admin = client.get("/v1/admin/microsoft-identity-mappings", headers={"Authorization": f"Bearer {token}"})
+                reset_storage_for_tests()
+
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertEqual(created.json()["tenant_id"], "tenant-a")
+        self.assertEqual(tenant_user.firm_id, "firm-a")
+        self.assertEqual(tenant_user.roles, ("attorney",))
+        self.assertEqual(admin.status_code, 403)
+
+    def test_supabase_user_metadata_cannot_reactivate_blocked_account_or_add_bypass_role(self) -> None:
+        token = _supabase_jwt(
+            tenant_id="blocked-tenant",
+            roles=["attorney"],
+            account_status="suspended",
+            account_active=False,
+            user_metadata={
+                "roles": ["ops"],
+                "account_status": "active",
+                "workspace_active": True,
+            },
+        )
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            with self.assertRaisesRegex(Exception, "deactivated"):
+                _tenant_user_from_supabase_jwt(f"Bearer {token}")
+
+            deactivated_platform = _supabase_jwt(
+                tenant_id="platform-tenant",
+                roles=["ops"],
+                account_status="suspended",
+                account_active=False,
+            )
+            with self.assertRaisesRegex(Exception, "deactivated"):
+                _tenant_user_from_supabase_jwt(f"Bearer {deactivated_platform}")
+
+    def test_supabase_malformed_active_or_firm_claims_fail_closed(self) -> None:
+        malformed_active = _supabase_jwt(tenant_id="tenant-a", account_status="active", account_active="definitely")
+        missing_firm = _supabase_jwt(tenant_id="tenant-a", account_status="active", account_type="firm")
+        solo_with_firm = _supabase_jwt(tenant_id="tenant-a", firm_id="firm-a", account_status="active", account_type="solo")
+        missing_active = _supabase_jwt(tenant_id="tenant-a", account_status="active", account_active=None)
+        missing_type = _supabase_jwt(tenant_id="tenant-a", account_status="active", include_account_type=False)
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            with self.assertRaisesRegex(Exception, "deactivated"):
+                _tenant_user_from_supabase_jwt(f"Bearer {malformed_active}")
+            with self.assertRaisesRegex(Exception, "Firm accounts require"):
+                _tenant_user_from_supabase_jwt(f"Bearer {missing_firm}")
+            with self.assertRaisesRegex(Exception, "Solo accounts cannot"):
+                _tenant_user_from_supabase_jwt(f"Bearer {solo_with_firm}")
+            with self.assertRaisesRegex(Exception, "deactivated"):
+                _tenant_user_from_supabase_jwt(f"Bearer {missing_active}")
+            with self.assertRaisesRegex(Exception, "account type"):
+                _tenant_user_from_supabase_jwt(f"Bearer {missing_type}")
+
+    def test_supabase_conflicting_role_and_status_aliases_fail_closed(self) -> None:
+        conflicting_role = _supabase_jwt(roles=["attorney"], legacy_role="superadmin")
+        conflicting_status = _supabase_jwt()
+        parts = conflicting_status.split(".")
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+        payload["app_metadata"]["subscription_status"] = "suspended"
+        signing_input = f"{parts[0]}.{_b64url(payload)}"
+        signature = hmac.new(b"unit-supabase-secret", signing_input.encode("ascii"), hashlib.sha256).digest()
+        conflicting_status = f"{signing_input}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode('ascii')}"
+
+        with _patched_env(
+            os.environ,
+            {"MERCY_ENV": "prod", "MERCY_AUTH_MODE": "supabase", "SUPABASE_JWT_SECRET": "unit-supabase-secret"},
+        ):
+            with self.assertRaisesRegex(Exception, "role claim"):
+                _tenant_user_from_supabase_jwt(f"Bearer {conflicting_role}")
+            with self.assertRaisesRegex(Exception, "account status claims conflict"):
+                _tenant_user_from_supabase_jwt(f"Bearer {conflicting_status}")
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in the active Python environment")
     def test_modern_supabase_rs256_jwt_uses_jwks_and_derives_identity(self) -> None:

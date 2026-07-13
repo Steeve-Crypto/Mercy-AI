@@ -6,12 +6,12 @@ Mercy AI is designed for D.C. attorneys handling confidential legal workflows. T
 
 ## Core Controls
 
-- Tenant isolation: every authenticated workflow carries tenant context and tenant-scoped matter access checks.
+- Tenant isolation: production Supabase sessions derive tenant, firm, roles, entitlement, active state, and billing identity only from verified server-owned `app_metadata`; user-editable profile metadata and identity headers cannot select a tenant or elevate a role.
 - Persistent storage: PostgreSQL/pgvector is the primary backend for matters, RAG chunks, sources, checkpoints, and audit logs.
 - Audit logging: sensitive events are written to LangSmith/local observability and to DB audit logs when PostgreSQL is configured.
 - RAG grounding: research uses official D.C. source records and citation provenance.
 - Attorney review: generated content carries human review and verification warnings.
-- Rate limiting: `/v1/*` endpoints are limited by tenant/IP/path to reduce abuse.
+- Rate limiting: `/v1/*` is limited by client address for bearer-less traffic or by a normalized bearer-session fingerprint for authenticated traffic (180 requests/minute by default); client-supplied tenant headers cannot rotate the bucket. The in-process bucket store is bounded and expires inactive keys.
 - Sanitization: LLM and RAG inputs and outputs pass through control-character cleanup and PII redaction hooks.
 - Data deletion: beta users can invoke `DELETE /v1/account/data` to soft-delete matters and purge tenant-scoped transient records.
 

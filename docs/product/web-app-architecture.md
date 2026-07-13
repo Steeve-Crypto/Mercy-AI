@@ -113,23 +113,32 @@ The frontend should not implement its own legal routing, RAG, citation verificat
 
 Target behavior:
 
-1. User signs in through the selected auth provider.
+1. User signs in through Supabase Auth.
 2. Middleware protects `(app)` and `(admin)` routes.
-3. Session includes user ID, tenant ID, role, and beta/plan state.
-4. Server-side web calls pass tenant/user/role and bearer credentials to the FastAPI core.
+3. Server provisioning writes tenant, firm, role, account type, entitlement status, active state, and Stripe customer identity to Supabase `app_metadata`.
+4. Middleware, server sessions, browser sessions, billing, and the FastAPI core derive authorization only from that server-owned metadata.
 5. Client-side calls use a safe API route or session-aware token strategy.
 6. Production code does not rely on localStorage tenant defaults.
 
-Required core headers:
+Production Core contract:
 
 ```text
 Authorization: Bearer <token>
-X-Mercy-Tenant-Id: <tenant>
-X-Mercy-User-Id: <user>
-X-Mercy-Roles: attorney | admin | ops
+JWT app_metadata.tenant_id: workspace/data scope
+JWT app_metadata.firm_id: parent firm/account scope when applicable
+JWT app_metadata.roles: allowlisted Mercy roles
+JWT app_metadata.account_type: solo | firm
+JWT app_metadata.account_status: active | trialing for workspace access
+JWT app_metadata.workspace_active: true for workspace access
 ```
 
-Local dev may keep explicit `MERCY_ENV=local` and `MERCY_AUTH_MODE=dev` behavior, but production paths must fail closed when auth is missing.
+Supabase `user_metadata` is editable by the authenticated user. Mercy uses it only for display fields such as name, firm display name, D.C. Bar number, and pending onboarding data; it cannot supply tenant, firm, role, entitlement, active-state, or billing authorization. The paid signup and Microsoft session issuers already write the canonical `app_metadata` contract.
+
+`X-Mercy-*` identity headers are accepted only by explicit local/test auth modes. In production Supabase mode, the verified bearer JWT is authoritative and client identity headers cannot select a tenant or add a role. The Next.js Core proxy also requires an active trusted workspace before forwarding non-health requests.
+
+Legacy accounts whose authorization exists only in `user_metadata` must be backfilled through server/admin provisioning and then refresh or re-authenticate to receive a new JWT. Subscription suspension, role removal, and tenant reassignment likewise require token refresh/session revocation policy because JWT claims remain stale until reissued.
+
+Local dev may keep explicit `MERCY_ENV=local` and `MERCY_AUTH_MODE=dev` behavior, but production paths fail closed when trusted claims are missing or malformed.
 
 ## Matter Workspace Model
 
@@ -199,4 +208,3 @@ The current `dashboard/` components can be migrated gradually into these groups.
 5. Create reusable reliability/source metadata components.
 6. Add admin/beta/monitoring route protection.
 7. Add Playwright or equivalent end-to-end smoke tests.
-
