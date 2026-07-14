@@ -136,7 +136,15 @@ Supabase `user_metadata` is editable by the authenticated user. Mercy uses it on
 
 `X-Mercy-*` identity headers are accepted only by explicit local/test auth modes. In production Supabase mode, the verified bearer JWT is authoritative and client identity headers cannot select a tenant or add a role. The Next.js Core proxy also requires an active trusted workspace before forwarding non-health requests.
 
-Legacy accounts whose authorization exists only in `user_metadata` must be backfilled through server/admin provisioning and then refresh or re-authenticate to receive a new JWT. Subscription suspension, role removal, and tenant reassignment likewise require token refresh/session revocation policy because JWT claims remain stale until reissued.
+Legacy accounts whose authorization exists only in `user_metadata` must not be trusted. Operator backfill uses membership/tenant rows only:
+
+```powershell
+cd mercy-legal-web
+node scripts\backfill-auth-claims.mjs
+node scripts\backfill-auth-claims.mjs --apply
+```
+
+The server session helper refreshes the access token when verified `getUser()` `app_metadata` diverges from JWT claims before the Core proxy forwards a bearer token. Subscription suspension and entitlement demotion update `app_metadata` immediately; `getUser()`-backed workspace checks deny access without waiting for client refresh. Direct Core callers still need short JWT TTL and re-authentication. Full hosted steps live in `docs/product/hosted-beta-activation.md`.
 
 Local dev may keep explicit `MERCY_ENV=local` and `MERCY_AUTH_MODE=dev` behavior, but production paths fail closed when trusted claims are missing or malformed.
 

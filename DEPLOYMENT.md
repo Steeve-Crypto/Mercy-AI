@@ -250,6 +250,28 @@ Advanced RAGAS regression:
 python -m evals.run_regression --corpus=full --json
 ```
 
+## Hosted Beta Activation
+
+Operator runbook: `docs/product/hosted-beta-activation.md`.
+
+Locally runnable preparation (no hosted secrets required for pure checks):
+
+```powershell
+cd mercy-legal-web
+node scripts\validate-stripe-entitlements.mjs
+npm.cmd run typecheck
+npm.cmd run test:e2e:local -- tests/e2e/auth-claims.spec.ts --project=chromium
+```
+
+When hosted Supabase/Stripe credentials are available:
+
+```powershell
+cd mercy-legal-web
+node scripts\backfill-auth-claims.mjs
+node scripts\backfill-auth-claims.mjs --apply
+node scripts\validate-stripe-entitlements.mjs --live
+```
+
 ## Production Considerations
 
 Do not invite real attorneys or process real client data in production until these are complete:
@@ -264,8 +286,9 @@ Do not invite real attorneys or process real client data in production until the
 - Production-safe secrets management.
 - Office add-in production manifest with valid support, terms, privacy, icon, and hosting URLs.
 - Clear source/citation limitations in the UI.
-- Stripe/beta entitlements connected to tenant capability gates.
+- Stripe/beta entitlements connected to tenant capability gates (mapping + webhook sync shipped; live checkout/cancel smoke still required).
 - End-to-end beta workflow checks.
+- Legacy claim backfill applied for any pre-hardening accounts.
 
 ## Recommended Deployment Shape
 

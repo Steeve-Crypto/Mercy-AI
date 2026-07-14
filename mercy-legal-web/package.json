@@ -11,7 +11,11 @@
     "test:e2e": "node scripts/run-e2e-local.mjs",
     "test:e2e:ci": "playwright test --project=chromium --workers=2",
     "test:e2e:local": "node scripts/run-e2e-local.mjs",
-    "test:e2e:cleanup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-e2e-server.ps1"
+    "test:e2e:cleanup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-e2e-server.ps1",
+    "auth:backfill-claims": "node scripts/backfill-auth-claims.mjs",
+    "auth:backfill-claims:apply": "node scripts/backfill-auth-claims.mjs --apply",
+    "entitlements:validate": "node scripts/validate-stripe-entitlements.mjs",
+    "entitlements:validate:live": "node scripts/validate-stripe-entitlements.mjs --live"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.7",

@@ -40,6 +40,16 @@ Update - 2026-07-13 (production auth claim hardening):
 - Automated regressions cover metadata-only and conflicting-metadata attacks, inactive-account override attempts, trusted tenant/firm precedence, platform-admin denial, malformed claims, Stripe customer provenance, and safe redirects. Static assertions cover the production Core proxy wiring; hosted behavioral proxy verification remains part of PD047. The targeted Core/web auth suite and pure Playwright claim tests pass.
 - Current paid signup and Microsoft-issued Mercy sessions already write canonical `app_metadata`. Before live beta, legacy users must be backfilled and forced to refresh/re-authenticate; live Stripe suspension/role-removal revocation timing still requires hosted verification.
 
+Update - 2026-07-14 (hosted activation support for claims and entitlements):
+
+- Canonical claim builders, membership-backed legacy backfill decisions, entitlement status mapping, and stale JWT detection live in `mercy-legal-web/src/lib/auth/authorization-claims.ts`.
+- Server sessions now refresh Supabase access tokens when verified `getUser()` app_metadata diverges from JWT claims, so the Core proxy does not forward pre-backfill or pre-revocation bearer tokens after Auth metadata changes.
+- Operator tooling:
+  - `node mercy-legal-web/scripts/backfill-auth-claims.mjs` (dry-run) / `--apply`
+  - `node mercy-legal-web/scripts/validate-stripe-entitlements.mjs` (pure) / `--live`
+- Hosted operator runbook: `docs/product/hosted-beta-activation.md`.
+- Backfill never copies `user_metadata` into authorization claims; membership/tenant rows are the only automated source of truth. Remaining blockers are external: hosted Supabase/Stripe secrets, apply backfill in the live project, live checkout/cancel smoke, and full manual product smoke.
+
 Verified in this update:
 
 - Core `/health` is public and does not require tenant or user headers.
@@ -66,7 +76,8 @@ Implemented but not fully manually verified in-browser:
 
 Current blockers:
 
-- External beta still needs live auth/session activation, legacy-claim backfill if applicable, token refresh/revocation timing, beta entitlement/payment verification, and full manual smoke.
+- External beta still needs hosted Supabase Auth activation, operator-run legacy-claim backfill against the live project, live Stripe checkout/cancel entitlement verification, and full manual smoke (see `docs/product/hosted-beta-activation.md`).
+- Code-side claim/session/entitlement mapping for those steps is in place; residual JWT risk for direct Core callers is bounded by short JWT TTL plus proxy `getUser()` gates.
 - Real-client use remains blocked until data retention, deletion, support, and legal documentation are tenant-approved.
 
 Vault document type support:
