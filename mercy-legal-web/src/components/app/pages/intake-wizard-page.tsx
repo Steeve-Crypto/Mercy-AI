@@ -182,21 +182,21 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
 
   return (
       <div data-testid="intake-workspace-ready" data-ready={hydrated} className="p-5 lg:p-8">
-        <section className="mb-5 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mercy-navy-soft)]">Client intake</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-normal text-[var(--mercy-fg-strong)]">Guided D.C. matter intake</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#4338CA]">Client intake</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">Guided D.C. matter intake</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 Create a tenant-scoped matter with the context Agent X needs for research, drafting, document review, and attorney final review.
               </p>
             </div>
             {initialMatterId ? (
-              <span className="w-fit rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]">
+              <span className="w-fit rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
                 Updating existing matter
               </span>
             ) : (
-              <span className="w-fit rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+              <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 New matter
               </span>
             )}
@@ -204,7 +204,7 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-4 shadow-[var(--mercy-shadow)]">
+          <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="space-y-2">
               {steps.map((item, index) => {
                 const active = step === index;
@@ -215,28 +215,28 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
                     type="button"
                     onClick={() => setStep(index)}
                     className={`flex w-full items-start gap-3 rounded-lg p-3 text-left transition ${
-                      active ? "bg-[var(--mercy-secondary)] text-[var(--mercy-navy-soft)]" : "text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]"
+                      active ? "bg-[#EEF2FF] text-[#4338CA]" : "text-slate-600 hover:bg-slate-50"
                     }`}
                   >
                     <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                      done ? "bg-emerald-100 text-emerald-700" : active ? "bg-[var(--mercy-card)] text-[var(--mercy-navy-soft)]" : "bg-[var(--mercy-muted)] text-[var(--mercy-fg-muted)]"
+                      done ? "bg-emerald-100 text-emerald-700" : active ? "bg-white text-[#4338CA]" : "bg-slate-100 text-slate-500"
                     }`}>
                       {done ? <CheckCircle2 className="size-4" /> : index + 1}
                     </span>
                     <span>
                       <span className="block text-sm font-semibold">{item.label}</span>
-                      <span className="mt-1 block text-xs text-[var(--mercy-fg-muted)]">{item.description}</span>
+                      <span className="mt-1 block text-xs text-slate-500">{item.description}</span>
                     </span>
                   </button>
                 );
               })}
             </div>
-            <div className="mt-5 rounded-lg bg-[var(--mercy-secondary)] p-3 text-xs leading-5 text-[var(--mercy-fg-muted)]">
+            <div className="mt-5 rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
               Intake is saved through the shared Mercy core and returned as a matter context for Mercy.
             </div>
           </aside>
 
-          <form onSubmit={submit} className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+          <form onSubmit={submit} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             {step === 0 ? <ClientStep form={form} update={update} /> : null}
             {step === 1 ? <MatterStep form={form} update={update} /> : null}
             {step === 2 ? <ScopeStep form={form} update={update} /> : null}
@@ -249,12 +249,12 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-col gap-3 border-t border-[var(--mercy-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
                 onClick={back}
                 disabled={step === 0 || busy}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-4 text-sm font-semibold text-[var(--mercy-fg)] disabled:opacity-50"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-50"
               >
                 <ArrowLeft className="size-4" />
                 Back
@@ -264,7 +264,7 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
                   type="button"
                   onClick={next}
                   disabled={Boolean(currentValidation)}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)] disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-50"
                 >
                   Continue
                   <ArrowRight className="size-4" />
@@ -273,7 +273,7 @@ export function IntakeWizardPage({ initialMatterId }: IntakeWizardPageProps) {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)] disabled:opacity-60"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Bot className="size-4" />}
                   Create Matter & Start Draft
@@ -309,21 +309,21 @@ function MatterStep({ form, update }: { form: IntakeState; update: <K extends ke
         <Field label="Jurisdiction" required value={form.jurisdiction} onChange={(value) => update("jurisdiction", value)} />
         <Field label="Parties" value={form.parties} onChange={(value) => update("parties", value)} placeholder="Opposing parties, comma-separated" />
       </div>
-      <label className="mt-4 block text-sm font-medium text-[var(--mercy-fg)]">
+      <label className="mt-4 block text-sm font-medium text-slate-700">
         Matter description
         <textarea
           value={form.description}
           onChange={(event) => update("description", event.target.value)}
-          className="mt-1 min-h-36 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
+          className="mt-1 min-h-36 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
           placeholder="Facts, posture, client goal, documents available, requested relief..."
         />
       </label>
-      <label className="mt-4 block text-sm font-medium text-[var(--mercy-fg)]">
+      <label className="mt-4 block text-sm font-medium text-slate-700">
         Deadlines
         <textarea
           value={form.deadlines}
           onChange={(event) => update("deadlines", event.target.value)}
-          className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
+          className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
           placeholder="One per line, e.g. Answer due May 30; hearing June 12"
         />
       </label>
@@ -371,9 +371,9 @@ function ReviewStep({
         <Summary label="Jurisdiction" value={form.jurisdiction} />
         <Summary label="Parties" value={form.parties || "Pending"} />
       </div>
-      <div className="mt-4 rounded-xl bg-[var(--mercy-secondary)] p-4">
-        <p className="text-sm font-semibold text-[var(--mercy-fg-strong)]">Matter description</p>
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--mercy-fg-muted)]">{form.description || "No description entered."}</p>
+      <div className="mt-4 rounded-xl bg-slate-50 p-4">
+        <p className="text-sm font-semibold text-slate-950">Matter description</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{form.description || "No description entered."}</p>
       </div>
       {created && matterHref && chatHref ? (
         <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -382,7 +382,7 @@ function ReviewStep({
             <Link href={matterHref} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">
               Open matter
             </Link>
-            <Link href={chatHref} className="rounded-lg border border-emerald-300 bg-[var(--mercy-card)] px-4 py-2 text-sm font-semibold text-emerald-800">
+            <Link href={chatHref} className="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800">
               Open in Mercy
             </Link>
           </div>
@@ -395,10 +395,10 @@ function ReviewStep({
 function StepHeading({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">{icon}</div>
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">{icon}</div>
       <div>
-        <h2 className="text-xl font-semibold text-[var(--mercy-fg-strong)]">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">{description}</p>
+        <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
       </div>
     </div>
   );
@@ -418,13 +418,13 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <label className="block text-sm font-medium text-[var(--mercy-fg)]">
+    <label className="block text-sm font-medium text-slate-700">
       {label} {required ? <span className="text-rose-600">*</span> : null}
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
+        className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
       />
     </label>
   );
@@ -432,7 +432,7 @@ function Field({
 
 function CheckField({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
   return (
-    <label className="flex gap-3 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-4 text-sm leading-6 text-[var(--mercy-fg)]">
+    <label className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1" />
       {label}
     </label>
@@ -441,9 +441,9 @@ function CheckField({ checked, onChange, label }: { checked: boolean; onChange: 
 
 function Summary({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-[var(--mercy-secondary)] p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-[var(--mercy-fg-muted)]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[var(--mercy-fg-strong)]">{value || "Pending"}</p>
+    <div className="rounded-xl bg-slate-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-950">{value || "Pending"}</p>
     </div>
   );
 }

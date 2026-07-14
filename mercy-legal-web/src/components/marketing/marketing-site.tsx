@@ -83,11 +83,6 @@ const resourceLinks = [
   ["Contact Us", routes.contact, "Request a demo or trust packet."],
 ] as const;
 
-const audienceLinks = [
-  ["Solo attorneys", routes.useCases, "Matters, Vault, research, drafting, and personal billing without firm-admin noise."],
-  ["Small firms", routes.useCases, "Shared matters, seats, firm billing ownership, and workspace isolation."],
-] as const;
-
 type Feature = {
   title: string;
   description: string;
@@ -228,17 +223,52 @@ const solutionPages: Record<SolutionKey, Feature & { problem: string; workflow: 
 function LogoMark() {
   return (
     <Link href={routes.home} className="flex items-center gap-3">
-      <span className="grid size-9 place-items-center rounded-md bg-[#0b1426] text-white shadow-sm">
-        <Scale className="size-4.5" />
+      <span className="grid size-10 place-items-center rounded-sm bg-[#111827] text-white">
+        <Scale className="size-5" />
       </span>
-      <span className="text-[1.05rem] font-semibold tracking-tight text-[#0b1426]">Mercy</span>
+      <span className="text-lg font-semibold tracking-normal text-[#111827]">Mercy</span>
     </Link>
   );
 }
 
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f7f5f0] text-[#152033]">
+    <div className="min-h-screen bg-[#f6f4ef] text-[#151515]">
+      <style jsx global>{`
+        @keyframes mercy-drift {
+          0% { transform: translate3d(0, 0, 0); }
+          50% { transform: translate3d(0, -10px, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
+        @keyframes mercy-grid-pan {
+          0% { background-position: 0 0, 0 0; }
+          100% { background-position: 72px 36px, 36px 72px; }
+        }
+        @keyframes mercy-node-pulse {
+          0%, 100% { opacity: 0.72; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.06); }
+        }
+        .mercy-hero-grid {
+          animation: mercy-grid-pan 28s linear infinite;
+        }
+        .mercy-float-slow {
+          animation: mercy-drift 8s ease-in-out infinite;
+        }
+        .mercy-float-medium {
+          animation: mercy-drift 6.5s ease-in-out infinite;
+        }
+        .mercy-source-node {
+          animation: mercy-node-pulse 4.8s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mercy-hero-grid,
+          .mercy-float-slow,
+          .mercy-float-medium,
+          .mercy-source-node {
+            animation: none !important;
+          }
+        }
+      `}</style>
       <MarketingHeader />
       {children}
       <MarketingFooter />
@@ -255,31 +285,31 @@ function MarketingHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#e8e2d6] bg-[#f7f5f0]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-5 px-5 py-3.5 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-black/10 bg-[#f6f4ef]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-4 lg:px-8">
         <LogoMark />
-        <nav className="hidden items-center gap-0.5 text-sm font-medium text-[#4b5568] lg:flex" aria-label="Marketing navigation">
+        <nav className="hidden items-center gap-1 text-sm font-medium text-[#4b4741] lg:flex" aria-label="Marketing navigation">
           <MegaMenu label="Product" items={productLinks} active={active(routes.product) || active(routes.howItWorks) || pathname === "/"} />
           <MegaMenu label="Solutions" items={solutionLinks} active={active(routes.solutions) || active(routes.useCases)} />
           <Link className={navClass(active(routes.location))} href={routes.location}>
-            D.C. focus
+            Location
           </Link>
           <Link className={navClass(active(routes.security))} href={routes.security}>
             Security
           </Link>
           <MegaMenu label="Resources" items={resourceLinks} active={active(routes.resources) || active(routes.blog) || active(routes.trust) || active(routes.contact)} align="right" />
         </nav>
-        <div className="hidden items-center gap-2 lg:flex">
-          <Button asChild variant="ghost" size="sm" className="text-[#152033] hover:bg-black/5">
-            <Link href={routes.signIn}>Sign in</Link>
+        <div className="hidden items-center gap-3 lg:flex">
+          <Button asChild variant="ghost" size="sm">
+            <Link href={routes.signIn}>Login</Link>
           </Button>
-          <Button asChild size="sm" className="bg-[#0b1426] px-4 text-white hover:bg-[#15233d]">
-            <Link href={routes.getStarted}>Start beta</Link>
+          <Button asChild size="sm" className="bg-[#111827] text-white shadow-sm hover:bg-[#1f2937]">
+            <Link href={routes.getStarted}>Get Started</Link>
           </Button>
         </div>
         <button
           type="button"
-          className="grid size-10 place-items-center rounded-md border border-[#e5e0d4] bg-white lg:hidden"
+          className="grid size-10 place-items-center rounded-md border border-black/10 bg-white lg:hidden"
           onClick={() => setMobileOpen((value) => !value)}
           aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
           aria-expanded={mobileOpen}
@@ -293,10 +323,7 @@ function MarketingHeader() {
 }
 
 function navClass(isActive: boolean) {
-  return cn(
-    "rounded-md px-3 py-2 transition hover:bg-black/[0.04] hover:text-[#0b1426]",
-    isActive && "bg-[#0b1426] text-white hover:bg-[#0b1426] hover:text-white",
-  );
+  return cn("rounded-full px-3.5 py-2 transition hover:bg-black/5 hover:text-black", isActive && "bg-[#111827] text-white hover:bg-[#111827] hover:text-white");
 }
 
 function MegaMenu({
@@ -322,11 +349,14 @@ function MegaMenu({
           align === "right" ? "right-0" : "left-0",
         )}
       >
-        <div className="grid w-[320px] gap-0.5 rounded-xl border border-[#e5e0d4] bg-white p-2 shadow-[0_16px_40px_rgba(11,20,38,0.12)]">
-          {items.map(([title, href, description]) => (
-            <Link key={title} href={href} className="rounded-lg px-3 py-2.5 transition hover:bg-[#f7f5f0]">
-              <span className="block text-sm font-semibold text-[#0b1426]">{title}</span>
-              <span className="mt-0.5 block text-[0.72rem] leading-4 text-[#5c6b84]">{description}</span>
+        <div className="grid w-[315px] gap-1 rounded-md border border-[#d4af37]/16 bg-[#202632]/95 p-2 text-white shadow-[0_16px_42px_rgba(5,8,15,0.24)] ring-1 ring-white/5 backdrop-blur-md">
+          {items.map(([title, href, description], index) => (
+            <Link key={title} href={href} className="rounded-sm border border-transparent px-2.5 py-2 transition hover:border-[#d4af37]/20 hover:bg-white/[0.07]">
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <span className={cn("size-1.5 rounded-full", index % 3 === 0 ? "bg-[#d4af37]" : index % 3 === 1 ? "bg-[#6d5dfc]" : "bg-[#14b8a6]")} />
+                {title}
+              </span>
+              <span className="mt-0.5 block text-[0.72rem] leading-4 text-white/66">{description}</span>
             </Link>
           ))}
         </div>
@@ -388,12 +418,12 @@ function MarketingFooter() {
   ] as const;
 
   return (
-    <footer className="border-t border-white/10 bg-[#0b1426] text-white">
-      <div className="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[1.1fr_2.4fr] lg:px-8">
+    <footer className="border-t border-black/10 bg-[#111827] text-white">
+      <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-14 lg:grid-cols-[1.1fr_2.4fr] lg:px-8">
         <div>
           <div className="flex items-center gap-3">
-            <span className="grid size-9 place-items-center rounded-md bg-white text-[#0b1426]">
-              <Scale className="size-4" />
+            <span className="grid size-10 place-items-center rounded-sm bg-white text-[#111827]">
+              <Scale className="size-5" />
             </span>
             <span className="text-lg font-semibold">Mercy</span>
           </div>
@@ -422,44 +452,31 @@ function MarketingFooter() {
 
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-5 pb-16 pt-14 lg:px-8 lg:pb-24 lg:pt-20">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgba(196,163,90,0.14),transparent_55%)]" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+    <section className="relative overflow-hidden bg-[#f6f4ef] px-5 py-14 lg:px-8 lg:py-[4.5rem]">
+      <div className="mercy-hero-grid pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(17,24,39,0.045)_1px,transparent_1px),linear-gradient(180deg,rgba(17,24,39,0.035)_1px,transparent_1px)] bg-[size:72px_72px] opacity-45" />
+      <div className="pointer-events-none absolute right-[7%] top-10 hidden h-48 w-72 rounded-[50%] border border-[#d4af37]/20 opacity-40 lg:block" />
+      <div className="pointer-events-none absolute right-[12%] top-20 hidden h-24 w-44 border-t border-[#8a6b16]/20 lg:block" />
+      <div className="mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e0d4] bg-white px-3 py-1 text-xs font-medium text-[#5c6b84] shadow-sm">
-            <span className="size-1.5 rounded-full bg-[#c4a35a]" />
-            D.C.-focused legal AI · Attorney supervised
-          </div>
-          <h1 className="mt-6 max-w-2xl text-[2.4rem] font-semibold leading-[1.08] tracking-tight text-[#0b1426] md:text-5xl lg:text-[3.35rem]">
-            Legal AI that keeps attorneys in control.
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8a6b16]">Mercy Legal AI</p>
+          <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-normal text-[#111827] md:text-[3.55rem]">
+            Legal AI for attorneys who need speed without losing control.
           </h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-[#5c6b84] md:text-lg">
-            Mercy is a premium workspace for solo attorneys and small firms—matter context, official-source research,
-            drafting, Vault documents, Office add-ins, and citation review in one tenant-isolated system.
+          <p className="mt-6 max-w-xl text-base leading-7 text-[#5b564e] md:text-lg">
+            Mercy combines a secure workspace, Office add-ins, matter context, D.C.-focused workflows, and a Reliability Panel for citations, source visibility, and attorney review.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="h-12 bg-[#0b1426] px-6 text-white hover:bg-[#15233d]">
-              <Link href={routes.getStarted}>Start beta access</Link>
+            <Button asChild size="lg" className="bg-[#111827] text-white hover:bg-[#1f2937]">
+              <Link href={routes.getStarted}>Get Started</Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="h-12 border-[#0b1426]/20 bg-white px-6 text-[#0b1426] hover:bg-white">
-              <Link href={routes.howItWorks}>
-                See how it works <ArrowRight />
-              </Link>
+            <Button asChild variant="outline" size="lg" className="border-[#111827] bg-transparent">
+              <Link href={routes.howItWorks}>See How It Works <ArrowRight /></Link>
             </Button>
           </div>
-          <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-[#e5e0d4] pt-6 text-sm">
-            <div>
-              <p className="font-semibold text-[#0b1426]">Workspace</p>
-              <p className="mt-1 text-xs leading-5 text-[#5c6b84]">Matters, Vault, LARS</p>
-            </div>
-            <div>
-              <p className="font-semibold text-[#0b1426]">Office</p>
-              <p className="mt-1 text-xs leading-5 text-[#5c6b84]">Word + Outlook</p>
-            </div>
-            <div>
-              <p className="font-semibold text-[#0b1426]">Trust</p>
-              <p className="mt-1 text-xs leading-5 text-[#5c6b84]">Citations + review</p>
-            </div>
+          <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 text-xs text-[#5b564e]">
+            <div className="border-l border-[#d4af37]/50 pl-3">Workspace + Office</div>
+            <div className="border-l border-[#6d5dfc]/50 pl-3">Assistant layer</div>
+            <div className="border-l border-[#14b8a6]/50 pl-3">Source signals</div>
           </div>
         </div>
         <ProductArchitectureVisual />
@@ -470,31 +487,45 @@ function HeroSection() {
 
 function ProductArchitectureVisual() {
   return (
-    <div className="relative rounded-2xl border border-[#e5e0d4] bg-white p-3 shadow-[0_30px_80px_rgba(11,20,38,0.1)]">
-      <div className="rounded-xl border border-[#eef0f4] bg-[#faf9f6] p-4">
-        <div className="flex items-center justify-between border-b border-[#e8e2d6] pb-3">
-          <div>
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Mercy Workspace</p>
-            <h2 className="mt-1 text-base font-semibold text-[#0b1426]">Matter · Agency response review</h2>
+    <div className="relative overflow-hidden rounded-xl border border-[#d4af37]/25 bg-[#0c111b] p-3 shadow-[0_34px_110px_rgba(5,8,15,0.34)] lg:p-4">
+      <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/70 to-transparent" />
+      <div className="mercy-float-slow absolute -right-14 top-8 size-52 rounded-full bg-[#6d5dfc]/12 blur-3xl" />
+      <div className="mercy-float-medium absolute -bottom-24 left-16 size-64 rounded-full bg-[#14b8a6]/12 blur-3xl" />
+      <div className="absolute inset-0 opacity-[0.12] [background-image:linear-gradient(135deg,transparent_0_46%,#d4af37_46%_47%,transparent_47%_100%)] [background-size:84px_84px]" />
+      <div className="relative rounded-lg border border-white/10 bg-[#202632] p-3">
+        <div className="grid gap-3 lg:grid-cols-[1fr_0.92fr]">
+          <div className="mercy-float-slow rounded-md border border-[#d4af37]/20 bg-[#f8f7f3] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.22)]">
+            <div className="flex items-center justify-between border-b border-black/10 pb-3">
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">Mercy Workspace</p>
+                <h2 className="mt-1 text-lg font-semibold text-[#111827]">Matter: Agency response review</h2>
+              </div>
+              <span className="rounded-full border border-[#14b8a6]/30 bg-[#14b8a6]/10 px-2.5 py-1 text-[0.68rem] font-semibold text-[#0f766e]">D.C. beta</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              <SurfaceMini title="Matter context" meta="Documents, facts, jurisdiction" icon={BriefcaseBusiness} />
+              <SurfaceMini title="Assistant layer" meta="Draft, review, reason" icon={MessageSquareText} accent="purple" />
+              <SurfaceMini title="Office Add-ins" meta="Word + Outlook workflows" icon={Layers3} accent="gold" />
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Signal label="Matter" value="Bounded" />
+              <Signal label="D.C." value="Grounded" />
+              <Signal label="Review" value="Required" />
+            </div>
           </div>
-          <span className="rounded-full border border-[#d4af37]/35 bg-[#f8f1df] px-2.5 py-1 text-[0.65rem] font-semibold text-[#8a6b16]">
-            D.C. beta
-          </span>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-2">
-            <SurfaceMini title="Active matter" meta="Facts, parties, jurisdiction" icon={BriefcaseBusiness} />
-            <SurfaceMini title="Assistant + LARS" meta="Draft, research, tree search" icon={MessageSquareText} />
-            <SurfaceMini title="Office add-ins" meta="Word & Outlook approval flows" icon={Layers3} />
-          </div>
-          <div className="space-y-2">
-            <ReliabilityPanelPreview compact />
-            <div className="rounded-lg border border-[#0b1426]/90 bg-[#0b1426] p-3 text-white">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-white/50">Source trail</p>
-              <div className="mt-3 space-y-2">
-                {["D.C. Code source set", "Superior Court rules", "Local federal context"].map((item) => (
-                  <div key={item} className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/80">
-                    <span className="size-1.5 rounded-full bg-[#d4b76a]" />
+          <div className="grid gap-3">
+            <div className="mercy-float-medium">
+              <ReliabilityPanelPreview compact />
+            </div>
+            <div className="rounded-md border border-white/10 bg-[#111827] p-3 text-white">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Source nodes</p>
+                <span className="mercy-source-node size-2 rounded-full bg-[#14b8a6] shadow-[0_0_18px_rgba(20,184,166,0.75)]" />
+              </div>
+              <div className="mt-3 grid gap-2">
+                {["D.C. Code source set", "Superior Court rule context", "Local federal context"].map((item, index) => (
+                  <div key={item} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/76">
+                    <span className={cn("mercy-source-node size-1.5 rounded-full", index === 0 ? "bg-[#14b8a6]" : index === 1 ? "bg-[#d4af37]" : "bg-[#6d5dfc]")} />
                     {item}
                   </div>
                 ))}
@@ -502,26 +533,26 @@ function ProductArchitectureVisual() {
             </div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <Signal label="Matter" value="Isolated" />
-          <Signal label="Citations" value="Visible" />
-          <Signal label="Review" value="Required" />
+        <div className="mt-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
+          <div className="grid gap-2 sm:grid-cols-4">
+            {["Matter folder", "Document panel", "Assistant trace", "Citation trail"].map((item) => (
+              <div key={item} className="rounded border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/72">{item}</div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function SurfaceMini({ title, meta, icon: Icon }: { title: string; meta: string; icon: LucideIcon; accent?: "gold" | "navy" }) {
+function SurfaceMini({ title, meta, icon: Icon, accent = "teal" }: { title: string; meta: string; icon: LucideIcon; accent?: "gold" | "purple" | "teal" }) {
   return (
-    <div className="rounded-lg border border-[#e8e2d6] bg-white p-3 shadow-sm">
+    <div className="rounded-md border border-black/10 bg-white p-3 shadow-sm">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid size-8 place-items-center rounded-md border border-[#eadfbf] bg-[#f8f1df] text-[#8a6b16]">
-          <Icon className="size-4" />
-        </span>
+        <Icon className={cn("mt-1 size-4", accent === "purple" ? "text-[#6d5dfc]" : accent === "gold" ? "text-[#8a6b16]" : "text-[#0f766e]")} />
         <div>
-          <h3 className="text-sm font-semibold text-[#0b1426]">{title}</h3>
-          <p className="mt-0.5 text-xs leading-5 text-[#5c6b84]">{meta}</p>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-600">{meta}</p>
         </div>
       </div>
     </div>
@@ -530,39 +561,33 @@ function SurfaceMini({ title, meta, icon: Icon }: { title: string; meta: string;
 
 function Signal({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[#e8e2d6] bg-white px-3 py-2.5">
-      <p className="text-[0.65rem] uppercase tracking-[0.12em] text-[#5c6b84]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#0b1426]">{value}</p>
+    <div className="rounded-md border border-black/10 bg-white px-4 py-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
   );
 }
 
 function ReliabilityPanelPreview({ compact = false }: { compact?: boolean }) {
-  const rows = compact
-    ? [
-        ["Citations", "3 visible"],
-        ["D.C. grounding", "On"],
-        ["Attorney review", "Required"],
-      ]
-    : [
-        ["Citations", "3 visible"],
-        ["Confidence", "Review"],
-        ["D.C. grounding", "On"],
-        ["Attorney-review flag", "Required"],
-        ["Unsupported claim warning", "1 item"],
-        ["Trace / request ID", "req_7D4A"],
-      ];
+  const rows = [
+    ["Citations", "3 visible"],
+    ["Confidence", "Review"],
+    ["D.C. grounding", "On"],
+    ["Attorney-review flag", "Required"],
+    ["Unsupported claim warning", "1 item"],
+    ["Trace / request ID", "req_7D4A"],
+  ];
   return (
-    <div className="rounded-lg border border-[#0b1426] bg-[#0b1426] p-3.5 text-white shadow-sm">
+    <div className="rounded-md border border-black/10 bg-[#111827] p-4 text-white shadow-sm">
       <div className="flex items-center gap-2">
-        <PanelRight className="size-4 text-[#d4b76a]" />
-        <h3 className="text-sm font-semibold">Reliability Panel</h3>
+        <PanelRight className="size-4 text-[#d4af37]" />
+        <h3 className="font-semibold">Reliability Panel</h3>
       </div>
-      <div className="mt-3 grid gap-2">
+      <div className={cn("mt-4 grid gap-2", !compact && "sm:grid-cols-2")}>
         {rows.map(([label, value]) => (
-          <div key={label} className="rounded-md border border-white/10 bg-white/[0.05] px-3 py-2">
-            <p className="text-[0.65rem] text-white/55">{label}</p>
-            <p className="mt-0.5 text-sm font-semibold">{value}</p>
+          <div key={label} className="rounded-md bg-white/8 p-3">
+            <p className="text-xs text-white/54">{label}</p>
+            <p className="mt-1 text-sm font-semibold">{value}</p>
           </div>
         ))}
       </div>
@@ -580,16 +605,12 @@ function TrustStrip() {
   ] as const;
 
   return (
-    <section className="bg-[#0b1426] px-5 py-16 text-white lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-10 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d4b76a]">Trust</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">Security and supervision are product features, not footnotes.</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {items.map(([title, description]) => (
-            <div key={title} className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
-              <span className="block h-0.5 w-8 rounded-full bg-[#d4b76a]" />
+    <section className="bg-[#111827] px-5 py-16 text-white lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
+        <div className="grid gap-4 md:grid-cols-5">
+          {items.map(([title, description], index) => (
+            <div key={title} className="rounded-lg border border-white/10 bg-white/[0.04] p-5">
+              <span className={cn("block h-1 w-10 rounded-full", index === 2 ? "bg-[#6d5dfc]" : index === 3 ? "bg-[#14b8a6]" : "bg-[#d4af37]")} />
               <h3 className="mt-5 text-sm font-semibold">{title}</h3>
               <p className="mt-3 text-xs leading-5 text-white/64">{description}</p>
             </div>
@@ -602,55 +623,51 @@ function TrustStrip() {
 
 function SectionIntro({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
-    <div className="mx-auto max-w-2xl text-center">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6b16]">{eyebrow}</p>
-      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1426] md:text-[2.15rem]">{title}</h2>
-      <p className="mt-4 text-base leading-7 text-[#5c6b84]">{description}</p>
+    <div className="mx-auto max-w-3xl text-center">
+      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
+      <h2 className="mt-4 text-4xl font-semibold tracking-normal text-[#111827] md:text-5xl">{title}</h2>
+      <p className="mt-5 text-base leading-7 text-[#5b564e] md:text-lg">{description}</p>
     </div>
   );
 }
 
 function ProductSurfaceCard({ title, description, icon: Icon, href }: Feature & { href: MarketingRoute }) {
   return (
-    <Link
-      href={href}
-      className="group flex min-h-[220px] flex-col rounded-2xl border border-[#e5e0d4] bg-white p-6 shadow-[0_10px_30px_rgba(11,20,38,0.04)] transition hover:border-[#d4af37]/40 hover:shadow-[0_18px_40px_rgba(11,20,38,0.08)]"
-    >
-      <span className="grid size-10 place-items-center rounded-lg border border-[#eadfbf] bg-[#f8f1df]">
-        <Icon className="size-5 text-[#8a6b16]" />
-      </span>
-      <h3 className="mt-5 text-lg font-semibold leading-snug text-[#0b1426]">{title}</h3>
-      <p className="mt-3 text-sm leading-6 text-[#5c6b84]">{description}</p>
-      <span className="mt-auto inline-flex items-center gap-2 pt-6 text-sm font-semibold text-[#0b1426]">
-        Explore <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
-      </span>
+    <Link href={href} className="group flex min-h-[230px] flex-col rounded-lg border border-black/10 bg-[#fffdf7] p-6 shadow-[0_14px_45px_rgba(17,24,39,0.06)] transition hover:-translate-y-0.5 hover:border-[#d4af37]/35 hover:shadow-[0_24px_70px_rgba(17,24,39,0.12)]">
+      <div className="flex items-center justify-between">
+        <span className="grid size-10 place-items-center rounded-md border border-[#d4af37]/20 bg-white">
+          <Icon className="size-5 text-[#8a6b16]" />
+        </span>
+        <span className="h-px w-12 bg-gradient-to-r from-[#d4af37]/50 to-transparent" />
+      </div>
+      <h3 className="mt-6 text-xl font-semibold leading-snug">{title}</h3>
+      <p className="mt-3 text-sm leading-6 text-[#5b564e]">{description}</p>
+      <span className="mt-auto pt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#111827]">Explore <ArrowRight className="size-4 transition group-hover:translate-x-0.5" /></span>
     </Link>
   );
 }
 
 function AttorneyControlSection() {
   return (
-    <section className="bg-[#0b1426] px-5 py-16 text-white lg:px-8 lg:py-20">
-      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+    <section className="bg-[#111827] px-5 py-20 text-white lg:px-8">
+      <div className="mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d4b76a]">Attorney control</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">The work stays reviewable before it leaves the firm.</h2>
-          <p className="mt-5 max-w-xl text-base leading-7 text-white/68">
-            Matter context, source visibility, and final review are product requirements—not optional metadata.
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d4af37]">Attorney control</p>
+          <h2 className="mt-4 text-4xl font-semibold tracking-normal md:text-5xl">The work stays reviewable before it leaves the firm.</h2>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-white/68">
+            Mercy is built around matter context, source visibility, and attorney final review. The product helps attorneys move faster without treating AI output as a finished legal answer.
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(
-            [
-              ["Matter context", "Facts, documents, and jurisdiction stay attached.", BriefcaseBusiness],
-              ["Source visibility", "Citations and warnings stay near the output.", SearchCheck],
-              ["Final review", "Attorney judgment remains required.", UserCheck],
-            ] as const
-          ).map(([title, description, Icon]) => (
-            <div key={title} className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
-              <Icon className="size-5 text-[#d4b76a]" />
-              <h3 className="mt-4 text-base font-semibold">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-white/64">{description}</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          {([
+            ["Matter context", "Facts, documents, jurisdiction, and source context remain attached.", BriefcaseBusiness, "gold"],
+            ["Source visibility", "Citations, warnings, and request trace details stay near the output.", SearchCheck, "teal"],
+            ["Final review", "Attorney judgment remains required before legal output is used.", UserCheck, "purple"],
+          ] as const).map(([title, description, Icon, accent]) => (
+            <div key={title as string} className="rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.18)]">
+              <Icon className={cn("size-5", accent === "gold" ? "text-[#d4af37]" : accent === "teal" ? "text-[#14b8a6]" : "text-[#8b7cf6]")} />
+              <h3 className="mt-5 text-lg font-semibold">{title as string}</h3>
+              <p className="mt-3 text-sm leading-6 text-white/64">{description as string}</p>
             </div>
           ))}
         </div>
@@ -661,17 +678,16 @@ function AttorneyControlSection() {
 
 function DcIntelligenceSection() {
   return (
-    <section className="px-5 py-16 lg:px-8 lg:py-20">
-      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+    <section className="relative overflow-hidden bg-white px-5 py-20 lg:px-8">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:linear-gradient(30deg,transparent_0_48%,#8a6b16_48%_49%,transparent_49%_100%)] [background-size:96px_96px]" />
+      <div className="mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">D.C.-focused intelligence</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#0b1426] md:text-4xl">
-            Built first around Washington, D.C. legal work.
-          </h2>
-          <p className="mt-5 max-w-xl text-base leading-7 text-[#5c6b84]">
-            D.C. Code-aware workflows, Superior Court rule awareness, and local federal context stay visible—jurisdiction is not treated as generic content.
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">D.C.-focused intelligence</p>
+          <h2 className="mt-4 text-4xl font-semibold tracking-normal md:text-5xl">Built first around Washington, D.C. legal work.</h2>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-[#5b564e]">
+            Mercy keeps D.C. jurisdiction focus visible through D.C. Code-aware workflows, Superior Court rule awareness, and D.C. Circuit or local federal context where applicable.
           </p>
-          <Button asChild variant="outline" className="mt-7 border-[#0b1426]/20 bg-white text-[#0b1426]">
+          <Button asChild variant="outline" className="mt-7 border-[#111827] bg-transparent">
             <Link href={routes.location}>Explore D.C. focus</Link>
           </Button>
         </div>
@@ -723,27 +739,21 @@ function WorkflowCard({ step, title, description }: { step: string; title: strin
   );
 }
 
-function CtaBand({
-  title = "See how Mercy fits your practice.",
-  description = "Start registration or request a focused walkthrough of the workspace, Office workflows, and reliability layer.",
-}: {
-  title?: string;
-  description?: string;
-}) {
+function CtaBand({ title = "See how Mercy fits your practice.", description = "Start registration or contact Mercy for a focused walkthrough of the workspace, Office workflows, and reliability layer." }) {
   return (
-    <section className="px-5 py-16 lg:px-8 lg:py-20">
-      <div className="mx-auto max-w-6xl rounded-2xl bg-[#0b1426] px-6 py-12 text-white md:px-10">
+    <section className="px-5 py-20 lg:px-8">
+      <div className="mx-auto max-w-[1440px] rounded-xl bg-[#111827] px-6 py-12 text-white shadow-[0_36px_120px_rgba(17,24,39,0.2)] md:px-10">
         <div className="grid gap-8 md:grid-cols-[1fr_auto] md:items-center">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h2>
+            <h2 className="text-3xl font-semibold">{title}</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">{description}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild className="bg-white text-[#0b1426] hover:bg-[#f7f5f0]">
-              <Link href={routes.getStarted}>Start beta</Link>
+            <Button asChild>
+              <Link href={routes.getStarted}>Get Started</Link>
             </Button>
-            <Button asChild variant="outline" className="border-white/25 bg-transparent text-white hover:bg-white/10">
-              <Link href={routes.contact}>Contact us</Link>
+            <Button asChild variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10">
+              <Link href={routes.contact}>Contact Us</Link>
             </Button>
           </div>
         </div>
@@ -757,69 +767,34 @@ export function HomeMarketingPage() {
     <MarketingShell>
       <main>
         <HeroSection />
-        <section className="border-y border-[#e8e2d6] bg-white px-5 py-16 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-6xl">
+        <section className="bg-white px-5 py-20 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
             <SectionIntro
-              eyebrow="Product system"
-              title="One connected legal operating environment."
-              description="Workspace, Office add-ins, Vault, research, drafting, and reliability review share the same matter, tenant, and attorney-control model."
+              eyebrow="Product"
+              title="One focused product system."
+              description="Mercy keeps the workflow simple: matter setup, Office-first work, and reliability review before attorney final judgment."
             />
             <div className="mt-12 grid gap-4 md:grid-cols-3">
-              <ProductSurfaceCard title="How it works" description="Matter setup, workspace context, Assistant support, Office workflows, and attorney final review." icon={Monitor} href={routes.howItWorks} />
-              <ProductSurfaceCard title="Office add-ins" description="Draft and revise inside Word; analyze selected text and email context in Outlook with approval gates." icon={Layers3} href={routes.productOfficeAddins} />
-              <ProductSurfaceCard title="Reliability & citations" description="Citations, confidence, D.C. grounding, warnings, and trace IDs stay next to every legal output." icon={PanelRight} href={routes.productReliabilityCitations} />
-            </div>
-          </div>
-        </section>
-        <section className="px-5 py-16 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-6xl">
-            <SectionIntro
-              eyebrow="Built for practice"
-              title="Solo clarity. Firm structure."
-              description="The same product adapts to individual attorneys and small firms—without exposing platform-admin controls to customers."
-            />
-            <div className="mt-12 grid gap-4 md:grid-cols-2">
-              {audienceLinks.map(([title, href, description]) => (
-                <Link
-                  key={title}
-                  href={href}
-                  className="rounded-2xl border border-[#e5e0d4] bg-white p-7 shadow-[0_10px_30px_rgba(11,20,38,0.04)] transition hover:border-[#d4af37]/40"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6b16]">{title}</p>
-                  <p className="mt-4 text-base leading-7 text-[#5c6b84]">{description}</p>
-                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#0b1426]">
-                    Explore use cases <ArrowRight className="size-4" />
-                  </span>
-                </Link>
-              ))}
-            </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild className="bg-[#0b1426] text-white hover:bg-[#15233d]">
-                <Link href="/sign-up/solo">Solo signup</Link>
-              </Button>
-              <Button asChild variant="outline" className="border-[#0b1426]/20 bg-white text-[#0b1426]">
-                <Link href="/sign-up/firm">Firm signup</Link>
-              </Button>
-              <Button asChild variant="ghost" className="text-[#152033] hover:bg-black/5">
-                <Link href={routes.security}>Security posture</Link>
-              </Button>
+              <ProductSurfaceCard title="How It Works" description="Matter setup, workspace context, Assistant support, Office workflows, and attorney final review." icon={Monitor} href={routes.howItWorks} />
+              <ProductSurfaceCard title="Office Add-ins" description="Draft and revise inside Word, then analyze selected text and email context in Outlook." icon={Layers3} href={routes.productOfficeAddins} />
+              <ProductSurfaceCard title="Reliability & Citations" description="Citations, source visibility, confidence, D.C. grounding, warnings, and trace/request IDs." icon={PanelRight} href={routes.productReliabilityCitations} />
             </div>
           </div>
         </section>
         <AttorneyControlSection />
         <DcIntelligenceSection />
-        <section className="border-t border-[#e8e2d6] bg-white px-5 py-16 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-6xl">
+        <section className="px-5 py-20 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
             <SectionIntro
               eyebrow="Solutions"
-              title="Litigation, transactions, and research with review boundaries."
-              description="Practice workflows that require source visibility, matter context, and attorney judgment—not generic chat."
+              title="Three workflows. Clear boundaries."
+              description="Mercy is organized around litigation, transactional work, and research/compliance workflows that require source visibility and attorney judgment."
             />
             <div className="mt-12 grid gap-4 md:grid-cols-3">
               {[
-                ["Litigation", "Pleadings, discovery, motion drafting, document review, citations, and attorney final review.", routes.solutionLitigation, Gavel],
-                ["Transactions", "Contracts, clauses, negotiation prep, redline support, and Word workflows.", routes.solutionTransactions, FileText],
-                ["Research & Compliance", "D.C. source grounding, rule awareness, source checking, and attorney judgment.", routes.solutionResearchCompliance, BookOpenCheck],
+                ["Litigation", "Pleadings, discovery, motion drafting, document/evidence review, citations, and attorney final review.", routes.solutionLitigation, Gavel],
+                ["Transactions", "Contracts, clauses, document review, negotiation prep, redline support, and Word workflows.", routes.solutionTransactions, FileText],
+                ["Research & Compliance", "D.C. source grounding, rule awareness, source checking, compliance review, and attorney judgment.", routes.solutionResearchCompliance, BookOpenCheck],
               ].map(([title, description, href, Icon]) => (
                 <ProductSurfaceCard key={title as string} title={title as string} description={description as string} href={href as MarketingRoute} icon={Icon as LucideIcon} />
               ))}

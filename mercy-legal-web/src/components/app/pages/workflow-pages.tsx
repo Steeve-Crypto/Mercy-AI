@@ -34,15 +34,15 @@ type VaultPageProps = { matters: CoreMatter[] };
 export function MattersPage({ matters, coreOnline }: MattersPageProps) {
   return (
     <div className="space-y-5 p-5 lg:p-8">
-        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Matters</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <h1 className="text-lg font-semibold text-slate-950">Matters</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
                 Matters organize client context. Vault stores documents. Agent X uses selected matter context.
               </p>
             </div>
-            <span className="w-fit shrink-0 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-1 text-xs text-[var(--mercy-fg-muted)]">
+            <span className="w-fit shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
               Core {coreOnline ? "online" : "unavailable"}
             </span>
           </div>
@@ -52,27 +52,27 @@ export function MattersPage({ matters, coreOnline }: MattersPageProps) {
             <Link
               key={matter.matter_id}
               href={`/matters/${encodeURIComponent(matter.matter_id)}` as Route}
-              className="block rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)] transition hover:border-[color-mix(in srgb, var(--mercy-gold) 45%, var(--mercy-border))] hover:bg-[var(--mercy-secondary)]"
+              className="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#A5B4FC] hover:bg-[#F8FAFF]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold text-[var(--mercy-fg-strong)]">{matter.name}</h2>
-                  <p className="mt-1 text-sm text-[var(--mercy-fg-muted)]">{matter.client_name ?? matter.client_id} / {matter.matter_type ?? "type pending"}</p>
+                  <h2 className="font-semibold text-slate-950">{matter.name}</h2>
+                  <p className="mt-1 text-sm text-slate-500">{matter.client_name ?? matter.client_id} / {matter.matter_type ?? "type pending"}</p>
                 </div>
-                <span className="rounded-full bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]">{matter.jurisdiction ?? "D.C."}</span>
+                <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">{matter.jurisdiction ?? "D.C."}</span>
               </div>
-              <p className="mt-3 text-sm text-[var(--mercy-fg-muted)]">{matter.missing_information?.length ?? 0} open intake item(s), {matter.documents?.length ?? 0} document(s).</p>
+              <p className="mt-3 text-sm text-slate-600">{matter.missing_information?.length ?? 0} open intake item(s), {matter.documents?.length ?? 0} document(s).</p>
             </Link>
           )) : (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-card)] p-8 text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
                 <BriefcaseBusiness className="size-6" />
               </div>
-              <h2 className="mt-4 text-lg font-semibold text-[var(--mercy-fg-strong)]">Create your first matter</h2>
-              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <h2 className="mt-4 text-lg font-semibold text-slate-950">Create your first matter</h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
                 Create a matter to connect documents, Assistant threads, research, and reliability review.
               </p>
-              <Link href="/intake" className="mt-5 inline-flex rounded-lg bg-[var(--mercy-navy)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)]">
+              <Link href="/intake" className="mt-5 inline-flex rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
                 Create your first matter
               </Link>
             </div>
@@ -116,22 +116,22 @@ export function IntakePage({ matters }: IntakePageProps) {
 
   return (
     <div className="p-5 lg:p-8">
-        <form onSubmit={submit} className="mx-auto max-w-4xl rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <form onSubmit={submit} className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5">
-            <h1 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Intake</h1>
-            <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+            <h1 className="text-lg font-semibold text-slate-950">Intake</h1>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
               Capture the minimum matter facts Agent X needs before research, drafting, or document review.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium text-[var(--mercy-fg)]">Matter<select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"><option value="">Create from intake</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select></label>
-            <label className="text-sm font-medium text-[var(--mercy-fg)]">Requested relief<input value={requestedRelief} onChange={(event) => setRequestedRelief(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" /></label>
+            <label className="text-sm font-medium text-slate-700">Matter<select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"><option value="">Create from intake</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select></label>
+            <label className="text-sm font-medium text-slate-700">Requested relief<input value={requestedRelief} onChange={(event) => setRequestedRelief(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" /></label>
           </div>
-          <label className="mt-4 block text-sm font-medium text-[var(--mercy-fg)]">Opposing parties<input value={opposingParties} onChange={(event) => setOpposingParties(event.target.value)} placeholder="Comma-separated" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" /></label>
-          <label className="mt-4 block text-sm font-medium text-[var(--mercy-fg)]">Facts and posture<textarea value={facts} onChange={(event) => setFacts(event.target.value)} className="mt-1 min-h-40 w-full rounded-lg border border-slate-300 px-3 py-3" /></label>
+          <label className="mt-4 block text-sm font-medium text-slate-700">Opposing parties<input value={opposingParties} onChange={(event) => setOpposingParties(event.target.value)} placeholder="Comma-separated" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" /></label>
+          <label className="mt-4 block text-sm font-medium text-slate-700">Facts and posture<textarea value={facts} onChange={(event) => setFacts(event.target.value)} className="mt-1 min-h-40 w-full rounded-lg border border-slate-300 px-3 py-3" /></label>
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           {result ? <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{result}</p> : null}
-          <button disabled={busy} className="mt-5 flex h-11 items-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}Save intake</button>
+          <button disabled={busy} className="mt-5 flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}Save intake</button>
         </form>
     </div>
   );
@@ -205,20 +205,20 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
 
   return (
     <div className="p-5 lg:p-8">
-        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5">
-            <h1 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Research</h1>
-            <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+            <h1 className="text-lg font-semibold text-slate-950">Research</h1>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
               Run D.C.-focused retrieval with source metadata, matter context when selected, and attorney review before relying on any legal conclusion.
             </p>
           </div>
           <div className="grid gap-3 md:grid-cols-[0.45fr_1fr_auto]">
             <select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm"><option value="">No matter</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="What are the D.C. requirements..." className="h-11 rounded-lg border border-slate-300 px-3 text-sm" />
-            <button onClick={runResearch} disabled={busy || !query.trim()} className="flex h-11 items-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}Research</button>
+            <button onClick={runResearch} disabled={busy || !query.trim()} className="flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}Research</button>
           </div>
           {initialDocumentContext ? (
-            <div className="mt-4 rounded-xl border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] p-3 text-sm text-[var(--mercy-navy-soft)]">
+            <div className="mt-4 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3 text-sm text-[#4338CA]">
               Research opened with {initialAttachedDocIds.length} Vault document{initialAttachedDocIds.length === 1 ? "" : "s"} selected. Public D.C. sources remain available; private retrieval is limited to the selected document context and matter scope.
             </div>
           ) : null}
@@ -234,51 +234,51 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           <div className="mt-5 space-y-3">
             {result ? (
-              <div className="rounded-xl border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] p-4">
-                <p className="text-sm font-semibold text-[var(--mercy-fg-strong)]">Retrieval summary</p>
-                <p className="mt-1 text-sm text-[var(--mercy-fg-muted)]">
+              <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
+                <p className="text-sm font-semibold text-slate-950">Retrieval summary</p>
+                <p className="mt-1 text-sm text-slate-600">
                   Retrieval completed with review warnings. {result.results.length} source result{result.results.length === 1 ? "" : "s"} returned.
                   Mercy was not invoked on this page; use Mercy Assistant for full reliability review before relying on these results.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-                <div className="rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-secondary)] p-5">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
-                    <Search className="size-4 text-[var(--mercy-navy)]" />
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                    <Search className="size-4 text-[#4F46E5]" />
                     Start with a D.C. source question
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
                     Select a matter when available so research can stay connected to facts, documents, and the later Reliability Panel review.
                   </p>
-                  <div className="mt-4 space-y-2 text-sm text-[var(--mercy-fg-muted)]">
-                    <button type="button" onClick={() => setQuery("What are the D.C. requirements for")} className="block w-full rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-left hover:bg-[var(--mercy-secondary)]">
+                  <div className="mt-4 space-y-2 text-sm text-slate-600">
+                    <button type="button" onClick={() => setQuery("What are the D.C. requirements for")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
                       What are the D.C. requirements for...
                     </button>
-                    <button type="button" onClick={() => setQuery("Summarize D.C. Superior Court rule considerations for")} className="block w-full rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-left hover:bg-[var(--mercy-secondary)]">
+                    <button type="button" onClick={() => setQuery("Summarize D.C. Superior Court rule considerations for")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
                       Summarize D.C. Superior Court rule considerations for...
                     </button>
-                    <button type="button" onClick={() => setQuery("Find source support for this matter issue:")} className="block w-full rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-left hover:bg-[var(--mercy-secondary)]">
+                    <button type="button" onClick={() => setQuery("Find source support for this matter issue:")} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left hover:bg-slate-50">
                       Find source support for this matter issue...
                     </button>
                   </div>
                 </div>
-                <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
-                    <ShieldCheck className="size-4 text-[var(--mercy-navy)]" />
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                    <ShieldCheck className="size-4 text-[#4F46E5]" />
                     Research history
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
                     Recent research is saved to History after each completed run. Review returned source metadata before using the output.
                   </p>
                 </div>
               </div>
             )}
             {result?.results.map((item) => (
-              <div key={item.chunk_id} className="rounded-xl border border-[var(--mercy-border)] p-4">
-                <p className="text-sm font-semibold text-[var(--mercy-fg-strong)]">{item.citation?.label ?? item.source_id}</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">{safeText(item.summary || item.text, "Summary unavailable. Review the source before use.")}</p>
-                <p className="mt-2 text-xs text-[var(--mercy-fg-muted)]">Source relevance {Math.round(item.combined_score * 100)}%. Attorney review required before use.</p>
+              <div key={item.chunk_id} className="rounded-xl border border-slate-200 p-4">
+                <p className="text-sm font-semibold text-slate-950">{item.citation?.label ?? item.source_id}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{safeText(item.summary || item.text, "Summary unavailable. Review the source before use.")}</p>
+                <p className="mt-2 text-xs text-slate-500">Source relevance {Math.round(item.combined_score * 100)}%. Attorney review required before use.</p>
               </div>
             ))}
           </div>
@@ -323,15 +323,15 @@ export function TemplatesPage({ initialTemplates }: TemplatesPageProps) {
 
   return (
     <div className="p-5 lg:p-8">
-        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Templates</h1>
-              <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <h1 className="text-lg font-semibold text-slate-950">Templates</h1>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
                 Browse D.C.-specific templates, then open the selected workflow directly in Agent X.
               </p>
             </div>
-            <span className="w-fit rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]">
+            <span className="w-fit rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
               {templates.length} templates
             </span>
           </div>
@@ -340,28 +340,28 @@ export function TemplatesPage({ initialTemplates }: TemplatesPageProps) {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search motions, retainers, zoning, LLC, discovery..."
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
+              className="h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
             />
-            <select value={practiceArea} onChange={(event) => setPracticeArea(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm">
+            <select value={practiceArea} onChange={(event) => setPracticeArea(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
               <option value="">All practice areas</option>
               {practiceAreas.map((area) => (
                 <option key={area} value={area}>{area.replace(/_/g, " ")}</option>
               ))}
             </select>
-            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm">
+            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
               <option value="">All levels</option>
               <option value="beginner">Beginner</option>
               <option value="intermediate">Intermediate</option>
               <option value="advanced">Advanced</option>
             </select>
-            <select value={popularity} onChange={(event) => setPopularity(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm">
+            <select value={popularity} onChange={(event) => setPopularity(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
               <option value="all">All popularity</option>
               <option value="85">Most used</option>
               <option value="70">Common</option>
             </select>
           </div>
 
-          <p className="mt-3 text-xs text-[var(--mercy-fg-muted)]">
+          <p className="mt-3 text-xs text-slate-500">
             Popularity is a local product signal derived from workflow breadth, required-input fit, and practice-area priority until live usage analytics are connected.
           </p>
 
@@ -369,28 +369,28 @@ export function TemplatesPage({ initialTemplates }: TemplatesPageProps) {
 
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredTemplates.map((template) => (
-              <div key={template.template_id} className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+              <div key={template.template_id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="font-semibold leading-6 text-[var(--mercy-fg-strong)]">{template.title}</h2>
-                  <span className="rounded-full bg-[var(--mercy-muted)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+                  <h2 className="font-semibold leading-6 text-slate-950">{template.title}</h2>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                     {popularityScore(template)}
                   </span>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">{template.description}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">{template.description}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-[var(--mercy-secondary)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]">
+                  <span className="rounded-full bg-[#EEF2FF] px-2.5 py-1 text-xs font-medium text-[#4338CA]">
                     {template.practice_area.replace(/_/g, " ")}
                   </span>
-                  <span className="rounded-full bg-[var(--mercy-muted)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                     {template.difficulty}
                   </span>
                 </div>
-                <p className="mt-4 text-xs leading-5 text-[var(--mercy-fg-muted)]">
+                <p className="mt-4 text-xs leading-5 text-slate-500">
                   Inputs: {template.required_inputs.slice(0, 4).map((input) => input.replace(/_/g, " ")).join(", ")}
                 </p>
                 <Link
                   href={`/chat?templateId=${encodeURIComponent(template.template_id)}` as Route}
-                  className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--mercy-navy)] px-4 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)]"
+                  className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[#4F46E5] px-4 text-sm font-semibold text-white hover:bg-[#4338CA]"
                 >
                   Use Template
                 </Link>
@@ -552,19 +552,19 @@ export function VaultPage({ matters }: VaultPageProps) {
 
   return (
     <div className="space-y-5 p-5 lg:p-8">
-        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-normal text-[var(--mercy-fg-strong)]">Vault</h1>
-                <span className="rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-semibold text-[var(--mercy-navy-soft)]">
+                <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Vault</h1>
+                <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-semibold text-[#4338CA]">
                   Document command center
                 </span>
-                <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-semibold text-[var(--mercy-fg-muted)]">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
                   Supported: PDF
                 </span>
               </div>
-            <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+            <p className="mt-1 text-sm leading-6 text-slate-500">
                 Securely store, organize, and route legal documents into Mercy and Research while keeping matter context and attorney review visible.
             </p>
             </div>
@@ -582,15 +582,15 @@ export function VaultPage({ matters }: VaultPageProps) {
           </div>
           <div className="grid gap-3 md:grid-cols-[0.45fr_1fr_auto]">
             <select value={matterId} onChange={(event) => setMatterId(event.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm"><option value="">No matter</option>{matters.map((m) => <option key={m.matter_id} value={m.matter_id}>{m.name}</option>)}</select>
-            <input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 py-2 text-sm" />
-            <button onClick={upload} disabled={busy || !file} className="flex h-11 items-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}Upload</button>
+            <input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            <button onClick={upload} disabled={busy || !file} className="flex h-11 items-center gap-2 rounded-lg bg-[#4F46E5] px-5 text-sm font-semibold text-white">{busy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}Upload</button>
           </div>
-          <p className="mt-3 text-xs leading-5 text-[var(--mercy-fg-muted)]">
+          <p className="mt-3 text-xs leading-5 text-slate-500">
             Supported: PDF. TODO: evaluate DOCX, TXT, and OCR ingestion after extraction and citation reliability are hardened.
           </p>
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           {result ? (
-            <div className="mt-5 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-4">
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start gap-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0" />
                 <span>Document stored. Review extraction details before relying on any document-derived facts.</span>
@@ -600,45 +600,45 @@ export function VaultPage({ matters }: VaultPageProps) {
                 <VaultCue icon={Bot} label="Facts" text={`${factEntries.length} clean field${factEntries.length === 1 ? "" : "s"}`} />
                 <VaultCue icon={ShieldCheck} label="Review" text="Attorney review required" />
               </div>
-              <div className="mt-4 rounded-lg bg-[var(--mercy-card)] p-4">
-                <h2 className="text-sm font-semibold text-[var(--mercy-fg-strong)]">Extraction summary</h2>
+              <div className="mt-4 rounded-lg bg-white p-4">
+                <h2 className="text-sm font-semibold text-slate-950">Extraction summary</h2>
                 {factEntries.length ? (
                   <dl className="mt-3 grid gap-3 md:grid-cols-2">
                     {factEntries.map((entry) => (
-                      <div key={entry.label} className="rounded-lg border border-[var(--mercy-border)] p-3">
-                        <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--mercy-fg-muted)]">{entry.label}</dt>
-                        <dd className="mt-1 text-sm leading-6 text-[var(--mercy-fg)]">{entry.value}</dd>
+                      <div key={entry.label} className="rounded-lg border border-slate-200 p-3">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{entry.label}</dt>
+                        <dd className="mt-1 text-sm leading-6 text-slate-700">{entry.value}</dd>
                       </div>
                     ))}
                   </dl>
                 ) : (
-                  <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">{extractionLimitedMessage()}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{extractionLimitedMessage()}</p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-secondary)] p-6">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
-                <UploadCloud className="size-4 text-[var(--mercy-navy)]" />
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <UploadCloud className="size-4 text-[#4F46E5]" />
                 Upload documents into the Vault
               </div>
-              <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <p className="mt-2 text-sm leading-6 text-slate-600">
                 Upload documents, attach them to matters, and use them in Assistant or research workflows. Attorney review remains required.
               </p>
             </div>
           )}
         </section>
-        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Document Library</h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--mercy-fg-muted)]">Full Vault inventory, shown without raw extraction payloads or debug output.</p>
+              <h2 className="text-lg font-semibold text-slate-950">Document Library</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">Full Vault inventory, shown without raw extraction payloads or debug output.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 {vaultDocuments.length} file{vaultDocuments.length === 1 ? "" : "s"}
               </span>
-              <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 {matterLinkedCount} matter-linked
               </span>
               {matterId ? (
@@ -646,7 +646,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                   type="button"
                   onClick={() => void refreshMatterDocuments(matterId)}
                   disabled={actionBusy === `refresh:${matterId}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-card)] px-3 py-1 text-xs font-semibold text-[var(--mercy-navy-soft)] hover:bg-[var(--mercy-secondary)]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#C7D2FE] bg-white px-3 py-1 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
                 >
                   {actionBusy === `refresh:${matterId}` ? <Loader2 className="size-3 animate-spin" /> : null}
                   Refresh selected matter
@@ -659,7 +659,7 @@ export function VaultPage({ matters }: VaultPageProps) {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search filename, matter, status, upload date, or safe summary..."
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
             />
             <div className="flex flex-wrap gap-2">
               {[
@@ -675,7 +675,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                   type="button"
                   onClick={() => setFilter(value)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                    filter === value ? "border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] text-[var(--mercy-navy-soft)]" : "border-[var(--mercy-border)] bg-[var(--mercy-card)] text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]"
+                    filter === value ? "border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   {label}
@@ -684,8 +684,8 @@ export function VaultPage({ matters }: VaultPageProps) {
             </div>
             {actionError ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{actionError}</p> : null}
           </div>
-          <div className="mt-5 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)]">
-            <div className="hidden grid-cols-[minmax(260px,1.5fr)_220px_180px_180px] gap-4 rounded-t-xl bg-[var(--mercy-secondary)] px-4 py-3 text-xs font-semibold uppercase text-[var(--mercy-fg-muted)] lg:grid">
+          <div className="mt-5 rounded-xl border border-slate-200 bg-white">
+            <div className="hidden grid-cols-[minmax(260px,1.5fr)_220px_180px_180px] gap-4 rounded-t-xl bg-slate-50 px-4 py-3 text-xs font-semibold uppercase text-slate-500 lg:grid">
               <span>Document</span>
               <span>Status / readiness</span>
               <span>Details</span>
@@ -693,22 +693,22 @@ export function VaultPage({ matters }: VaultPageProps) {
             </div>
             <div className="divide-y divide-slate-200">
             {filteredDocuments.length ? filteredDocuments.map((document) => (
-              <article key={document.id} className="grid gap-4 bg-[var(--mercy-card)] p-4 lg:grid-cols-[minmax(260px,1.5fr)_220px_180px_180px]">
+              <article key={document.id} className="grid gap-4 bg-white p-4 lg:grid-cols-[minmax(260px,1.5fr)_220px_180px_180px]">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-[var(--mercy-fg-strong)]">{document.filename}</h3>
-                    <p className="mt-1 text-xs text-[var(--mercy-fg-muted)]">{document.type} / {document.matterName}</p>
+                    <h3 className="truncate text-sm font-semibold text-slate-950">{document.filename}</h3>
+                    <p className="mt-1 text-xs text-slate-500">{document.type} / {document.matterName}</p>
                   </div>
                   <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClasses(document.statusKey)}`}>
                     {document.statusLabel}
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${document.readiness === "searchable" ? "border-emerald-200 bg-[var(--mercy-card)] text-emerald-700" : document.readiness === "limited" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-[var(--mercy-border)] bg-[var(--mercy-card)] text-[var(--mercy-fg-muted)]"}`}>
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${document.readiness === "searchable" ? "border-emerald-200 bg-white text-emerald-700" : document.readiness === "limited" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600"}`}>
                     {document.readinessLabel}
                   </span>
-                  {document.matterId ? <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">Attached to Matter</span> : null}
-                  {document.readiness === "searchable" ? <span className="rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-card)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]">Ready for Mercy</span> : null}
+                  {document.matterId ? <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">Attached to Matter</span> : null}
+                  {document.readiness === "searchable" ? <span className="rounded-full border border-[#C7D2FE] bg-white px-2.5 py-1 text-xs font-medium text-[#4338CA]">Ready for Mercy</span> : null}
                 </div>
                 {document.readiness === "limited" ? (
                   <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
@@ -727,21 +727,21 @@ export function VaultPage({ matters }: VaultPageProps) {
                     type="button"
                     onClick={() => void previewDocument(document)}
                     disabled={actionBusy === `preview:${document.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     {actionBusy === `preview:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
                     Preview
                   </button>
                   <Link
                     href={`/mercy?${new URLSearchParams({ ...(document.matterId ? { matterId: document.matterId } : {}), attachedDocs: document.id, attached: "1" }).toString()}` as Route}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--mercy-navy)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--mercy-navy-soft)]"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]"
                   >
                     <Bot className="size-3.5" />
                     Send to Mercy
                   </Link>
                   <Link
                     href={`/research?${new URLSearchParams({ ...(document.matterId ? { matterId: document.matterId } : {}), attachedDocs: document.id, documentContext: "1" }).toString()}` as Route}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mercy-border-strong)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-navy-soft)] hover:bg-[var(--mercy-secondary)]"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C7D2FE] bg-white px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
                   >
                     <Search className="size-3.5" />
                     Use in Research
@@ -749,7 +749,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                   {document.matterId ? (
                     <Link
                       href={`/matters/${encodeURIComponent(document.matterId)}` as Route}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       <FolderOpen className="size-3.5" />
                       Open Matter
@@ -759,7 +759,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                       type="button"
                       onClick={() => void attachDocument(document)}
                       disabled={actionBusy === `attach:${document.id}` || !matterId}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       {actionBusy === `attach:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <FolderOpen className="size-3.5" />}
                       Attach to Matter
@@ -770,7 +770,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                       type="button"
                       onClick={() => void deleteDocument(document)}
                       disabled={actionBusy === `delete:${document.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                     >
                       {actionBusy === `delete:${document.id}` ? <Loader2 className="size-3.5 animate-spin" /> : null}
                       Delete
@@ -779,7 +779,7 @@ export function VaultPage({ matters }: VaultPageProps) {
                 </div>
               </article>
             )) : (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-secondary)] p-6 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-600">
                 No Vault documents match this view. Upload a PDF and attach it to a matter to use it in Mercy or research workflows.
               </div>
             )}
@@ -792,21 +792,21 @@ export function VaultPage({ matters }: VaultPageProps) {
 
 function VaultMetric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg bg-[var(--mercy-card)] p-3">
-      <dt className="font-medium text-[var(--mercy-fg-muted)]">{label}</dt>
-      <dd className="mt-1 truncate font-semibold text-[var(--mercy-fg-strong)]">{value}</dd>
+    <div className="rounded-lg bg-white p-3">
+      <dt className="font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 truncate font-semibold text-slate-900">{value}</dd>
     </div>
   );
 }
 
 function VaultCue({ icon: Icon, label, text }: { icon: LucideIcon; label: string; text: string }) {
   return (
-    <div className="rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
-        <Icon className="size-4 text-[var(--mercy-navy)]" />
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <Icon className="size-4 text-[#4F46E5]" />
         {label}
       </div>
-      <p className="mt-1 text-xs leading-5 text-[var(--mercy-fg-muted)]">{text}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
     </div>
   );
 }

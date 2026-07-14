@@ -1,16 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
-import {
-  ACTIVE_SUBSCRIPTION_STATUSES,
-  DB_SUBSCRIPTION_STATUSES,
-  buildCanonicalAppMetadata,
-  mergeCanonicalAppMetadata,
-  normalizeDbSubscriptionStatus,
-  type SignupAccountType,
-} from "@/lib/auth/authorization-claims";
 
-export type { SignupAccountType };
-export { ACTIVE_SUBSCRIPTION_STATUSES };
+export type SignupAccountType = "solo" | "firm";
 
 export type PendingSignup = {
   accountType: SignupAccountType;
@@ -23,6 +14,9 @@ export type PendingSignup = {
   practiceAreas: string;
   jurisdictionFocus: string;
 };
+
+export const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+const DB_SUBSCRIPTION_STATUSES = new Set(["pending", "trialing", "active", "past_due", "canceled", "incomplete", "suspended"]);
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 
@@ -58,15 +52,29 @@ function stableId(prefix: string, seed: string, sessionId: string) {
   return `${prefix}_${normalized}_${suffix}`;
 }
 
+function dbSubscriptionStatus(status: string | null | undefined) {
+  if (status === "active" || status === "trialing" || status === "past_due" || status === "canceled" || status === "incomplete" || status === "suspended") {
+    return status;
+  }
+  if (status === "unpaid") return "past_due";
+  if (status === "paused") return "suspended";
+  if (status === "incomplete_expired") return "incomplete";
+  return "pending";
+}
+
 function checkoutSubscriptionStatus(session: Stripe.Checkout.Session) {
   const expandedSubscription =
     typeof session.subscription === "object" && session.subscription ? (session.subscription as Stripe.Subscription) : null;
   if (expandedSubscription?.status) {
-    return normalizeDbSubscriptionStatus(expandedSubscription.status);
+    return dbSubscriptionStatus(expandedSubscription.status);
   }
   if (session.payment_status === "paid") return "active";
   if (session.payment_status === "no_payment_required") return "trialing";
   return "incomplete";
+}
+
+function workspaceActiveForStatus(status: string) {
+  return ACTIVE_SUBSCRIPTION_STATUSES.has(status);
 }
 
 function metadataBooleanActive(...values: unknown[]) {
@@ -79,6 +87,41 @@ function metadataBooleanActive(...values: unknown[]) {
   return true;
 }
 
+function canonicalAppMetadata({
+  tenantId,
+  firmId,
+  accountType,
+  roles,
+  seats,
+  subscriptionStatus,
+  customerId,
+  subscriptionId,
+}: {
+  tenantId: string;
+  firmId: string | null;
+  accountType: SignupAccountType;
+  roles: string[];
+  seats: number;
+  subscriptionStatus: string;
+  customerId: string | null;
+  subscriptionId: string | null;
+}) {
+  const workspaceActive = workspaceActiveForStatus(subscriptionStatus);
+  return {
+    tenant_id: tenantId,
+    firm_id: firmId,
+    account_type: accountType,
+    roles,
+    attorney_seat_limit: seats,
+    subscription_status: subscriptionStatus,
+    account_status: subscriptionStatus,
+    workspace_active: workspaceActive,
+    account_active: workspaceActive,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscriptionId,
+  };
+}
+
 async function updateUserAccountMetadata(
   supabase: SupabaseAdmin,
   userId: string,
@@ -87,7 +130,7 @@ async function updateUserAccountMetadata(
 ) {
   const { data, error: readError } = await supabase.auth.admin.getUserById(userId);
   if (readError) {
-    return { error: readError.message, previousAppMetadata: null as Record<string, unknown> | null };
+    return { error: readError.message };
   }
   const currentAppMetadata = (data.user?.app_metadata || {}) as Record<string, unknown>;
   const currentUserMetadata = (data.user?.user_metadata || {}) as Record<string, unknown>;
@@ -95,7 +138,10 @@ async function updateUserAccountMetadata(
     app_metadata: Record<string, unknown>;
     user_metadata?: Record<string, unknown>;
   } = {
-    app_metadata: mergeCanonicalAppMetadata(currentAppMetadata, appMetadata),
+    app_metadata: {
+      ...currentAppMetadata,
+      ...appMetadata,
+    },
   };
   if (userMetadata) {
     updatePayload.user_metadata = {
@@ -104,7 +150,7 @@ async function updateUserAccountMetadata(
     };
   }
   const { error } = await supabase.auth.admin.updateUserById(userId, updatePayload);
-  return { error: error?.message || null, previousAppMetadata: currentAppMetadata };
+  return { error: error?.message || null };
 }
 
 export function normalizeSignup(input: Partial<PendingSignup>): PendingSignup {
@@ -217,7 +263,7 @@ export async function provisionPaidSignup(session: Stripe.Checkout.Session) {
       ? existing.firmId || stableId("firm", slugify(signup.firmName || signup.tenantName, "firm"), session.id)
       : null;
 
-  const appMetadata = buildCanonicalAppMetadata({
+  const appMetadata = canonicalAppMetadata({
     tenantId,
     firmId,
     accountType: signup.accountType,
@@ -308,14 +354,14 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
     return { mode: "skipped" as const };
   }
 
-  const status = normalizeDbSubscriptionStatus(subscription.status);
+  const status = dbSubscriptionStatus(subscription.status);
   if (!DB_SUBSCRIPTION_STATUSES.has(status)) {
     return { mode: "skipped" as const };
   }
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null;
   const { data: tenant, error: tenantReadError } = await supabase
     .from("mercy_tenants")
-    .select("tenant_id,firm_id,account_type,attorney_seat_limit,stripe_customer_id,stripe_subscription_id,subscription_status")
+    .select("tenant_id,firm_id,account_type,attorney_seat_limit,stripe_customer_id,stripe_subscription_id")
     .eq("stripe_subscription_id", subscription.id)
     .maybeSingle();
   if (tenantReadError) {
@@ -324,9 +370,6 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
   if (!tenant?.tenant_id) {
     return { mode: "skipped" as const, status, reason: "tenant_not_found" };
   }
-
-  const previousTenantStatus =
-    typeof tenant.subscription_status === "string" ? normalizeDbSubscriptionStatus(tenant.subscription_status) : null;
 
   const { error: tenantError } = await supabase
     .from("mercy_tenants")
@@ -363,14 +406,13 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
   const firmId = typeof tenant.firm_id === "string" && tenant.firm_id.trim() ? tenant.firm_id.trim() : null;
   const seats = Number(tenant.attorney_seat_limit || (accountType === "firm" ? 2 : 1));
   const fallbackRoles = accountType === "firm" ? ["admin", "firm_admin", "attorney"] : ["admin", "attorney"];
-  let revokedAccessUsers = 0;
   for (const userId of userIds) {
     const member = (members || []).find((item) => item.user_id === userId);
     const roles = Array.isArray(member?.roles) && member.roles.length ? member.roles.map(String).filter(Boolean) : fallbackRoles;
-    const { error, previousAppMetadata } = await updateUserAccountMetadata(
+    const { error } = await updateUserAccountMetadata(
       supabase,
       userId,
-      buildCanonicalAppMetadata({
+      canonicalAppMetadata({
         tenantId: tenant.tenant_id,
         firmId,
         accountType,
@@ -384,26 +426,8 @@ export async function syncStripeSubscriptionStatus(subscription: Stripe.Subscrip
     if (error) {
       return { mode: "auth_error" as const, error };
     }
-    const previousStatus =
-      previousAppMetadata && typeof previousAppMetadata.subscription_status === "string"
-        ? normalizeDbSubscriptionStatus(previousAppMetadata.subscription_status)
-        : previousAppMetadata && typeof previousAppMetadata.account_status === "string"
-          ? normalizeDbSubscriptionStatus(previousAppMetadata.account_status)
-          : previousTenantStatus;
-    // getUser()-backed middleware/session checks re-read app_metadata immediately.
-    // Access tokens still carry JWT claims until refresh; demotion is enforced by
-    // hasTrustedWorkspaceAccess on the verified user record before Core proxying.
-    if (previousStatus && ACTIVE_SUBSCRIPTION_STATUSES.has(previousStatus) && !ACTIVE_SUBSCRIPTION_STATUSES.has(status)) {
-      revokedAccessUsers += 1;
-    }
   }
-  return {
-    mode: "synced" as const,
-    status,
-    updatedUsers: userIds.size,
-    revokedAccessUsers,
-    previousTenantStatus,
-  };
+  return { mode: "synced" as const, status, updatedUsers: userIds.size };
 }
 
 export async function getPaidSignupActivationStatus(userId: string, checkoutSessionId?: string | null) {
@@ -437,7 +461,7 @@ export async function getPaidSignupActivationStatus(userId: string, checkoutSess
         .eq("tenant_id", tenant.tenant_id)
         .eq("user_id", userId)
         .maybeSingle();
-      const tenantStatus = normalizeDbSubscriptionStatus(String(tenant.subscription_status || ""));
+      const tenantStatus = dbSubscriptionStatus(String(tenant.subscription_status || ""));
       const accountType = tenant.account_type === "firm" ? "firm" : "solo";
       const roles =
         Array.isArray(member?.roles) && member.roles.length
@@ -450,7 +474,7 @@ export async function getPaidSignupActivationStatus(userId: string, checkoutSess
         const { error } = await updateUserAccountMetadata(
           supabase,
           userId,
-          buildCanonicalAppMetadata({
+          canonicalAppMetadata({
             tenantId: tenant.tenant_id,
             firmId,
             accountType,

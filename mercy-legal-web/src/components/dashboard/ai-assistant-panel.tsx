@@ -138,7 +138,7 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
 
   return (
     <Card id="assistant" className="overflow-hidden">
-      <CardHeader className="border-b bg-[var(--mercy-card)]">
+      <CardHeader className="border-b bg-white">
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>AI Legal Assistant</CardTitle>
@@ -151,7 +151,7 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
       </CardHeader>
       <CardContent className="space-y-4 bg-[#fbfcfe] p-5">
         <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-lg border bg-[var(--mercy-card)] p-4">
+          <div className="rounded-lg border bg-white p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-mercy-navy text-white">
                 <UserRound className="size-4" />
@@ -175,7 +175,7 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
             </div>
           </div>
 
-          <div className="rounded-lg border bg-[var(--mercy-card)] p-4">
+          <div className="rounded-lg border bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-mercy-navy">
               <Bot className="size-4 text-[#9b740e]" />
               Live output
@@ -219,7 +219,7 @@ export function AiAssistantPanel({ matterContext, intakeSummary, ragResult, agen
           </div>
         )}
 
-        <div className="rounded-lg border bg-[var(--mercy-card)] p-3">
+        <div className="rounded-lg border bg-white p-3">
           <Textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}

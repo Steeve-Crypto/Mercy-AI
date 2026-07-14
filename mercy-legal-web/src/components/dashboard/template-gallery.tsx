@@ -155,7 +155,7 @@ export function TemplateGallery({ matterContext, onMatterCreated, onResult }: Te
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search motions, retainers, zoning, LLC, discovery..." />
           </div>
-          <select value={practiceArea} onChange={(event) => setPracticeArea(event.target.value)} className="h-10 rounded-md border bg-[var(--mercy-card)] px-3 text-sm">
+          <select value={practiceArea} onChange={(event) => setPracticeArea(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
             <option value="">All practice areas</option>
             {practiceAreas.map((area) => (
               <option key={area} value={area}>
@@ -163,7 +163,7 @@ export function TemplateGallery({ matterContext, onMatterCreated, onResult }: Te
               </option>
             ))}
           </select>
-          <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-10 rounded-md border bg-[var(--mercy-card)] px-3 text-sm">
+          <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm">
             <option value="">All levels</option>
             <option value="beginner">Beginner</option>
             <option value="intermediate">Intermediate</option>
@@ -176,7 +176,7 @@ export function TemplateGallery({ matterContext, onMatterCreated, onResult }: Te
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filteredTemplates.map((template) => (
-            <div key={template.template_id} className="flex min-h-72 flex-col rounded-lg border bg-[var(--mercy-card)] p-4">
+            <div key={template.template_id} className="flex min-h-72 flex-col rounded-lg border bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary text-mercy-navy">
                   <FileText className="size-4" />
@@ -207,7 +207,7 @@ export function TemplateGallery({ matterContext, onMatterCreated, onResult }: Te
 
         {lastResult && (
           <div>
-            <pre className="max-h-72 whitespace-pre-wrap rounded-md border bg-[var(--mercy-card)] p-4 text-xs leading-6 text-[#34405a]">
+            <pre className="max-h-72 whitespace-pre-wrap rounded-md border bg-white p-4 text-xs leading-6 text-[#34405a]">
               {outputText(lastResult)}
             </pre>
             <div className="mt-4">

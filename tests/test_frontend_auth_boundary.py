@@ -73,40 +73,15 @@ class FrontendAuthBoundaryTests(unittest.TestCase):
         route = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "signup" / "activation" / "route.ts").read_text(encoding="utf-8")
         success_client = (ROOT / "mercy-legal-web" / "src" / "components" / "auth" / "signup-success-client.tsx").read_text(encoding="utf-8")
         provisioning = (ROOT / "mercy-legal-web" / "src" / "lib" / "signup" / "provisioning.ts").read_text(encoding="utf-8")
-        authorization_claims = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "authorization-claims.ts").read_text(encoding="utf-8")
         webhook = (ROOT / "mercy-legal-web" / "src" / "app" / "api" / "stripe" / "webhook" / "route.ts").read_text(encoding="utf-8")
 
         self.assertIn('stripe.checkout.sessions.retrieve(checkoutSessionId!, { expand: ["subscription"] })', route)
         self.assertIn("stripeSessionUserId(session) !== user.id", route)
         self.assertIn("provisionPaidSignup(session)", route)
         self.assertIn("supabase?.auth.refreshSession()", success_client)
-        self.assertIn("buildCanonicalAppMetadata", provisioning)
-        self.assertIn("mergeCanonicalAppMetadata", provisioning)
-        self.assertIn("account_status: subscriptionStatus", authorization_claims)
-        self.assertIn("workspace_active: workspaceActive", authorization_claims)
+        self.assertIn("account_status: subscriptionStatus", provisioning)
+        self.assertIn("workspace_active: workspaceActive", provisioning)
         self.assertIn('result.mode === "storage_error" || result.mode === "auth_error"', webhook)
-
-    def test_session_helper_refreshes_stale_access_token_claims(self) -> None:
-        session = (ROOT / "mercy-legal-web" / "src" / "lib" / "auth" / "session.ts").read_text(encoding="utf-8")
-        self.assertIn("accessTokenAuthorizationIsStale", session)
-        self.assertIn("supabase.auth.refreshSession()", session)
-        self.assertIn("hasTrustedWorkspaceAccess(user)", session)
-
-    def test_claim_backfill_and_entitlement_operator_scripts_exist(self) -> None:
-        backfill = ROOT / "mercy-legal-web" / "scripts" / "backfill-auth-claims.mjs"
-        entitlements = ROOT / "mercy-legal-web" / "scripts" / "validate-stripe-entitlements.mjs"
-        runbook = ROOT / "docs" / "product" / "hosted-beta-activation.md"
-        package_json = (ROOT / "mercy-legal-web" / "package.json").read_text(encoding="utf-8")
-
-        self.assertTrue(backfill.is_file())
-        self.assertTrue(entitlements.is_file())
-        self.assertTrue(runbook.is_file())
-        backfill_text = backfill.read_text(encoding="utf-8")
-        self.assertIn("never user_metadata", backfill_text.lower())
-        self.assertIn("mercy_tenant_members", backfill_text)
-        self.assertIn("--apply", backfill_text)
-        self.assertIn("auth:backfill-claims", package_json)
-        self.assertIn("entitlements:validate", package_json)
 
 
 if __name__ == "__main__":

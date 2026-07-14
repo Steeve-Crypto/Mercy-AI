@@ -59,7 +59,7 @@ export function DocumentVault({ matterContext, discoveryResult, onDiscovery }: D
         <div className="space-y-3">
           {matterDocuments.length ? (
             matterDocuments.map((document, index) => (
-              <div key={String(document.document_id ?? document.title ?? index)} className="flex items-center justify-between gap-4 rounded-md border bg-[var(--mercy-card)] p-3">
+              <div key={String(document.document_id ?? document.title ?? index)} className="flex items-center justify-between gap-4 rounded-md border bg-white p-3">
                 <div className="flex items-center gap-3">
                   <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-mercy-navy">
                     <FileText className="size-4" />
@@ -76,14 +76,14 @@ export function DocumentVault({ matterContext, discoveryResult, onDiscovery }: D
               </div>
             ))
           ) : (
-            <div className="rounded-md border bg-[var(--mercy-card)] p-4 text-sm text-muted-foreground">
+            <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
               No documents are linked to the selected matter yet. Save intake documents or upload a PDF for analysis.
             </div>
           )}
         </div>
 
         {discoveredFacts.length ? (
-          <div className="rounded-lg border bg-[var(--mercy-card)] p-4">
+          <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-semibold text-mercy-navy">Latest discovery facts</p>
             <div className="mt-3 space-y-2">
               {discoveredFacts.map(([key, value]) => (

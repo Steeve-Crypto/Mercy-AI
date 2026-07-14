@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
 import type { CoreAuthContext } from "@/lib/core-client";
-import { accessTokenAuthorizationIsStale } from "@/lib/auth/authorization-claims";
 import { hasTrustedWorkspaceAccess, trustedAccountClaims } from "@/lib/auth/trusted-claims";
 
 export type MercySessionUser = {
@@ -64,8 +63,6 @@ async function getTrustedSupabaseSession(): Promise<{ user: User; accessToken: s
       },
       setAll() {
         // Server Components only read auth state. Middleware refreshes cookies.
-        // Token refresh below may attempt cookie writes; Route Handlers/middleware
-        // own durable cookie mutation for the browser session.
       },
     },
   });
@@ -73,26 +70,10 @@ async function getTrustedSupabaseSession(): Promise<{ user: User; accessToken: s
     supabase.auth.getUser(),
     supabase.auth.getSession(),
   ]);
-  let user = userResult.user;
-  let accessToken = sessionResult.session?.access_token || null;
-  if (!user || !accessToken || !hasTrustedWorkspaceAccess(user)) return null;
-
-  // getUser() returns current app_metadata from Auth; the access token JWT can
-  // still carry pre-backfill or pre-entitlement-sync claims. Reissue when stale
-  // so the Core proxy forwards a bearer token with matching authorization.
-  const appMetadata =
-    user.app_metadata && typeof user.app_metadata === "object" ? (user.app_metadata as Record<string, unknown>) : {};
-  if (accessTokenAuthorizationIsStale(accessToken, appMetadata)) {
-    const { data: refreshed, error } = await supabase.auth.refreshSession();
-    if (error || !refreshed.session?.access_token || !refreshed.user) {
-      return null;
-    }
-    user = refreshed.user;
-    accessToken = refreshed.session.access_token;
-    if (!hasTrustedWorkspaceAccess(user)) return null;
-  }
-
-  return { user, accessToken };
+  const user = userResult.user;
+  const session = sessionResult.session;
+  if (!user || !session || !hasTrustedWorkspaceAccess(user)) return null;
+  return { user, accessToken: session.access_token };
 }
 
 export async function getServerMercySessionUser(): Promise<MercySessionUser | null> {

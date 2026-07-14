@@ -22,8 +22,8 @@ function valueFrom(record: Record<string, unknown> | undefined, keys: string[], 
 
 function JsonCard({ title, data }: { title: string; data: unknown }) {
   return (
-    <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
-      <h2 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">{title}</h2>
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
       <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100">
         {JSON.stringify(data ?? { status: "unavailable" }, null, 2)}
       </pre>
@@ -33,31 +33,21 @@ function JsonCard({ title, data }: { title: string; data: unknown }) {
 
 export function AdminHome() {
   const links = [
-    ["/admin/monitoring", "Monitoring", "Usage, cost, quota, and operational alerts."],
-    ["/admin/beta-users", "Beta Users", "Invite-only beta state, feedback, and waitlist signals."],
-    ["/admin/analytics", "Analytics", "Product analytics summaries for internal review."],
-    ["/admin/provisioning", "Provisioning", "Manual beta and Microsoft identity mappings."],
-    ["/admin/security", "Security", "Compliance posture and security control status."],
-    ["/admin/system-health", "System Health", "Core, RAG, and dependency health signals."],
+    ["/admin/monitoring", "Monitoring"],
+    ["/admin/beta-users", "Beta Users"],
+    ["/admin/analytics", "Analytics"],
+    ["/admin/provisioning", "Provisioning"],
+    ["/admin/security", "Security"],
+    ["/admin/system-health", "System Health"],
   ] as const;
   return (
     <>
-      <PageHeader
-        eyebrow="Platform operations"
-        title="Mercy platform administration"
-        description="Internal controls for beta readiness, monitoring, provisioning, and security. These views are not customer firm-admin tools."
-      >
-        <span className="mercy-chip mercy-chip-warning">Internal only</span>
-      </PageHeader>
-      <div className="grid gap-4 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3 lg:p-8">
-        {links.map(([href, label, detail]) => (
-          <Link
-            key={href}
-            href={href}
-            className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)] transition hover:border-[color-mix(in_srgb,var(--mercy-gold)_40%,var(--mercy-border))]"
-          >
-            <span className="text-lg font-semibold text-[var(--mercy-fg-strong)]">{label}</span>
-            <span className="mt-2 block text-sm leading-6 text-[var(--mercy-fg-muted)]">{detail}</span>
+      <PageHeader title="Platform admin" description="Operational views for Mercy beta readiness, monitoring, security, and system health." />
+      <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3 lg:p-8">
+        {links.map(([href, label]) => (
+          <Link key={href} href={href} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-[#A5B4FC]">
+            <span className="text-lg font-semibold text-slate-950">{label}</span>
+            <span className="mt-2 block text-sm text-slate-500">Open {label.toLowerCase()} controls.</span>
           </Link>
         ))}
       </div>
@@ -193,8 +183,8 @@ export function ProvisioningAdminPage() {
         {notice ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{notice}</div> : null}
         {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{error}</div> : null}
 
-        <section className="grid gap-4 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)] md:grid-cols-2">
-          <label className="space-y-2 text-sm font-medium text-[var(--mercy-fg)]">
+        <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
+          <label className="space-y-2 text-sm font-medium text-slate-700">
             Account type
             <select className="w-full rounded-md border border-slate-300 px-3 py-2" value={form.accountType} onChange={(event) => update("accountType", event.target.value as "solo" | "firm")}>
               <option value="solo">Solo attorney</option>
@@ -209,7 +199,7 @@ export function ProvisioningAdminPage() {
           <Input label="Attorney seat limit" value={form.attorneySeatLimit} onChange={(value) => update("attorneySeatLimit", value)} />
           <Input label="Mercy user ID" value={form.mercyUserId} placeholder={mercyUserId || "pending:owner@example.com"} onChange={(value) => update("mercyUserId", value)} />
           <Input label="Roles" value={form.roles} onChange={(value) => update("roles", value)} />
-          <label className="space-y-2 text-sm font-medium text-[var(--mercy-fg)]">
+          <label className="space-y-2 text-sm font-medium text-slate-700">
             Status
             <select className="w-full rounded-md border border-slate-300 px-3 py-2" value={form.status} onChange={(event) => update("status", event.target.value as ProvisioningForm["status"])}>
               <option value="pending">Pending</option>
@@ -219,7 +209,7 @@ export function ProvisioningAdminPage() {
               <option value="canceled">Canceled</option>
             </select>
           </label>
-          <div className="rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-4 text-xs leading-5 text-[var(--mercy-fg-muted)] md:col-span-2">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600 md:col-span-2">
             Pending records are safe for users who have not signed up yet. After signup, update the Mercy user ID if the Supabase user ID differs from the pending email key. Service-role Auth user creation is intentionally not exposed in this admin UI.
           </div>
           <div className="md:col-span-2">
@@ -229,13 +219,13 @@ export function ProvisioningAdminPage() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] shadow-[var(--mercy-shadow)]">
-          <div className="border-b border-[var(--mercy-border)] p-4">
-            <h2 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Provisioned beta accounts</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-4">
+            <h2 className="text-lg font-semibold text-slate-950">Provisioned beta accounts</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-[var(--mercy-secondary)] text-left text-xs uppercase tracking-wide text-[var(--mercy-fg-muted)]">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Account</th>
                   <th className="px-4 py-3">Status</th>
@@ -252,7 +242,7 @@ export function ProvisioningAdminPage() {
                 {mappings.map((mapping) => (
                   <tr key={mapping.id}>
                     <td className="px-4 py-3">
-                      <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-2.5 py-1 text-xs font-semibold text-[var(--mercy-fg)]">
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
                         {mapping.account_type === "firm" ? "Firm" : "Solo"}
                       </span>
                     </td>
@@ -276,7 +266,7 @@ export function ProvisioningAdminPage() {
                 ))}
                 {mappings.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-5 text-[var(--mercy-fg-muted)]" colSpan={9}>No beta accounts provisioned.</td>
+                    <td className="px-4 py-5 text-slate-500" colSpan={9}>No beta accounts provisioned.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -290,7 +280,7 @@ export function ProvisioningAdminPage() {
 
 function Input({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
   return (
-    <label className="space-y-2 text-sm font-medium text-[var(--mercy-fg)]">
+    <label className="space-y-2 text-sm font-medium text-slate-700">
       {label}
       <input className="w-full rounded-md border border-slate-300 px-3 py-2" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </label>
@@ -311,9 +301,9 @@ export function MonitoringAdminPage({ metrics, error }: { metrics: CoreMonitorin
         {error ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{error}</div> : null}
         <section className="grid gap-4 md:grid-cols-4">
           {cards.map((card) => (
-            <div key={card.label} className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
-              <p className="text-sm text-[var(--mercy-fg-muted)]">{card.label}</p>
-              <p className="mt-3 text-2xl font-semibold text-[var(--mercy-fg-strong)]">{card.value}</p>
+            <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">{card.label}</p>
+              <p className="mt-3 text-2xl font-semibold text-slate-950">{card.value}</p>
             </div>
           ))}
         </section>
@@ -330,10 +320,10 @@ export function BetaUsersAdminPage({ analytics, error }: { analytics: CoreBetaAn
       <div className="space-y-5 p-5 lg:p-8">
         {error ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{error}</div> : null}
         <section className="grid gap-4 md:grid-cols-4">
-          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]"><p className="text-sm text-[var(--mercy-fg-muted)]">Active users</p><p className="mt-3 text-2xl font-semibold">{analytics?.active_users ?? "—"}</p></div>
-          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]"><p className="text-sm text-[var(--mercy-fg-muted)]">Waitlist</p><p className="mt-3 text-2xl font-semibold">{analytics?.waitlist_count ?? "—"}</p></div>
-          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]"><p className="text-sm text-[var(--mercy-fg-muted)]">Invites</p><p className="mt-3 text-2xl font-semibold">{analytics?.invite_count ?? "—"}</p></div>
-          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]"><p className="text-sm text-[var(--mercy-fg-muted)]">Feedback</p><p className="mt-3 text-2xl font-semibold">{analytics?.feedback.count ?? "—"}</p></div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">Active users</p><p className="mt-3 text-2xl font-semibold">{analytics?.active_users ?? "—"}</p></div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">Waitlist</p><p className="mt-3 text-2xl font-semibold">{analytics?.waitlist_count ?? "—"}</p></div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">Invites</p><p className="mt-3 text-2xl font-semibold">{analytics?.invite_count ?? "—"}</p></div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">Feedback</p><p className="mt-3 text-2xl font-semibold">{analytics?.feedback.count ?? "—"}</p></div>
         </section>
         <JsonCard title="Beta analytics" data={analytics} />
       </div>

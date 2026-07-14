@@ -146,7 +146,7 @@ export function MatterManagement({
         {error && <div className="rounded-md border border-[#ead08a] bg-[#fff8e1] p-3 text-xs text-[#735b13]">{error}</div>}
 
         <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <form onSubmit={handleCreateMatter} className="rounded-lg border bg-[var(--mercy-card)] p-4">
+          <form onSubmit={handleCreateMatter} className="rounded-lg border bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-mercy-navy">
               <UserPlus className="size-4 text-[#9b740e]" />
               New matter
@@ -162,7 +162,7 @@ export function MatterManagement({
             </div>
           </form>
 
-          <form onSubmit={handleIntake} className="rounded-lg border bg-[var(--mercy-card)] p-4">
+          <form onSubmit={handleIntake} className="rounded-lg border bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-mercy-navy">
               <BriefcaseBusiness className="size-4 text-[#9b740e]" />
               Client intake
@@ -205,7 +205,7 @@ export function MatterManagement({
                 key={matter.matter_id}
                 onClick={() => onSelectMatter(matter.matter_id)}
                 className={`grid w-full gap-4 rounded-md border p-4 text-left transition md:grid-cols-[1fr_0.8fr_auto] md:items-center ${
-                  selectedMatterId === matter.matter_id ? "border-[#d4af37] bg-[#fff9e8]" : "bg-[var(--mercy-card)] hover:border-[#d4af37]"
+                  selectedMatterId === matter.matter_id ? "border-[#d4af37] bg-[#fff9e8]" : "bg-white hover:border-[#d4af37]"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -225,7 +225,7 @@ export function MatterManagement({
               </button>
             ))
           ) : (
-            <div className="rounded-md border bg-[var(--mercy-card)] p-4 text-sm text-muted-foreground">
+            <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
               No tenant matters returned. Create a matter to start live intake, RAG, and agent workflows.
             </div>
           )}

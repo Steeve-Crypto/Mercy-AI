@@ -95,24 +95,24 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
   }
 
   return (
-    <article className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-4 shadow-[var(--mercy-shadow)]">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[var(--mercy-secondary)] px-2.5 py-1 text-xs font-semibold text-[var(--mercy-navy-soft)]">
+            <span className="rounded-full bg-[#EEF2FF] px-2.5 py-1 text-xs font-semibold text-[#4338CA]">
               {workflowLabel(record.workflowType)}
             </span>
-            <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
               {contextLabel(record)}
             </span>
             {sourceScopeLabel(record) ? (
-              <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
                 {sourceScopeLabel(record)}
               </span>
             ) : null}
           </div>
-          <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">{record.title}</h3>
-          {contextNames(record) ? <p className="mt-1 truncate text-xs text-[var(--mercy-fg-muted)]">{contextNames(record)}</p> : null}
+          <h3 className="mt-3 line-clamp-2 text-sm font-semibold text-slate-950">{record.title}</h3>
+          {contextNames(record) ? <p className="mt-1 truncate text-xs text-slate-500">{contextNames(record)}</p> : null}
         </div>
         <button
           type="button"
@@ -121,34 +121,34 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
           className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
             saved
               ? "border-amber-200 bg-amber-50 text-amber-700"
-              : "border-[var(--mercy-border)] bg-[var(--mercy-card)] text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
           }`}
         >
           <Star className={`size-3.5 ${saved ? "fill-current" : ""}`} />
           {saved ? "Saved" : "Save"}
         </button>
       </div>
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-[var(--mercy-fg-muted)]">{recordSummary(record)}</p>
+      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{recordSummary(record)}</p>
       <dl className="mt-4 grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-lg bg-[var(--mercy-secondary)] p-2">
-          <dt className="font-medium text-[var(--mercy-fg-muted)]">Created</dt>
-          <dd className="mt-1 font-semibold text-[var(--mercy-fg-strong)]">{formatTimestamp(record.createdAt)}</dd>
+        <div className="rounded-lg bg-slate-50 p-2">
+          <dt className="font-medium text-slate-500">Created</dt>
+          <dd className="mt-1 font-semibold text-slate-900">{formatTimestamp(record.createdAt)}</dd>
         </div>
-        <div className="rounded-lg bg-[var(--mercy-secondary)] p-2">
-          <dt className="font-medium text-[var(--mercy-fg-muted)]">Reliability</dt>
-          <dd className="mt-1 truncate font-semibold text-[var(--mercy-fg-strong)]">{reliabilityLabel(record)}</dd>
+        <div className="rounded-lg bg-slate-50 p-2">
+          <dt className="font-medium text-slate-500">Reliability</dt>
+          <dd className="mt-1 truncate font-semibold text-slate-900">{reliabilityLabel(record)}</dd>
         </div>
-        <div className="rounded-lg bg-[var(--mercy-secondary)] p-2">
-          <dt className="font-medium text-[var(--mercy-fg-muted)]">Citations</dt>
-          <dd className="mt-1 font-semibold text-[var(--mercy-fg-strong)]">{citationCount(record)}</dd>
+        <div className="rounded-lg bg-slate-50 p-2">
+          <dt className="font-medium text-slate-500">Citations</dt>
+          <dd className="mt-1 font-semibold text-slate-900">{citationCount(record)}</dd>
         </div>
       </dl>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link href={reopenHref(record)} className="rounded-lg bg-[var(--mercy-navy)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--mercy-navy-soft)]">
+        <Link href={reopenHref(record)} className="rounded-lg bg-[#4F46E5] px-3 py-2 text-xs font-semibold text-white hover:bg-[#4338CA]">
           Re-open in Mercy
         </Link>
         {matterHref(record) ? (
-          <Link href={matterHref(record)!} className="rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
+          <Link href={matterHref(record)!} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Open matter
           </Link>
         ) : null}
@@ -159,21 +159,21 @@ function HistoryCard({ record, onSavedChange }: { record: WorkHistoryRecord; onS
 
 function HistorySectionCard({ section, onSavedChange }: { section: HistorySection; onSavedChange: (record: WorkHistoryRecord) => void }) {
   return (
-    <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--mercy-muted)] text-[var(--mercy-navy)]">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-slate-100 text-[#4F46E5]">
           <section.icon className="size-5" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-[var(--mercy-fg-strong)]">{section.title}</h2>
-          <p className="mt-1 text-xs leading-5 text-[var(--mercy-fg-muted)]">{section.description}</p>
+          <h2 className="text-sm font-semibold text-slate-950">{section.title}</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{section.description}</p>
         </div>
       </div>
       <div className="mt-4 grid gap-3">
         {section.records.length ? (
           section.records.slice(0, 6).map((record) => <HistoryCard key={record.id} record={record} onSavedChange={onSavedChange} />)
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-secondary)] p-4 text-sm leading-6 text-[var(--mercy-fg-muted)]">
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
             No saved work in this section yet.
           </div>
         )}
@@ -240,28 +240,28 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
 
   return (
     <div className="space-y-5 p-5 lg:p-8">
-      <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-navy-soft)]">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#4338CA]">
               <Clock3 className="size-4" />
               History / Threads
             </div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-normal text-[var(--mercy-fg-strong)]">Mercy work history</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--mercy-fg-muted)]">
+            <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">Mercy work history</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Prior Mercy work stays scoped to your tenant, matter context when selected, reliability snapshots, and saved outputs.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/mercy" className="inline-flex items-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)]">
+            <Link href="/mercy" className="inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]">
               <MessageSquareText className="size-4" />
               Start in Mercy
             </Link>
-            <Link href="/intake" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-4 py-2 text-sm font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
+            <Link href="/intake" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
               <Plus className="size-4" />
               Create new matter
             </Link>
-            <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-4 py-2 text-sm font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
+            <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
               <BookOpenText className="size-4" />
               Open templates
             </Link>
@@ -287,7 +287,7 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
               type="button"
               onClick={() => setActiveTab(value as typeof activeTab)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                activeTab === value ? "border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] text-[var(--mercy-navy-soft)]" : "border-[var(--mercy-border)] bg-[var(--mercy-card)] text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]"
+                activeTab === value ? "border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
               {label}
@@ -297,14 +297,14 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
       </section>
 
       {!records.length ? (
-        <section className="rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-card)] p-8 text-center shadow-[var(--mercy-shadow)]">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
+        <section className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#EEF2FF] text-[#4F46E5]">
             <Clock3 className="size-6" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-[var(--mercy-fg-strong)]">
+          <h2 className="mt-4 text-lg font-semibold text-slate-950">
             Your Mercy work history will appear here after drafting, research, review, or citation-checking work.
           </h2>
-          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-[var(--mercy-fg-muted)]">
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             History supports both general work and matter-linked work. Saved outputs will appear here once you mark completed work as saved.
           </p>
         </section>
