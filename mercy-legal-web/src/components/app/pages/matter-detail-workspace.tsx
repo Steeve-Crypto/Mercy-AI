@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Loader2,
   MessageSquareText,
+  GitBranch,
   Paperclip,
   Plus,
   RefreshCw,
@@ -27,6 +28,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   deleteMatterDocument,
+  listLarsJobs,
   listMatterDocuments,
   previewMatterDocument,
   retrieveRag,
@@ -35,7 +37,11 @@ import {
   type CoreMatter,
   type CoreMatterDocument,
   type CoreRagEnvelope,
+  type LarsJobSummary,
 } from "@/lib/core-client";
+import { AssignmentComposer } from "@/components/app/lars/assignment-composer";
+import { AssignmentStatusList } from "@/components/app/lars/assignment-status-card";
+import { LARS_FULL_NAME, LARS_HELP } from "@/lib/lars-labels";
 import {
   formatActivityDetail,
   formatActivityEvent,
@@ -54,7 +60,7 @@ type MatterDetailWorkspaceProps = {
   initialError: string | null;
 };
 
-type MatterTab = "overview" | "documents" | "research" | "drafting" | "activity" | "billing";
+type MatterTab = "overview" | "documents" | "research" | "drafting" | "assignments" | "activity" | "billing";
 type DocumentStatus = "Uploading" | "Extracting" | "Ready for Mercy" | "Failed" | "Extraction Limited";
 
 type MatterDocument = {
@@ -85,6 +91,7 @@ const tabs: Array<{ id: MatterTab; label: string; icon: typeof FolderOpen }> = [
   { id: "documents", label: "Documents", icon: FileText },
   { id: "research", label: "Research", icon: Search },
   { id: "drafting", label: "Drafting", icon: MessageSquareText },
+  { id: "assignments", label: "LARS Assignments", icon: GitBranch },
   { id: "activity", label: "Activity", icon: Activity },
   { id: "billing", label: "Billing / Usage", icon: CreditCard },
 ];
@@ -203,6 +210,8 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [matterHistory, setMatterHistory] = useState<WorkHistoryRecord[]>([]);
+  const [larsJobs, setLarsJobs] = useState<LarsJobSummary[]>([]);
+  const [showAssignmentComposer, setShowAssignmentComposer] = useState(false);
 
   const deadlines = matter.deadlines ?? [];
   const activities = useMemo(
@@ -227,6 +236,13 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
       })
       .catch(() => {
         if (!cancelled) setMatterHistory([]);
+      });
+    listLarsJobs(30, undefined, { matterId: matter.matter_id })
+      .then((result) => {
+        if (!cancelled && result.ok && result.data) setLarsJobs(result.data.jobs || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLarsJobs([]);
       });
     return () => {
       cancelled = true;
@@ -548,6 +564,43 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
                 onClick={() => setActiveTab("drafting")}
                 tone="default"
               />
+              <CommandAction
+                icon={GitBranch}
+                label="LARS Assignments"
+                detail={`${larsJobs.length} assignment${larsJobs.length === 1 ? "" : "s"} · long-running research and delivery`}
+                onClick={() => setActiveTab("assignments")}
+                tone="default"
+              />
+            </section>
+
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    {LARS_FULL_NAME} (LARS)
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500" title={LARS_HELP}>
+                    Active assignments, pending reviews, work products, and deadlines for this matter.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("assignments");
+                    setShowAssignmentComposer(true);
+                  }}
+                  className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]"
+                >
+                  Start assignment
+                </button>
+              </div>
+              <div className="mt-4">
+                <AssignmentStatusList
+                  jobs={larsJobs.slice(0, 5)}
+                  emptyLabel="No LARS assignments for this matter yet. Start one to run durable ALTS research with attorney gates."
+                  compact
+                />
+              </div>
             </section>
 
             <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -873,12 +926,69 @@ export function MatterDetailWorkspace({ matter, initialError }: MatterDetailWork
             <h2 className="text-lg font-semibold text-slate-950">Drafting with Mercy</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Open Mercy with this matter preloaded. Mercy will receive matter ID, D.C. jurisdiction, facts, documents, requested relief, and source toggles.
+              LARS work products also open in the assignment workspace for versioned review before Word export.
             </p>
-            <Link href={chatHref} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-5 py-3 text-sm font-semibold text-white hover:bg-[#4338CA]">
-              <Bot className="size-4" />
-              Open in Mercy
-            </Link>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href={chatHref} className="inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-5 py-3 text-sm font-semibold text-white hover:bg-[#4338CA]">
+                <Bot className="size-4" />
+                Open in Mercy
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("assignments");
+                  setShowAssignmentComposer(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <GitBranch className="size-4" />
+                Start LARS drafting assignment
+              </button>
+            </div>
           </section>
+        ) : null}
+
+        {activeTab === "assignments" ? (
+          <div className="space-y-5">
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">{LARS_FULL_NAME} (LARS)</h2>
+                  <p className="mt-1 text-sm text-slate-500" title={LARS_HELP}>
+                    Matter-scoped assignments inherit matter ID, tenant, firm, documents, Vault scope, and jurisdiction metadata.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAssignmentComposer((open) => !open)}
+                  className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]"
+                >
+                  {showAssignmentComposer ? "Hide form" : "Start assignment"}
+                </button>
+              </div>
+            </section>
+            {showAssignmentComposer ? (
+              <AssignmentComposer
+                matters={[matter]}
+                initialMatterId={matter.matter_id}
+                initialJurisdiction={matter.jurisdiction ?? "District of Columbia"}
+                surfaceContext="matter"
+                title="Start assignment for this matter"
+                description="Matter context, Vault documents, and jurisdiction are pre-applied."
+                onCancel={() => setShowAssignmentComposer(false)}
+                onStarted={() => {
+                  setShowAssignmentComposer(false);
+                  void listLarsJobs(30, undefined, { matterId: matter.matter_id }).then((result) => {
+                    if (result.ok && result.data) setLarsJobs(result.data.jobs || []);
+                  });
+                }}
+              />
+            ) : null}
+            <AssignmentStatusList
+              jobs={larsJobs}
+              emptyLabel="No LARS assignments on this matter yet."
+            />
+          </div>
         ) : null}
 
         {activeTab === "activity" ? (

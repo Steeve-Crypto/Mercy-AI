@@ -106,6 +106,25 @@ class ContradictionType(str, Enum):
     DOCUMENT_METADATA = "document_metadata_conflict"
 
 
+# Attorney contradiction decisions that close a conflict for ALTS budgeting.
+CONTRADICTION_TERMINAL_STATUSES = frozenset(
+    {
+        "resolved",
+        "preserve_both",
+        "immaterial",
+        "accepted_risk",
+    }
+)
+
+
+def contradiction_is_open(status: str | None) -> bool:
+    """True when the contradiction still needs attorney/ALTS attention."""
+    normalized = (status or "open").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"open", "reopen", "reopened"}:
+        return True
+    return normalized not in CONTRADICTION_TERMINAL_STATUSES
+
+
 DELIVERABLE_TYPES = frozenset(
     {
         "research_memorandum",

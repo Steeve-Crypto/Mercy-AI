@@ -63,10 +63,12 @@ def evaluate_node(job: ResearchJob, node: TreeNode) -> EvaluationScores:
     contrary = node.contrary_evidence or []
     missing = node.missing_evidence or []
     contradictions = [cid for cid in node.contradictions if cid in job.contradictions]
+    from lars.models import contradiction_is_open  # local to avoid import cycles
+
     unresolved = [
         job.contradictions[cid]
         for cid in contradictions
-        if job.contradictions[cid].resolution_status != "resolved"
+        if contradiction_is_open(job.contradictions[cid].resolution_status)
     ]
 
     official_hits = sum(

@@ -12,6 +12,8 @@ import {
 } from "@fluentui/react-icons";
 import { MercyLogo } from "./components/brand/MercyLogo";
 import { ReliabilitySignals } from "./components/metadata/ReliabilitySignals";
+import { LarsPanel } from "./components/lars/LarsPanel";
+import "./components/lars/LarsPanel.css";
 import { ApprovalActions } from "./components/office/ApprovalActions";
 import { OfficeContextCard } from "./components/office/OfficeContextCard";
 import { api, initializeAuthHandoff, MercyAuthStatus } from "./services/api";
@@ -744,6 +746,8 @@ export function App() {
             </div>
         )}
       </section>
+
+      {surface === "Word" ? <LarsPanel disabled={signInRequired || coreStatus === "offline"} /> : null}
 
       <footer className="reviewFooter">
         Requires attorney review before client use. Verify all citations and D.C. source grounding.

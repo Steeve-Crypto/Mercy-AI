@@ -7,17 +7,21 @@ import {
   Clock3,
   FileText,
   FolderOpen,
+  GitBranch,
   MessageSquareText,
   Search,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import type { CoreBetaStatus, CoreSnapshot } from "@/lib/core-client";
+import type { CoreBetaStatus, CoreSnapshot, LarsJobSummary } from "@/lib/core-client";
+import { formatLarsLabel, larsStatusTone, assignmentWorkspaceHref } from "@/lib/lars-labels";
+import { cn } from "@/lib/utils";
 
 type DashboardHomeProps = {
   snapshot: CoreSnapshot;
   betaStatus: CoreBetaStatus | null;
   betaError: string | null;
+  larsJobs?: LarsJobSummary[];
 };
 
 const actions = [
@@ -69,11 +73,15 @@ function recentActivity(snapshot: CoreSnapshot) {
     .slice(0, 5);
 }
 
-export function DashboardHome({ snapshot, betaStatus, betaError }: DashboardHomeProps) {
+export function DashboardHome({ snapshot, betaStatus, betaError, larsJobs = [] }: DashboardHomeProps) {
   const openInputs = snapshot.matters.reduce((total, matter) => total + (matter.missing_information?.length ?? 0), 0);
   const documentCount = countDocuments(snapshot);
   const reliabilityWarnings = countReliabilityWarnings(snapshot);
   const activity = recentActivity(snapshot);
+  const larsRunning = larsJobs.filter((job) => ["running", "queued", "verifying"].includes(job.status)).length;
+  const larsReview = larsJobs.filter((job) => job.status === "waiting_attorney").length;
+  const larsCompleted = larsJobs.filter((job) => job.status === "completed").length;
+  const larsInterrupted = larsJobs.filter((job) => ["paused", "failed", "canceled", "blocked"].includes(job.status)).length;
   const stats = [
     { label: "Active matters", value: snapshot.matters.length, detail: "Tenant-scoped matters" },
     { label: "Matter documents", value: documentCount, detail: "Attached to workspace matters" },
@@ -117,6 +125,50 @@ export function DashboardHome({ snapshot, betaStatus, betaError }: DashboardHome
               <p className="mt-1 text-xs text-slate-500">{stat.detail}</p>
             </div>
           ))}
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <GitBranch className="size-5 text-[#4F46E5]" />
+                <h2 className="text-lg font-semibold text-slate-950">LARS assignment summaries</h2>
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Running, needs review, completed, interrupted, and failed durable assignments across your tenant.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-900">Running {larsRunning}</span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-900">Needs review {larsReview}</span>
+              <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-1 text-[#4338CA]">Completed {larsCompleted}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">Interrupted/failed {larsInterrupted}</span>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {larsJobs.slice(0, 5).map((job) => (
+              <Link
+                key={job.job_id}
+                href={assignmentWorkspaceHref(job.job_id, job.matter_id) as Route}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:border-[#A5B4FC] hover:bg-[#F8FAFF]"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-slate-950">{job.query || job.job_id}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {job.matter_id ? `Matter ${job.matter_id}` : "No matter"} · {job.artifact_count ?? 0} work product(s)
+                  </span>
+                </span>
+                <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium", larsStatusTone(job.status))}>
+                  {formatLarsLabel(job.status)}
+                </span>
+              </Link>
+            ))}
+            {!larsJobs.length ? (
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                No LARS assignments yet. Start one from a Matter, Chat (LARS Assignment mode), Research, Vault, or Word.
+              </p>
+            ) : null}
+          </div>
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">

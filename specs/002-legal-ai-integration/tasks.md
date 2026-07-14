@@ -17,7 +17,8 @@ Mercy now has a strong backend and integration layer:
 - **D.C. Knowledge Base**: seeded official D.C. source records and chunks exist, with PostgreSQL/pgvector support and local fallback.
 - **RAGAS/Regression**: deterministic reports show the current seeded corpus passing local thresholds, including the 200-case advanced regression report.
 - **Office Add-ins**: `mercy-legal-plugin/` uses one host-aware Word/Outlook task pane, request-scoped read-only matter context, Agent X execution, shared reliability metadata, redacted offline state, and explicit approval before document or draft changes. Outlook has no send capability. Live Microsoft 365 host validation remains open.
-- **Standalone Web**: `mercy-legal-web/` has a typed core client and live dashboard panels, but the product experience remains basic and needs real auth, route separation, matter-centered workflows, and beta polish.
+- **Standalone Web**: `mercy-legal-web/` has a typed core client and live product surfaces. **LARS is globally integrated** (no `/lars` page, no Assignments landing/sidebar): job detail at `/assignments/{jobId}` or `/matters/{matterId}/assignments/{jobId}`, Matter LARS tab, Chat LARS mode, Research Continue-as-LARS + ALTS panel, Vault source scope, History/Dashboard summaries, shared composer/status, full ALTS Research Map in the detail workspace.
+- **Mercy LARS / ALTS-MoE**: Durable jobs (`lars/`, `/v1/lars/*`, `mercy_lars_jobs` migration), ALTS Research Map on assignment workspace, phase-aware attorney gates, leased background workers + SSE events, source usage tracing, Office Word `LarsPanel` for gates/inserts/start, depth budget modes (focused/standard/deep/custom).
 
 Legacy root docs may still describe older in-memory/basic behavior. This task file and `plan.md` are the active implementation status source of truth.
 

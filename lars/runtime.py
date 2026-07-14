@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
@@ -15,7 +16,7 @@ from lars.alts import (
     create_child_node,
     ensure_hypotheses,
 )
-from lars.assignment import compile_legal_assignment, validate_assignment
+from lars.assignment import compile_legal_assignment, depth_budget_profiles, validate_assignment
 from lars.evaluator import evaluate_node
 from lars.models import (
     ALTS_MOE_VERSION,
@@ -35,6 +36,7 @@ from lars.models import (
     ResearchJob,
     TreeNode,
     append_event,
+    contradiction_is_open,
     new_id,
     utc_now,
 )
@@ -42,9 +44,23 @@ from lars.store import get_job as store_get_job
 from lars.store import list_jobs as store_list_jobs
 from lars.store import lars_store_status
 from lars.store import save_job
+from lars.workspace import (
+    artifact_catalog,
+    budget_snapshot,
+    derive_phase,
+    node_detail,
+    office_insert_payload,
+    permitted_node_actions,
+    source_usage_trace,
+    timeline,
+    tree_snapshot,
+)
 from legal_task_router import moe_route
 from observability import trace_event, trace_span
 from response_envelope import build_response_envelope
+
+_BACKGROUND_LOCK = threading.RLock()
+_BACKGROUND_THREADS: dict[str, threading.Thread] = {}
 
 
 def _now() -> str:
@@ -210,8 +226,11 @@ def create_and_start_job(
         job.status = JobStatus.RUNNING.value
         append_event(job, "job_started", {})
         save_job(job)
-        run_job_steps(job.job_id, tenant_id=tenant_id, max_steps=job.budgets.max_steps_per_tick)
+        # One synchronous tick for immediate UI feedback, then durable background continuation.
+        run_job_steps(job.job_id, tenant_id=tenant_id, max_steps=min(2, job.budgets.max_steps_per_tick))
         job = store_get_job(job.job_id, tenant_id=tenant_id) or job
+        if job.status == JobStatus.RUNNING.value:
+            schedule_background_run(job.job_id, tenant_id=tenant_id)
 
     return status_payload(job)
 
@@ -220,18 +239,31 @@ def get_job(job_id: str, *, tenant_id: str) -> ResearchJob | None:
     return store_get_job(job_id, tenant_id=tenant_id)
 
 
-def list_jobs(*, tenant_id: str, limit: int = 50) -> list[ResearchJob]:
-    return store_list_jobs(tenant_id=tenant_id, limit=limit)
+def list_jobs(
+    *,
+    tenant_id: str,
+    limit: int = 50,
+    matter_id: str | None = None,
+    status: str | None = None,
+) -> list[ResearchJob]:
+    return store_list_jobs(tenant_id=tenant_id, limit=limit, matter_id=matter_id, status=status)
 
 
 def status_payload(job: ResearchJob) -> dict[str, Any]:
+    from lars.alts import _pending_required_gate
+
     snapshot = controller_snapshot(job)
-    pending_gates = [gate.to_dict() for gate in job.gates if gate.status == "pending"]
+    blocking_gate = _pending_required_gate(job)
+    # Attorney-facing pending gates: currently blocking / in-scope only.
+    pending_gates = [blocking_gate.to_dict()] if blocking_gate else []
+    # Full gate board (including future draft/final) for transparency.
+    scheduled_pending = [gate.to_dict() for gate in job.gates if gate.status == "pending"]
     unresolved = [
         item.to_dict()
         for item in job.contradictions.values()
-        if item.resolution_status != "resolved"
+        if contradiction_is_open(item.resolution_status)
     ]
+    phase = derive_phase(job)
     return {
         "mode": "lars_job",
         "lars_version": LARS_VERSION,
@@ -239,12 +271,210 @@ def status_payload(job: ResearchJob) -> dict[str, Any]:
         "alts_moe_version": ALTS_MOE_VERSION,
         "job": job.to_dict(),
         "controller": snapshot,
+        "phase": phase,
+        "phases": [
+            "assignment",
+            "plan",
+            "research",
+            "synthesis",
+            "verification",
+            "attorney_review",
+            "complete",
+        ],
+        "tree": tree_snapshot(job),
+        "artifacts_catalog": artifact_catalog(job),
+        "budget_snapshot": budget_snapshot(job),
+        "timeline": timeline(job, limit=80),
         "pending_gates": pending_gates,
+        "scheduled_pending_gates": scheduled_pending,
+        "gate_history": [gate.to_dict() for gate in job.gates],
         "unresolved_contradictions": unresolved,
+        "authorities": [auth.to_dict() for auth in job.authorities.values()],
+        "attorney_notes": list(job.metadata.get("attorney_notes") or []),
+        "background_running": _is_background_running(job.job_id),
+        "depth_budget_profiles": depth_budget_profiles(),
         "attorney_review_required": True,
         "human_review_required": True,
         "store": lars_store_status(),
     }
+
+
+def _is_background_running(job_id: str) -> bool:
+    with _BACKGROUND_LOCK:
+        thread = _BACKGROUND_THREADS.get(job_id)
+        return bool(thread and thread.is_alive())
+
+
+def _lease_owner_id() -> str:
+    return f"worker_{threading.get_ident()}_{int(time.time())}"
+
+
+def _lease_payload(*, owner_id: str, ttl_seconds: int = 90) -> dict[str, Any]:
+    now = time.time()
+    return {
+        "owner_id": owner_id,
+        "acquired_at": _now(),
+        "heartbeat_at": _now(),
+        "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + ttl_seconds)),
+        "ttl_seconds": ttl_seconds,
+    }
+
+
+def _lease_expired(lease: dict[str, Any]) -> bool:
+    expires_at = str(lease.get("expires_at") or "")
+    if not expires_at:
+        return True
+    try:
+        from datetime import datetime
+
+        exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        now_dt = datetime.fromisoformat(_now().replace("Z", "+00:00"))
+        return exp_dt <= now_dt
+    except Exception:
+        return True
+
+
+def _acquire_or_refresh_lease(job: ResearchJob, *, owner_id: str, force: bool = False) -> bool:
+    """Durable job lease with heartbeat + expiration (payload stored in mercy_lars_jobs)."""
+    lease = dict(job.metadata.get("worker_lease") or {})
+    existing_owner = str(lease.get("owner_id") or "")
+    if existing_owner and existing_owner != owner_id and not _lease_expired(lease) and not force:
+        return False
+    job.metadata["worker_lease"] = _lease_payload(owner_id=owner_id)
+    return True
+
+
+def _release_lease(job: ResearchJob, *, owner_id: str) -> None:
+    lease = dict(job.metadata.get("worker_lease") or {})
+    if str(lease.get("owner_id") or "") == owner_id:
+        job.metadata["worker_lease"] = {
+            **lease,
+            "released_at": _now(),
+            "owner_id": None,
+            "expires_at": _now(),
+        }
+
+
+def recover_abandoned_jobs(*, tenant_id: str | None = None, limit: int = 20) -> dict[str, Any]:
+    """Requeue jobs whose worker lease expired while still marked running."""
+    recovered: list[str] = []
+    candidates = store_list_jobs(tenant_id=tenant_id or "", limit=limit) if tenant_id else []
+    if not tenant_id:
+        # Memory/store list requires tenant; recovery is called per-tenant from API.
+        return {"recovered": [], "count": 0}
+    for job in candidates:
+        if job.status not in {JobStatus.RUNNING.value, JobStatus.QUEUED.value, JobStatus.VERIFYING.value}:
+            continue
+        lease = dict(job.metadata.get("worker_lease") or {})
+        if not lease:
+            schedule_background_run(job.job_id, tenant_id=job.tenant_id)
+            recovered.append(job.job_id)
+            continue
+        owner = str(lease.get("owner_id") or "")
+        if owner and not _acquire_or_refresh_lease(job, owner_id=f"recovery_{job.job_id[:8]}", force=False):
+            # Still leased by a live owner.
+            continue
+        # Force-clear expired lease and reschedule.
+        job.metadata["worker_lease"] = {}
+        append_event(job, "worker_lease_recovered", {"previous_owner": owner or None})
+        save_job(job)
+        schedule_background_run(job.job_id, tenant_id=job.tenant_id)
+        recovered.append(job.job_id)
+    return {"recovered": recovered, "count": len(recovered)}
+
+
+def schedule_background_run(job_id: str, *, tenant_id: str, max_ticks: int = 50) -> dict[str, Any]:
+    """Continue a durable job outside the HTTP request boundary.
+
+    When MERCY_LARS_EXTERNAL_WORKER=true, only mark the job runnable for the
+    out-of-process claim loop (`python -m scripts.lars_worker`). Otherwise uses
+    an in-process thread with durable job leases/heartbeats so abandoned work
+    can still be recovered after API restart.
+    """
+    import os
+
+    if str(os.environ.get("MERCY_LARS_EXTERNAL_WORKER") or "").lower() in {"1", "true", "yes"}:
+        job = store_get_job(job_id, tenant_id=tenant_id)
+        if not job:
+            return {"scheduled": False, "reason": "not_found", "job_id": job_id}
+        if job.status in {
+            JobStatus.COMPLETED.value,
+            JobStatus.CANCELED.value,
+            JobStatus.FAILED.value,
+            JobStatus.BLOCKED.value,
+            JobStatus.PAUSED.value,
+            JobStatus.WAITING_ATTORNEY.value,
+        }:
+            return {"scheduled": False, "reason": f"status_{job.status}", "job_id": job_id, "external": True}
+        if job.status == JobStatus.QUEUED.value:
+            job.status = JobStatus.RUNNING.value
+        # Clear expired lease so external worker can claim.
+        lease = dict(job.metadata.get("worker_lease") or {})
+        if lease and _lease_expired(lease):
+            job.metadata["worker_lease"] = {}
+        append_event(job, "external_worker_enqueued", {"max_ticks": max_ticks})
+        save_job(job)
+        return {"scheduled": True, "job_id": job_id, "external": True, "durable": True}
+
+    def _worker() -> None:
+        owner_id = _lease_owner_id()
+        try:
+            job = store_get_job(job_id, tenant_id=tenant_id)
+            if not job:
+                return
+            if not _acquire_or_refresh_lease(job, owner_id=owner_id, force=True):
+                append_event(job, "background_run_skipped", {"reason": "lease_held"})
+                save_job(job)
+                return
+            append_event(job, "background_run_started", {"max_ticks": max_ticks, "lease_owner": owner_id})
+            save_job(job)
+            for tick in range(max_ticks):
+                job = store_get_job(job_id, tenant_id=tenant_id)
+                if not job:
+                    break
+                if job.status in {
+                    JobStatus.COMPLETED.value,
+                    JobStatus.CANCELED.value,
+                    JobStatus.FAILED.value,
+                    JobStatus.BLOCKED.value,
+                    JobStatus.PAUSED.value,
+                    JobStatus.WAITING_ATTORNEY.value,
+                }:
+                    break
+                if not _acquire_or_refresh_lease(job, owner_id=owner_id):
+                    append_event(job, "background_run_preempted", {"tick": tick})
+                    save_job(job)
+                    break
+                from lars.alts import _pending_required_gate
+
+                if _pending_required_gate(job):
+                    job.status = JobStatus.WAITING_ATTORNEY.value
+                    save_job(job)
+                    break
+                run_job_steps(job_id, tenant_id=tenant_id, max_steps=job.budgets.max_steps_per_tick)
+            job = store_get_job(job_id, tenant_id=tenant_id)
+            if job:
+                _release_lease(job, owner_id=owner_id)
+                append_event(job, "background_run_finished", {"status": job.status, "lease_owner": owner_id})
+                save_job(job)
+        finally:
+            with _BACKGROUND_LOCK:
+                current = _BACKGROUND_THREADS.get(job_id)
+                if current is threading.current_thread():
+                    _BACKGROUND_THREADS.pop(job_id, None)
+
+    with _BACKGROUND_LOCK:
+        existing = _BACKGROUND_THREADS.get(job_id)
+        if existing and existing.is_alive():
+            return {"scheduled": False, "reason": "already_running", "job_id": job_id}
+        thread = threading.Thread(
+            target=_worker,
+            name=f"lars-bg-{job_id[:18]}",
+            daemon=True,
+        )
+        _BACKGROUND_THREADS[job_id] = thread
+        thread.start()
+    return {"scheduled": True, "job_id": job_id, "background": True, "durable": True}
 
 
 def pause_job(job_id: str, *, tenant_id: str, reason: str = "attorney_pause") -> dict[str, Any]:
@@ -265,7 +495,9 @@ def resume_job(job_id: str, *, tenant_id: str, steps: int | None = None) -> dict
         raise KeyError("job_not_found")
     if job.status == JobStatus.CANCELED.value:
         raise RuntimeError("canceled_job")
-    if any(gate.required and gate.status == "pending" for gate in job.gates):
+    from lars.alts import _pending_required_gate
+
+    if _pending_required_gate(job):
         job.status = JobStatus.WAITING_ATTORNEY.value
         append_event(job, "resume_blocked_pending_gate", {})
         save_job(job)
@@ -273,7 +505,13 @@ def resume_job(job_id: str, *, tenant_id: str, steps: int | None = None) -> dict
     job.status = JobStatus.RUNNING.value
     append_event(job, "job_resumed", {})
     save_job(job)
-    return run_job_steps(job_id, tenant_id=tenant_id, max_steps=steps or job.budgets.max_steps_per_tick)
+    payload = run_job_steps(job_id, tenant_id=tenant_id, max_steps=steps or min(2, job.budgets.max_steps_per_tick))
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if job and job.status == JobStatus.RUNNING.value:
+        schedule_background_run(job_id, tenant_id=tenant_id)
+        job = store_get_job(job_id, tenant_id=tenant_id) or job
+        return status_payload(job)
+    return payload
 
 
 def cancel_job(job_id: str, *, tenant_id: str, reason: str = "attorney_cancel") -> dict[str, Any]:
@@ -304,27 +542,561 @@ def approve_gate(
     if not gate:
         raise KeyError("gate_not_found")
     normalized = decision.strip().lower()
-    if normalized not in {"approved", "rejected"}:
-        raise ValueError("decision must be approved or rejected")
-    gate.status = normalized
+    if normalized not in {"approved", "rejected", "revision_requested"}:
+        raise ValueError("decision must be approved, rejected, or revision_requested")
+
+    # Stale-approval protection: reject approval when artifacts changed after prior decision stamp.
+    artifact_stamp = job.metadata.get("artifact_content_stamp")
+    current_stamp = _artifact_content_stamp(job)
+    if normalized == "approved" and artifact_stamp and artifact_stamp != current_stamp:
+        prior = job.metadata.get("last_gate_decision_at")
+        if prior and any(a.get("created_at", "") > prior for a in job.artifacts if isinstance(a, dict)):
+            raise RuntimeError("stale_approval: artifacts changed after prior review; re-review required")
+
+    gate.status = "pending" if normalized == "revision_requested" else normalized
     gate.decision = normalized
     gate.decided_by = user_id
     gate.decided_at = _now()
     gate.notes = notes
+    job.metadata["last_gate_decision_at"] = gate.decided_at
+    job.metadata["artifact_content_stamp"] = current_stamp
+    decision_history = list(job.metadata.get("gate_decision_history") or [])
+    decision_history.append(
+        {
+            "gate_id": gate_id,
+            "gate_type": gate.gate_type,
+            "decision": normalized,
+            "decided_by": user_id,
+            "decided_at": gate.decided_at,
+            "notes": notes,
+        }
+    )
+    job.metadata["gate_decision_history"] = decision_history[-100:]
     append_event(job, "gate_decision", {"gate_id": gate_id, "decision": normalized})
     if normalized == "rejected":
         job.status = JobStatus.BLOCKED.value
         job.last_error = f"Gate rejected: {gate.gate_type}"
         save_job(job)
         return status_payload(job)
-    if not any(item.required and item.status == "pending" for item in job.gates):
+    if normalized == "revision_requested":
         job.status = JobStatus.RUNNING.value
-    else:
+        append_event(job, "revision_requested", {"gate_id": gate_id, "notes": notes})
+        # Re-open draft path for ALTS revision/synthesis.
+        root = job.nodes.get(job.root_node_id)
+        if root:
+            create_child_node(
+                job,
+                root,
+                node_type=NodeType.REVISION.value,
+                research_question=f"Attorney revision request: {notes or gate.gate_type}",
+                status=NodeStatus.ACTIVE.value,
+            )
+        save_job(job)
+        payload = run_job_steps(job_id, tenant_id=tenant_id, max_steps=continue_steps or min(2, job.budgets.max_steps_per_tick))
+        schedule_background_run(job_id, tenant_id=tenant_id)
+        job = store_get_job(job_id, tenant_id=tenant_id)
+        return status_payload(job) if job else payload
+    from lars.alts import _pending_required_gate
+
+    if _pending_required_gate(job):
         job.status = JobStatus.WAITING_ATTORNEY.value
+    else:
+        job.status = JobStatus.RUNNING.value
     save_job(job)
     if job.status == JobStatus.RUNNING.value:
-        return run_job_steps(job_id, tenant_id=tenant_id, max_steps=continue_steps or job.budgets.max_steps_per_tick)
+        payload = run_job_steps(
+            job_id, tenant_id=tenant_id, max_steps=continue_steps or min(2, job.budgets.max_steps_per_tick)
+        )
+        schedule_background_run(job_id, tenant_id=tenant_id)
+        job = store_get_job(job_id, tenant_id=tenant_id)
+        return status_payload(job) if job else payload
     return status_payload(job)
+
+
+def _artifact_content_stamp(job: ResearchJob) -> str:
+    parts = []
+    for art in job.artifacts:
+        if isinstance(art, dict):
+            parts.append(f"{art.get('artifact_id')}:{len(str(art.get('content_markdown') or ''))}:{art.get('created_at')}")
+    return "|".join(parts) or "empty"
+
+
+def protect_artifact(
+    job_id: str,
+    *,
+    tenant_id: str,
+    user_id: str,
+    artifact_id: str,
+    section_key: str | None = None,
+    protected: bool = True,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Lock attorney-edited work-product text against automatic replacement.
+
+    When protected, subsequent automatic artifact revisions must preserve the
+    locked markdown body (and optional named sections). Decisions are persisted
+    with actor + timestamp on the artifact and job event stream.
+    """
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    artifact = next(
+        (item for item in job.artifacts if isinstance(item, dict) and str(item.get("artifact_id")) == artifact_id),
+        None,
+    )
+    if not artifact:
+        raise KeyError("artifact_not_found")
+    protection = dict(artifact.get("protection") or {})
+    section = (section_key or "full_document").strip() or "full_document"
+    sections = dict(protection.get("sections") or {})
+    if protected:
+        body = str(artifact.get("content_markdown") or "")
+        sections[section] = {
+            "locked": True,
+            "locked_content": body if section == "full_document" else str(sections.get(section, {}).get("locked_content") or body),
+            "locked_by": user_id,
+            "locked_at": _now(),
+            "notes": notes,
+        }
+        protection["manual_lock"] = True
+        protection["locked_by"] = user_id
+        protection["locked_at"] = _now()
+        if section == "full_document":
+            protection["locked_content_markdown"] = body
+    else:
+        sections.pop(section, None)
+        if section == "full_document":
+            protection.pop("locked_content_markdown", None)
+            protection["manual_lock"] = bool(sections)
+        else:
+            protection["manual_lock"] = bool(sections) or bool(protection.get("locked_content_markdown"))
+    protection["sections"] = sections
+    artifact["protection"] = protection
+    artifact["updated_at"] = _now()
+    append_event(
+        job,
+        "artifact_protection_updated",
+        {
+            "artifact_id": artifact_id,
+            "section_key": section,
+            "protected": protected,
+            "user_id": user_id,
+            "notes": notes,
+        },
+    )
+    save_job(job)
+    return status_payload(job)
+
+
+def merge_protected_artifact_content(previous: dict[str, Any] | None, candidate_markdown: str) -> str:
+    """Prefer attorney-locked content over automatic revision text."""
+    if not previous or not isinstance(previous, dict):
+        return candidate_markdown
+    protection = dict(previous.get("protection") or {})
+    if protection.get("manual_lock") and protection.get("locked_content_markdown"):
+        return str(protection["locked_content_markdown"])
+    sections = dict(protection.get("sections") or {})
+    full = sections.get("full_document") or {}
+    if full.get("locked") and full.get("locked_content"):
+        return str(full["locked_content"])
+    return candidate_markdown
+
+
+def apply_node_action(
+    job_id: str,
+    *,
+    tenant_id: str,
+    user_id: str,
+    node_id: str,
+    action: str,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    node = job.nodes.get(node_id)
+    if not node:
+        raise KeyError("node_not_found")
+    if job.status in {JobStatus.COMPLETED.value, JobStatus.CANCELED.value}:
+        raise RuntimeError("terminal_job")
+    normalized = action.strip().upper()
+    allowed = {item["action"] for item in permitted_node_actions(job, node_id)}
+    if normalized not in allowed and normalized != "PAUSE_FOR_ATTORNEY":
+        raise ValueError(f"action_not_permitted:{normalized}")
+    append_event(
+        job,
+        "attorney_action",
+        {"action": normalized, "node_id": node_id, "user_id": user_id, "notes": notes},
+    )
+    job.metadata["last_attorney_action"] = {
+        "action": normalized,
+        "node_id": node_id,
+        "user_id": user_id,
+        "notes": notes,
+        "at": _now(),
+    }
+
+    if normalized == "PAUSE_FOR_ATTORNEY":
+        job.status = JobStatus.WAITING_ATTORNEY.value
+        save_job(job)
+        return status_payload(job)
+
+    job.status = JobStatus.RUNNING.value
+    if normalized == "EXPAND_WIDER":
+        hyps = ensure_hypotheses(job, node)
+        for hyp in hyps[: max(1, job.budgets.max_children_per_node)]:
+            if len(job.active_branch_ids) >= job.budgets.max_active_branches:
+                break
+            child = create_child_node(
+                job,
+                node,
+                node_type=NodeType.HYPOTHESIS.value,
+                branch_id=new_id("branch"),
+                hypothesis=hyp.legal_proposition,
+                research_question=hyp.legal_proposition,
+                proposed_legal_theory=hyp.legal_proposition,
+                status=NodeStatus.ACTIVE.value,
+            )
+            research = create_child_node(
+                job,
+                child,
+                node_type=NodeType.RESEARCH.value,
+                hypothesis=hyp.legal_proposition,
+                research_question=hyp.legal_proposition,
+                status=NodeStatus.ACTIVE.value,
+            )
+            _execute_research_node(job, research)
+    elif normalized == "DEEPEN":
+        child = create_child_node(
+            job,
+            node,
+            node_type=NodeType.RESEARCH.value,
+            hypothesis=node.hypothesis,
+            research_question=f"Deepen: {node.research_question or node.hypothesis or job.assignment.query}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_research_node(job, child)
+    elif normalized == "CHALLENGE":
+        child = create_child_node(
+            job,
+            node,
+            node_type=NodeType.CRITIQUE.value,
+            hypothesis=f"Challenge: {node.hypothesis or node.research_question}",
+            research_question=f"Identify contrary authority for: {node.research_question or job.assignment.query}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_research_node(job, child)
+    elif normalized == "REVISE":
+        child = create_child_node(
+            job,
+            node,
+            node_type=NodeType.REVISION.value,
+            hypothesis=node.hypothesis,
+            research_question=f"Revise: {notes or node.research_question or job.assignment.query}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        child.metadata["revision_count"] = int(node.metadata.get("revision_count") or 0) + 1
+        _execute_research_node(job, child)
+    elif normalized == "MERGE":
+        apply_merge(job, node, notes or "Attorney-directed merge")
+    elif normalized == "PRUNE":
+        apply_prune(job, node, notes or "Attorney-directed prune")
+    elif normalized == "VERIFY":
+        child = create_child_node(
+            job,
+            node,
+            node_type=NodeType.VERIFICATION.value,
+            research_question="Attorney-directed verification",
+            status=NodeStatus.ACTIVE.value,
+        )
+        job.status = JobStatus.VERIFYING.value
+        _execute_verification(job, child)
+    elif normalized == "SYNTHESIZE":
+        child = create_child_node(
+            job,
+            node,
+            node_type=NodeType.SYNTHESIS.value,
+            research_question=notes or "Attorney-directed synthesis of retained branches",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_draft_or_synthesis(job, child)
+        draft_gate = next((gate for gate in job.gates if gate.gate_type == GateType.DRAFT.value), None)
+        if draft_gate and draft_gate.status == "pending":
+            job.status = JobStatus.WAITING_ATTORNEY.value
+    elif normalized == "COMPLETE":
+        # Attorney-directed completion: package final artifact and either wait on final gate or complete.
+        final_gate = next((gate for gate in job.gates if gate.gate_type == GateType.FINAL.value), None)
+        final_node = create_child_node(
+            job,
+            node,
+            node_type=NodeType.FINAL_ARTIFACT.value,
+            research_question=notes or "Attorney-directed final deliverable",
+            status=NodeStatus.ACTIVE.value if (final_gate and final_gate.status == "pending") else NodeStatus.COMPLETE.value,
+        )
+        _build_final_artifact(job, final_node)
+        if final_gate and final_gate.status == "pending":
+            job.status = JobStatus.WAITING_ATTORNEY.value
+        else:
+            job.status = JobStatus.COMPLETED.value
+            job.completed_at = _now()
+            append_event(job, "job_completed", {"artifact_count": len(job.artifacts), "source": "attorney_complete"})
+    else:
+        raise ValueError(f"unsupported_action:{normalized}")
+
+    job.last_action = normalized
+    save_job(job)
+    if job.status == JobStatus.RUNNING.value:
+        schedule_background_run(job_id, tenant_id=tenant_id)
+    job = store_get_job(job_id, tenant_id=tenant_id) or job
+    return status_payload(job)
+
+
+# Canonical attorney contradiction decisions (aliases normalized below).
+CONTRADICTION_RESOLUTION_STATUSES = frozenset(
+    {
+        "resolved",  # select one position / close conflict
+        "preserve_both",  # keep competing conclusions
+        "needs_research",  # request more research
+        "challenge_path",  # challenge a related ALTS path
+        "revise_conclusion",  # revise a conclusion
+        "immaterial",  # mark immaterial
+        "escalated",  # escalate for further attorney review
+        "reopen",  # reopen a prior resolution
+        "accepted_risk",  # legacy alias for risk acceptance
+    }
+)
+
+_CONTRADICTION_STATUS_ALIASES = {
+    "select_position": "resolved",
+    "select_one": "resolved",
+    "preserve": "preserve_both",
+    "preserved": "preserve_both",
+    "preserve_competing": "preserve_both",
+    "research_further": "needs_research",
+    "request_research": "needs_research",
+    "challenge": "challenge_path",
+    "challenge_conclusion": "challenge_path",
+    "revise": "revise_conclusion",
+    "revise_analysis": "revise_conclusion",
+    "mark_immaterial": "immaterial",
+    "escalate": "escalated",
+    "reopened": "reopen",
+    "open": "reopen",
+}
+
+
+def normalize_contradiction_resolution(status: str) -> str:
+    raw = (status or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return _CONTRADICTION_STATUS_ALIASES.get(raw, raw)
+
+
+def resolve_contradiction(
+    job_id: str,
+    *,
+    tenant_id: str,
+    user_id: str,
+    contradiction_id: str,
+    resolution_status: str,
+    notes: str | None = None,
+    escalate: bool = False,
+) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    contradiction = job.contradictions.get(contradiction_id)
+    if not contradiction:
+        raise KeyError("contradiction_not_found")
+    status = normalize_contradiction_resolution(resolution_status)
+    if status not in CONTRADICTION_RESOLUTION_STATUSES:
+        raise ValueError(
+            "invalid_resolution_status: expected one of "
+            + ", ".join(sorted(CONTRADICTION_RESOLUTION_STATUSES))
+        )
+    if escalate:
+        status = "escalated"
+    # reopen returns the contradiction to open for further work
+    stored_status = "open" if status == "reopen" else status
+    contradiction.resolution_status = stored_status
+    history = list(job.metadata.get("contradiction_resolution_history") or [])
+    history_entry = {
+        "contradiction_id": contradiction_id,
+        "resolution_status": stored_status,
+        "requested_action": status,
+        "notes": notes,
+        "decided_by": user_id,
+        "decided_at": _now(),
+        "related_paths": list(contradiction.impacted_branch_ids or []),
+    }
+    history.append(history_entry)
+    job.metadata["contradiction_resolution_history"] = history[-200:]
+    if notes:
+        contradiction.resolution_evidence = list(contradiction.resolution_evidence or []) + [notes]
+        contradiction.proposed_resolution = notes
+    overrides = list(job.metadata.get("attorney_overrides") or [])
+    overrides.append(
+        {
+            "type": "contradiction",
+            "contradiction_id": contradiction_id,
+            "resolution_status": stored_status,
+            "notes": notes,
+            "decided_by": user_id,
+            "decided_at": _now(),
+        }
+    )
+    job.metadata["attorney_overrides"] = overrides[-100:]
+    append_event(
+        job,
+        "contradiction_resolved" if stored_status != "open" else "contradiction_reopened",
+        {
+            "contradiction_id": contradiction_id,
+            "resolution_status": stored_status,
+            "requested_action": status,
+            "user_id": user_id,
+        },
+    )
+
+    # Side-effects for research / challenge / revise — direct ALTS on related paths when available.
+    related_node_ids = [
+        nid
+        for nid in (contradiction.impacted_branch_ids or [])
+        if nid in job.nodes
+    ]
+    if not related_node_ids and contradiction.responsible_node_id and contradiction.responsible_node_id in job.nodes:
+        related_node_ids = [contradiction.responsible_node_id]
+    focus = job.nodes.get(related_node_ids[0]) if related_node_ids else job.nodes.get(job.root_node_id)
+
+    if status == "needs_research" and focus:
+        child = create_child_node(
+            job,
+            focus,
+            node_type=NodeType.RESEARCH.value,
+            research_question=f"Additional research for contradiction {contradiction_id}: {notes or contradiction.proposed_resolution}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_research_node(job, child)
+        job.status = JobStatus.RUNNING.value
+    elif status == "challenge_path" and focus:
+        child = create_child_node(
+            job,
+            focus,
+            node_type=NodeType.CRITIQUE.value,
+            research_question=f"Challenge path for contradiction {contradiction_id}: {notes or focus.research_question or job.assignment.query}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_research_node(job, child)
+        job.status = JobStatus.RUNNING.value
+    elif status == "revise_conclusion" and focus:
+        child = create_child_node(
+            job,
+            focus,
+            node_type=NodeType.REVISION.value,
+            research_question=f"Revise conclusion for contradiction {contradiction_id}: {notes or focus.research_question or job.assignment.query}",
+            status=NodeStatus.ACTIVE.value,
+        )
+        _execute_research_node(job, child)
+        job.status = JobStatus.RUNNING.value
+    elif status == "escalated":
+        job.gates.append(
+            ApprovalGate(
+                gate_id=new_id("gate"),
+                gate_type=GateType.CONTRADICTION.value,
+                status="pending",
+                required=True,
+                prompt=f"Escalated contradiction {contradiction_id}: {notes or contradiction.proposed_resolution}",
+            )
+        )
+        job.status = JobStatus.WAITING_ATTORNEY.value
+    elif status == "reopen":
+        job.status = JobStatus.WAITING_ATTORNEY.value if any(
+            g.status == "pending" and g.required for g in job.gates
+        ) else JobStatus.RUNNING.value
+
+    save_job(job)
+    if job.status == JobStatus.RUNNING.value:
+        schedule_background_run(job_id, tenant_id=tenant_id)
+        job = store_get_job(job_id, tenant_id=tenant_id) or job
+    return status_payload(job)
+
+
+def add_attorney_note(
+    job_id: str,
+    *,
+    tenant_id: str,
+    user_id: str,
+    text: str,
+    node_id: str | None = None,
+) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    note_text = (text or "").strip()
+    if not note_text:
+        raise ValueError("note text required")
+    if node_id and node_id not in job.nodes:
+        raise KeyError("node_not_found")
+    notes = list(job.metadata.get("attorney_notes") or [])
+    notes.append(
+        {
+            "note_id": new_id("note"),
+            "text": note_text[:4000],
+            "node_id": node_id,
+            "created_by": user_id,
+            "created_at": _now(),
+        }
+    )
+    job.metadata["attorney_notes"] = notes[-200:]
+    append_event(job, "attorney_note_added", {"node_id": node_id, "user_id": user_id})
+    save_job(job)
+    return status_payload(job)
+
+
+def get_node(job_id: str, *, tenant_id: str, node_id: str) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    detail = node_detail(job, node_id)
+    if not detail:
+        raise KeyError("node_not_found")
+    return {
+        "mode": "lars_node",
+        "lars_version": LARS_VERSION,
+        "job_id": job_id,
+        "phase": derive_phase(job),
+        **detail,
+    }
+
+
+def get_events(job_id: str, *, tenant_id: str, since_index: int = 0, limit: int = 200) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    start = max(0, int(since_index))
+    events = list(job.events[start : start + max(1, min(limit, 500))])
+    return {
+        "job_id": job_id,
+        "since_index": start,
+        "next_index": start + len(events),
+        "total_events": len(job.events),
+        "events": events,
+        "timeline": timeline(job, limit=limit),
+        "phase": derive_phase(job),
+        "status": job.status,
+        "background_running": _is_background_running(job_id),
+    }
+
+
+def get_office_insert(job_id: str, *, tenant_id: str, kind: str = "executive_summary") -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    return office_insert_payload(job, kind=kind)
+
+
+def get_source_usage(job_id: str, *, tenant_id: str) -> dict[str, Any]:
+    job = store_get_job(job_id, tenant_id=tenant_id)
+    if not job:
+        raise KeyError("job_not_found")
+    return source_usage_trace(job)
 
 
 def _invoke_moe(job: ResearchJob, task: str, preferred_expert: str | None = None) -> dict[str, Any]:
@@ -572,7 +1344,7 @@ def _execute_verification(job: ResearchJob, node: TreeNode) -> None:
     critical_open = [
         item
         for item in job.contradictions.values()
-        if item.resolution_status != "resolved" and item.severity == "critical"
+        if contradiction_is_open(item.resolution_status) and item.severity == "critical"
     ]
     if node.evaluation.unsupported_claim_risk > 0.55 or not node.authorities_found or critical_open:
         node.status = NodeStatus.BLOCKED.value
@@ -612,20 +1384,45 @@ def _build_final_artifact(job: ResearchJob, node: TreeNode) -> None:
     authorities = []
     for item in job.nodes.values():
         authorities.extend(item.authorities_found)
+    content_markdown = "\n\n".join(content_parts)[:12000]
+    prior_same = [
+        item
+        for item in job.artifacts
+        if isinstance(item, dict) and item.get("deliverable_type") == job.assignment.deliverable_type
+    ]
+    version = len(prior_same) + 1
+    versions = []
+    last = prior_same[-1] if prior_same else None
+    if last:
+        versions = list(last.get("versions") or [])
+        versions.append(
+            {
+                "version": last.get("version") or len(versions) + 1,
+                "content_markdown": last.get("content_markdown"),
+                "created_at": last.get("created_at"),
+            }
+        )
+        # Preserve attorney-protected manual edits against automatic replacement.
+        content_markdown = merge_protected_artifact_content(last, content_markdown)
     artifact = {
         "artifact_id": new_id("art"),
         "deliverable_type": job.assignment.deliverable_type,
         "title": f"LARS {job.assignment.deliverable_type.replace('_', ' ').title()}",
-        "content_markdown": "\n\n".join(content_parts)[:12000],
+        "content_markdown": content_markdown,
+        "version": version,
+        "versions": versions[-10:],
+        "node_id": node.node_id,
+        "review_status": "pending_review",
         "authorities": authorities[:20],
         "missing_evidence": sorted({item for node_item in job.nodes.values() for item in node_item.missing_evidence})[:20],
         "unresolved_contradictions": [
-            item.to_dict() for item in job.contradictions.values() if item.resolution_status != "resolved"
+            item.to_dict() for item in job.contradictions.values() if contradiction_is_open(item.resolution_status)
         ],
         "attorney_review_required": True,
         "citation_policy": job.assignment.citation_requirements,
         "jurisdiction": job.assignment.jurisdiction,
         "created_at": _now(),
+        "protection": dict(last.get("protection") or {}) if last else {},
     }
     # envelope-style reliability metadata
     route = (verification.moe_route if verification else {}) or (synthesis.moe_route if synthesis else {})
@@ -636,6 +1433,7 @@ def _build_final_artifact(job: ResearchJob, node: TreeNode) -> None:
     )
     artifact["response_envelope"] = envelope
     job.artifacts.append(artifact)
+    job.metadata["artifact_content_stamp"] = _artifact_content_stamp(job)
     node.draft_conclusions.append(artifact["content_markdown"][:4000])
     node.status = NodeStatus.COMPLETE.value
     node.retention_decision = "final"
@@ -795,7 +1593,9 @@ def run_job_steps(job_id: str, *, tenant_id: str, max_steps: int = 4) -> dict[st
         return status_payload(job)
     if job.status == JobStatus.PAUSED.value:
         return status_payload(job)
-    if any(gate.required and gate.status == "pending" for gate in job.gates) and job.status == JobStatus.WAITING_ATTORNEY.value:
+    from lars.alts import _pending_required_gate
+
+    if _pending_required_gate(job) and job.status == JobStatus.WAITING_ATTORNEY.value:
         return status_payload(job)
 
     with trace_span("lars_run_steps", "lars", "runtime", matter_reference=job.assignment.matter_id, metadata={"job_id": job.job_id}) as span:

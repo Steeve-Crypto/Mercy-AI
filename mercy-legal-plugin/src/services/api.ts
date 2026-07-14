@@ -1466,4 +1466,69 @@ export const api = {
       return null;
     }
   },
+
+  async pauseLarsJob(jobId: string): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(`/v1/lars/jobs/${encodeURIComponent(jobId)}/pause`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  async resumeLarsJob(jobId: string, maxSteps = 4): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(`/v1/lars/jobs/${encodeURIComponent(jobId)}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_steps: maxSteps }),
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  async decideLarsGate(
+    jobId: string,
+    gateId: string,
+    payload: { decision: string; notes?: string; continue_steps?: number },
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(
+        `/v1/lars/jobs/${encodeURIComponent(jobId)}/gates/${encodeURIComponent(gateId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+    } catch {
+      return null;
+    }
+  },
+
+  async getLarsOfficeInsert(jobId: string, kind = "executive_summary"): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(
+        `/v1/lars/jobs/${encodeURIComponent(jobId)}/office-insert?kind=${encodeURIComponent(kind)}`,
+      );
+    } catch {
+      return null;
+    }
+  },
+
+  async addLarsNote(jobId: string, payload: { text: string; node_id?: string }): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(`/v1/lars/jobs/${encodeURIComponent(jobId)}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      return null;
+    }
+  },
 };

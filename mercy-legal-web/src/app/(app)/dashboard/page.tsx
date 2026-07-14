@@ -1,9 +1,20 @@
-import { AgentXChatPage } from "@/components/app/pages/agent-x-chat-page";
-import { getCoreSnapshot, getTemplateGallery } from "@/lib/core-client";
+import { DashboardHome } from "@/components/app/pages/dashboard-home";
+import { getBetaStatus, getCoreSnapshot, listLarsJobs } from "@/lib/core-client";
 import { getServerMercyAuthContext } from "@/lib/auth/session";
 
 export default async function DashboardPage() {
   const auth = await getServerMercyAuthContext();
-  const [snapshot, templates] = await Promise.all([getCoreSnapshot(auth), getTemplateGallery(undefined, auth)]);
-  return <AgentXChatPage initialMatters={snapshot.matters} templates={templates.data?.templates ?? []} coreOnline={snapshot.online} />;
+  const [snapshot, beta, lars] = await Promise.all([
+    getCoreSnapshot(auth),
+    getBetaStatus(auth),
+    listLarsJobs(40, auth),
+  ]);
+  return (
+    <DashboardHome
+      snapshot={snapshot}
+      betaStatus={beta.data ?? null}
+      betaError={beta.ok ? null : beta.error}
+      larsJobs={lars.data?.jobs ?? []}
+    />
+  );
 }

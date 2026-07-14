@@ -8,10 +8,10 @@ Current posture: **local/beta-candidate**. The backend is strong; production rea
 
 | Component | Path | Runtime | Purpose |
 | --- | --- | --- | --- |
-| FastAPI Shared Intelligence Core | repository root, `main.py` | Python | Legal router, matter context, RAG, Agent X, templates, beta, monitoring, security, discovery, drafting. |
-| Next.js Web App | `mercy-legal-web/` | Node/Next.js | Public marketing and standalone attorney workspace. Stable but still productizing. |
-| Office Add-in | `mercy-legal-plugin/` | Node/Vite/Office.js | Word taskpane connected to the shared core agent network. |
-| Optional Database | PostgreSQL/Supabase with pgvector | SQL | Persistent matters, source records, chunks, checkpoints, and audit logs. |
+| FastAPI Shared Intelligence Core | repository root, `main.py` | Python | Legal router, matter context, RAG, Agent X, LARS/ALTS-MoE, templates, beta, monitoring, security, discovery, drafting. |
+| Next.js Web App | `mercy-legal-web/` | Node/Next.js | Public marketing and attorney workspace; LARS integrated across Chat/Research/Matter/Vault/Dashboard/History (no `/lars` page). Job detail: `/assignments/{jobId}` or `/matters/{matterId}/assignments/{jobId}`. |
+| Office Add-in | `mercy-legal-plugin/` | Node/Vite/Office.js | Word/Outlook taskpane connected to the shared core; Word includes LARS gate/insert panel. |
+| Optional Database | PostgreSQL/Supabase with pgvector | SQL | Persistent matters, source records, chunks, checkpoints, audit logs, and `mercy_lars_jobs`. |
 
 Legacy `standalone_platform/` and `word_plugin/` surfaces are retained for local smoke/demo use only.
 
@@ -39,7 +39,8 @@ Important variables:
 | `MERCY_AUTH_MODE` | `dev` permits local bypass. Production must not rely on dev auth. |
 | `MERCY_API_TOKEN` | Shared bearer token for local/core calls when configured. |
 | `MERCY_RETENTION_MODE` | Data retention posture. Local default is `zero_retention`. |
-| `POSTGRES_URL` / `SUPABASE_URL` | Enables persistent SQLAlchemy storage and pgvector-backed RAG paths. |
+| `POSTGRES_URL` / `SUPABASE_URL` | Enables persistent SQLAlchemy storage, pgvector-backed RAG paths, and durable LARS jobs. |
+| `MERCY_AUTO_INIT_STORAGE_SCHEMA` | When `true`, local/dev may auto-create storage tables including `mercy_lars_jobs`. Production should prefer migrations. |
 | `MERCY_RAG_VECTOR_BACKEND` | `local`, `pgvector`, `qdrant`, or configured backend mode. |
 | `MERCY_RAG_GRAPH_BACKEND` | `local`, `neo4j`, or configured graph mode. |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY` | Optional live LLM providers through LiteLLM. |
@@ -96,6 +97,23 @@ POST /v1/matter/intake/full
 POST /v1/router/inspect
 POST /v1/rag/retrieve
 GET  /v1/rag/status
+GET  /v1/lars/status
+POST /v1/lars/jobs
+GET  /v1/lars/jobs
+GET  /v1/lars/jobs/{job_id}
+GET  /v1/lars/jobs/{job_id}/events/stream
+GET  /v1/lars/jobs/{job_id}/sources
+POST /v1/lars/jobs/{job_id}/artifacts/{artifact_id}/protect
+POST /v1/lars/workers/recover
+
+Out-of-process worker (optional multi-instance / long-running production):
+
+```powershell
+$env:MERCY_LARS_EXTERNAL_WORKER='true'   # API enqueues only; does not spawn in-process threads
+python -m scripts.lars_worker --tenant-id YOUR_TENANT --once
+# or continuous:
+python -m scripts.lars_worker --tenant-id YOUR_TENANT --poll-seconds 5
+```
 GET  /v1/agent/skills
 POST /v1/agent/execute
 GET  /v1/templates/gallery

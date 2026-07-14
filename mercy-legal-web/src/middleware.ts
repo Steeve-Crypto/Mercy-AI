@@ -15,7 +15,7 @@ const PROTECTED_PREFIXES = [
   "/settings",
   "/billing",
   "/admin",
-  "/lars",
+  "/assignments", // detail routes only: /assignments/{jobId} (no landing page)
 ];
 
 function supabaseConfigured() {

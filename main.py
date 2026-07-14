@@ -13,7 +13,7 @@ from client_intake_flow import run_full_intake_flow
 from dc_knowledge_rag import SourceValidationError, ingest_dc_sources, rag_backend_status, retrieve_dc_knowledge
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -21,20 +21,32 @@ from bridge import draft_from_facts, run_discovery
 from auth_context import TenantUser, get_current_tenant_user
 from lars import (
     LARS_VERSION,
+    add_attorney_note as lars_add_attorney_note,
+    apply_node_action as lars_apply_node_action,
     approve_gate as lars_approve_gate,
     cancel_job as lars_cancel_job,
     compile_legal_assignment,
     create_and_start_job as lars_create_and_start_job,
+    depth_budget_profiles as lars_depth_budget_profiles,
+    get_events as lars_get_events,
     get_job as lars_get_job,
+    get_node as lars_get_node,
+    get_office_insert as lars_get_office_insert,
+    get_source_usage as lars_get_source_usage,
     list_jobs as lars_list_jobs,
     pause_job as lars_pause_job,
+    protect_artifact as lars_protect_artifact,
+    recover_abandoned_jobs as lars_recover_abandoned_jobs,
+    resolve_contradiction as lars_resolve_contradiction,
     resume_job as lars_resume_job,
     run_job_steps as lars_run_job_steps,
+    schedule_background_run as lars_schedule_background_run,
     status_payload as lars_status_payload,
     validate_assignment as lars_validate_assignment,
 )
 from lars.models import ALTS_MOE_VERSION, ALTS_VERSION
 from lars.store import lars_store_status
+from lars.workspace import derive_phase as lars_derive_phase
 from beta_launch import (
     accept_invite,
     beta_analytics,
@@ -351,28 +363,61 @@ class LarsAssignmentRequest(BaseModel):
     disputed_facts: list[str] | None = None
     selected_document_ids: list[str] | None = None
     research_depth: str = "standard"
+    deadline: str | None = None
     official_source_preference: bool = True
     require_adverse_authority_review: bool = True
     approval_checkpoints: list[str] | None = None
+    require_research_plan_approval: bool = False
     max_model_calls: int | None = None
     max_tool_calls: int | None = None
     max_duration_seconds: int | None = None
     max_cost_usd: float | None = None
     max_active_branches: int | None = None
+    max_tree_depth: int | None = None
+    max_steps_per_tick: int | None = None
     force_start: bool = False
     auto_approve_assignment: bool = False
     surface_context: str = "web"
     allow_constrained_assumptions: bool = True
+    citation_requirements: list[str] | None = None
 
 
 class LarsGateDecisionRequest(BaseModel):
-    decision: str = Field(..., description="approved or rejected")
+    decision: str = Field(..., description="approved, rejected, or revision_requested")
     notes: str | None = None
     continue_steps: int | None = Field(4, description="Steps to run after approval when no gates remain.")
 
 
 class LarsStepsRequest(BaseModel):
     max_steps: int = Field(4, ge=1, le=20)
+
+
+class LarsNodeActionRequest(BaseModel):
+    action: str = Field(..., description="EXPAND_WIDER, DEEPEN, CHALLENGE, REVISE, MERGE, PRUNE, VERIFY, PAUSE_FOR_ATTORNEY")
+    notes: str | None = None
+
+
+class LarsContradictionResolveRequest(BaseModel):
+    resolution_status: str = Field(
+        ...,
+        description=(
+            "resolved | preserve_both | needs_research | challenge_path | revise_conclusion | "
+            "immaterial | escalated | reopen | accepted_risk (aliases accepted)"
+        ),
+    )
+    notes: str | None = None
+    escalate: bool = False
+
+
+class LarsAttorneyNoteRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    node_id: str | None = None
+
+
+class LarsArtifactProtectRequest(BaseModel):
+    protected: bool = True
+    section_key: str | None = Field(None, description="full_document or named section key")
+    notes: str | None = None
 
 
 class MatterCreateRequest(BaseModel):
@@ -1611,10 +1656,14 @@ async def lars_create_job(
         except MatterTenantAccessError as exc:
             raise HTTPException(status_code=404, detail="Matter not found.") from exc
     payload = request.model_dump(exclude_none=True)
-    # Local/dev can auto-approve assignment to exercise the tree; production paths keep the gate.
-    auto_approve = bool(request.auto_approve_assignment) or (
-        get_config().mercy_env == "local" and get_config().mercy_auth_mode in {"dev", "test"}
-    )
+    # Explicit client choice wins. Only default local/dev auto-approve when the field is omitted/false
+    # and the caller did not force a gate (auto_approve_assignment remains the attorney control).
+    # Production never auto-approves unless the request explicitly sets auto_approve_assignment=true.
+    if request.auto_approve_assignment:
+        auto_approve = True
+    else:
+        # Respect explicit false: attorneys/tests that require the assignment gate keep it.
+        auto_approve = False
     result = lars_create_and_start_job(
         payload,
         tenant_id=tenant_user.tenant_id,
@@ -1630,8 +1679,20 @@ async def lars_create_job(
 async def lars_list_jobs_endpoint(
     tenant_user: TenantUser = Depends(get_current_tenant_user),
     limit: int = Query(50, ge=1, le=200),
+    matter_id: str | None = Query(None),
+    status: str | None = Query(None),
 ) -> dict[str, Any]:
-    jobs = lars_list_jobs(tenant_id=tenant_user.tenant_id, limit=limit)
+    if matter_id:
+        try:
+            _scoped_matter_context(tenant_user, matter_id=matter_id, surface_context="lars")
+        except MatterTenantAccessError as exc:
+            raise HTTPException(status_code=404, detail="Matter not found.") from exc
+    jobs = lars_list_jobs(
+        tenant_id=tenant_user.tenant_id,
+        limit=limit,
+        matter_id=matter_id,
+        status=status,
+    )
     return {
         "lars_version": LARS_VERSION,
         "jobs": [
@@ -1641,9 +1702,22 @@ async def lars_list_jobs_endpoint(
                 "matter_id": job.assignment.matter_id,
                 "query": job.assignment.query,
                 "deliverable_type": job.assignment.deliverable_type,
+                "deadline": job.assignment.deadline,
+                "research_depth": job.assignment.research_depth,
+                "jurisdiction": job.assignment.jurisdiction,
+                "created_at": job.created_at,
                 "updated_at": job.updated_at,
+                "user_id": job.user_id,
+                "phase": lars_derive_phase(job),
                 "pending_gates": [gate.to_dict() for gate in job.gates if gate.status == "pending"],
+                "pending_review_count": len([gate for gate in job.gates if gate.status == "pending"]),
                 "artifact_count": len(job.artifacts),
+                "budget_state": {
+                    "cost_usd_used": job.budgets.cost_usd_used,
+                    "max_cost_usd": job.budgets.max_cost_usd,
+                    "model_calls_used": job.budgets.model_calls_used,
+                    "max_model_calls": job.budgets.max_model_calls,
+                },
             }
             for job in jobs
         ],
@@ -1734,6 +1808,248 @@ async def lars_gate_endpoint(
         raise HTTPException(status_code=404, detail=detail) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/v1/lars/jobs/{job_id}/tree")
+async def lars_tree_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    job = lars_get_job(job_id, tenant_id=tenant_user.tenant_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="LARS job not found.")
+    payload = lars_status_payload(job)
+    return {
+        "job_id": job_id,
+        "phase": payload.get("phase"),
+        "status": job.status,
+        "tree": payload.get("tree"),
+        "controller": payload.get("controller"),
+    }
+
+
+@app.get("/v1/lars/jobs/{job_id}/nodes/{node_id}")
+async def lars_node_endpoint(
+    job_id: str,
+    node_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_get_node(job_id, tenant_id=tenant_user.tenant_id, node_id=node_id)
+    except KeyError as exc:
+        detail = "LARS job not found." if "job" in str(exc) else "Node not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/nodes/{node_id}/actions")
+async def lars_node_action_endpoint(
+    job_id: str,
+    node_id: str,
+    request: LarsNodeActionRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_apply_node_action(
+            job_id,
+            tenant_id=tenant_user.tenant_id,
+            user_id=tenant_user.user_id,
+            node_id=node_id,
+            action=request.action,
+            notes=request.notes,
+        )
+    except KeyError as exc:
+        detail = "LARS job not found." if "job" in str(exc) else "Node not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/v1/lars/jobs/{job_id}/events")
+async def lars_events_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+    since_index: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    try:
+        return lars_get_events(job_id, tenant_id=tenant_user.tenant_id, since_index=since_index, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+
+
+@app.get("/v1/lars/jobs/{job_id}/events/stream")
+async def lars_events_stream_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+    since_index: int = Query(0, ge=0),
+) -> StreamingResponse:
+    """Server-Sent Events stream with sequence ids; clients should fall back to polling on failure."""
+    job = lars_get_job(job_id, tenant_id=tenant_user.tenant_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="LARS job not found.")
+
+    async def event_generator():
+        cursor = max(0, int(since_index))
+        idle_rounds = 0
+        seen_ids: set[str] = set()
+        while idle_rounds < 120:
+            try:
+                payload = lars_get_events(
+                    job_id,
+                    tenant_id=tenant_user.tenant_id,
+                    since_index=cursor,
+                    limit=50,
+                )
+            except KeyError:
+                yield "event: error\ndata: {\"detail\":\"not_found\"}\n\n"
+                break
+            events = payload.get("events") or []
+            for event in events:
+                event_id = str(event.get("event_id") or "")
+                if event_id and event_id in seen_ids:
+                    continue
+                if event_id:
+                    seen_ids.add(event_id)
+                data = json.dumps(event, default=str)
+                seq = cursor
+                yield f"id: {seq}\nevent: lars\ndata: {data}\n\n"
+                cursor += 1
+            if not events:
+                idle_rounds += 1
+                yield f"event: heartbeat\ndata: {{\"next_index\":{cursor},\"status\":{json.dumps(payload.get('status'))}}}\n\n"
+            else:
+                idle_rounds = 0
+                cursor = int(payload.get("next_index") or cursor)
+            status = str(payload.get("status") or "")
+            if status in {"completed", "canceled", "failed", "blocked"} and not events:
+                yield f"event: terminal\ndata: {{\"status\":{json.dumps(status)},\"next_index\":{cursor}}}\n\n"
+                break
+            await asyncio.sleep(2.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/v1/lars/jobs/{job_id}/sources")
+async def lars_source_usage_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_get_source_usage(job_id, tenant_id=tenant_user.tenant_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+
+
+@app.post("/v1/lars/workers/recover")
+async def lars_recover_workers_endpoint(
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    return lars_recover_abandoned_jobs(tenant_id=tenant_user.tenant_id, limit=50)
+
+
+@app.post("/v1/lars/jobs/{job_id}/contradictions/{contradiction_id}/resolve")
+async def lars_contradiction_resolve_endpoint(
+    job_id: str,
+    contradiction_id: str,
+    request: LarsContradictionResolveRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_resolve_contradiction(
+            job_id,
+            tenant_id=tenant_user.tenant_id,
+            user_id=tenant_user.user_id,
+            contradiction_id=contradiction_id,
+            resolution_status=request.resolution_status,
+            notes=request.notes,
+            escalate=request.escalate,
+        )
+    except KeyError as exc:
+        detail = "LARS job not found." if "job" in str(exc) else "Contradiction not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/notes")
+async def lars_notes_endpoint(
+    job_id: str,
+    request: LarsAttorneyNoteRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_add_attorney_note(
+            job_id,
+            tenant_id=tenant_user.tenant_id,
+            user_id=tenant_user.user_id,
+            text=request.text,
+            node_id=request.node_id,
+        )
+    except KeyError as exc:
+        detail = "LARS job not found." if "job" in str(exc) else "Node not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/artifacts/{artifact_id}/protect")
+async def lars_protect_artifact_endpoint(
+    job_id: str,
+    artifact_id: str,
+    request: LarsArtifactProtectRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_protect_artifact(
+            job_id,
+            tenant_id=tenant_user.tenant_id,
+            user_id=tenant_user.user_id,
+            artifact_id=artifact_id,
+            section_key=request.section_key,
+            protected=request.protected,
+            notes=request.notes,
+        )
+    except KeyError as exc:
+        detail = "LARS job not found." if "job" in str(exc) else "Artifact not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+
+
+@app.get("/v1/lars/jobs/{job_id}/office-insert")
+async def lars_office_insert_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+    kind: str = Query("executive_summary"),
+) -> dict[str, Any]:
+    try:
+        return lars_get_office_insert(job_id, tenant_id=tenant_user.tenant_id, kind=kind)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/run")
+async def lars_background_run_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    job = lars_get_job(job_id, tenant_id=tenant_user.tenant_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="LARS job not found.")
+    result = lars_schedule_background_run(job_id, tenant_id=tenant_user.tenant_id)
+    refreshed = lars_get_job(job_id, tenant_id=tenant_user.tenant_id)
+    payload = lars_status_payload(refreshed) if refreshed else {}
+    return {**payload, "schedule": result}
 
 
 @app.get("/v1/lars/status")
@@ -1745,15 +2061,28 @@ async def lars_status_endpoint(tenant_user: TenantUser = Depends(get_current_ten
         "store": lars_store_status(),
         "tenant_id": tenant_user.tenant_id,
         "firm_id": tenant_user.firm_id,
+        "depth_budget_profiles": lars_depth_budget_profiles(),
         "endpoints": {
             "compile": "/v1/lars/assignments/compile",
             "jobs": "/v1/lars/jobs",
             "job": "/v1/lars/jobs/{job_id}",
+            "tree": "/v1/lars/jobs/{job_id}/tree",
+            "node": "/v1/lars/jobs/{job_id}/nodes/{node_id}",
+            "node_actions": "/v1/lars/jobs/{job_id}/nodes/{node_id}/actions",
+            "events": "/v1/lars/jobs/{job_id}/events",
+            "events_stream": "/v1/lars/jobs/{job_id}/events/stream",
+            "sources": "/v1/lars/jobs/{job_id}/sources",
             "steps": "/v1/lars/jobs/{job_id}/steps",
+            "run": "/v1/lars/jobs/{job_id}/run",
             "pause": "/v1/lars/jobs/{job_id}/pause",
             "resume": "/v1/lars/jobs/{job_id}/resume",
             "cancel": "/v1/lars/jobs/{job_id}/cancel",
             "gates": "/v1/lars/jobs/{job_id}/gates/{gate_id}",
+            "contradictions": "/v1/lars/jobs/{job_id}/contradictions/{contradiction_id}/resolve",
+            "notes": "/v1/lars/jobs/{job_id}/notes",
+            "office_insert": "/v1/lars/jobs/{job_id}/office-insert",
+            "protect_artifact": "/v1/lars/jobs/{job_id}/artifacts/{artifact_id}/protect",
+            "recover_workers": "/v1/lars/workers/recover",
         },
         "division_of_responsibility": {
             "alts": "Chooses research trajectory (expand, deepen, challenge, revise, merge, prune, synthesize, verify).",

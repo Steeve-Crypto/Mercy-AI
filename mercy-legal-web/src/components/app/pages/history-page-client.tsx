@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useMemo, useState } from "react";
-import { BookOpenText, Clock3, FileText, MessageSquareText, Plus, Search, ShieldCheck, Star } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BookOpenText, Clock3, FileText, GitBranch, MessageSquareText, Plus, Search, ShieldCheck, Star } from "lucide-react";
 import type { WorkHistoryRecord, WorkHistoryWorkflowType } from "@/lib/work-history-types";
 import { setWorkHistorySavedClient } from "@/lib/work-history-client";
 import { formatTimestamp, safeText, titleCase } from "@/lib/display-safety";
 import { sourceScopeLabel as vaultSourceScopeLabel } from "@/lib/vault-documents";
+import { listLarsJobs, type LarsJobSummary } from "@/lib/core-client";
+import { AssignmentStatusList } from "@/components/app/lars/assignment-status-card";
+import { LARS_FULL_NAME } from "@/lib/lars-labels";
 
 type HistoryPageClientProps = {
   initialRecords: WorkHistoryRecord[];
@@ -183,6 +186,21 @@ function HistorySectionCard({ section, onSavedChange }: { section: HistorySectio
 }
 
 export function HistoryPageClient({ initialRecords, configured, initialError }: HistoryPageClientProps) {
+  const [larsJobs, setLarsJobs] = useState<LarsJobSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listLarsJobs(20)
+      .then((result) => {
+        if (!cancelled && result.ok && result.data) setLarsJobs(result.data.jobs || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLarsJobs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [records, setRecords] = useState(initialRecords);
   const [activeTab, setActiveTab] = useState<"all" | "recent" | "matter" | "research">("all");
 
@@ -238,6 +256,11 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
     setRecords((current) => current.map((record) => (record.id === nextRecord.id ? nextRecord : record)));
   }
 
+  const runningLars = larsJobs.filter((job) => ["running", "queued", "verifying"].includes(job.status));
+  const reviewLars = larsJobs.filter((job) => job.status === "waiting_attorney");
+  const completedLars = larsJobs.filter((job) => job.status === "completed");
+  const interruptedLars = larsJobs.filter((job) => ["paused", "failed", "canceled", "blocked"].includes(job.status));
+
   return (
     <div className="space-y-5 p-5 lg:p-8">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -250,6 +273,7 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
             <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">Mercy work history</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Prior Mercy work stays scoped to your tenant, matter context when selected, reliability snapshots, and saved outputs.
+              {LARS_FULL_NAME} (LARS) assignment events appear in the same History surface — not a separate product.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -274,6 +298,20 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
         ) : null}
         {initialError ? (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{initialError}</p>
+        ) : null}
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <HistoryLarsStat icon={GitBranch} label="Running" value={runningLars.length} />
+          <HistoryLarsStat icon={ShieldCheck} label="Needs review" value={reviewLars.length} />
+          <HistoryLarsStat icon={BookOpenText} label="Completed" value={completedLars.length} />
+          <HistoryLarsStat icon={Clock3} label="Interrupted / failed" value={interruptedLars.length} />
+        </div>
+        {larsJobs.length ? (
+          <div className="mt-5">
+            <h2 className="text-sm font-semibold text-slate-950">LARS assignment activity</h2>
+            <div className="mt-3">
+              <AssignmentStatusList jobs={larsJobs.slice(0, 8)} compact />
+            </div>
+          </div>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           {[
@@ -315,6 +353,26 @@ export function HistoryPageClient({ initialRecords, configured, initialError }: 
           <HistorySectionCard key={section.title} section={section} onSavedChange={updateRecord} />
         ))}
       </section>
+    </div>
+  );
+}
+
+function HistoryLarsStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Clock3;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+        <Icon className="size-3.5 text-[#4F46E5]" />
+        {label}
+      </div>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

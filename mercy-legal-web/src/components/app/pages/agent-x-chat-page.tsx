@@ -7,7 +7,10 @@ import {
   Bot,
   Clock3,
   FileText,
+  GitBranch,
   Loader2,
+  Pause,
+  Play,
   Paperclip,
   Search,
   Send,
@@ -17,10 +20,35 @@ import {
   X,
 } from "lucide-react";
 import { ReliabilityPanel } from "@/components/app/reliability-panel";
-import { executeAgent, getCoreHealth, type CoreAgentEnvelope, type CoreMatter, type CoreTemplateGalleryItem } from "@/lib/core-client";
+import { AssignmentComposer } from "@/components/app/lars/assignment-composer";
+import {
+  cancelLarsJob,
+  executeAgent,
+  getCoreHealth,
+  getLarsJob,
+  listLarsJobs,
+  pauseLarsJob,
+  resumeLarsJob,
+  type CoreAgentEnvelope,
+  type CoreMatter,
+  type CoreTemplateGalleryItem,
+  type LarsJobPayload,
+  type LarsJobSummary,
+} from "@/lib/core-client";
+import {
+  ALTS_FULL_NAME,
+  LARS_FULL_NAME,
+  LARS_HELP,
+  assignmentWorkspaceHref,
+  formatLarsLabel,
+  larsStatusTone,
+  phaseLabel,
+} from "@/lib/lars-labels";
 import { documentId, documentName, extractionLimitedWarning, normalizeVaultDocument } from "@/lib/vault-documents";
 import type { WorkHistoryRecord } from "@/lib/work-history-types";
 import { createWorkHistoryClient, listWorkHistoryClient, sourceTypeForRun, workflowTypeFromMode } from "@/lib/work-history-client";
+import { cn } from "@/lib/utils";
+import type { Route } from "next";
 
 type Message = {
   id: string;
@@ -123,7 +151,12 @@ export function AgentXChatPage({
   const [workHistory, setWorkHistory] = useState<WorkHistoryRecord[]>([]);
   const [coreIsOnline, setCoreIsOnline] = useState(coreOnline);
   const [coreStatusError, setCoreStatusError] = useState<string | null>(null);
+  const [larsJobs, setLarsJobs] = useState<LarsJobSummary[]>([]);
+  const [activeLarsJob, setActiveLarsJob] = useState<LarsJobPayload | null>(null);
+  const [larsBusy, setLarsBusy] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const isLarsMode = mode === "lars_assignment";
+  const isResearchMode = mode === "dc_research";
 
   const activeMatter = useMemo(() => initialMatters.find((matter) => matter.matter_id === matterId) ?? null, [initialMatters, matterId]);
   const attachedDocuments = useMemo(() => {
@@ -176,12 +209,38 @@ export function AgentXChatPage({
       .catch(() => {
         if (!cancelled) setWorkHistory([]);
       });
+    listLarsJobs(8, undefined, matterId ? { matterId } : undefined)
+      .then((result) => {
+        if (!cancelled && result.ok && result.data) setLarsJobs(result.data.jobs || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLarsJobs([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [matterId]);
+
+  useEffect(() => {
+    const jobId = activeLarsJob?.job?.job_id;
+    if (!jobId) return;
+    const status = activeLarsJob?.job?.status;
+    const active =
+      activeLarsJob?.background_running || status === "running" || status === "queued" || status === "verifying";
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      void getLarsJob(jobId).then((result) => {
+        if (result.ok && result.data) setActiveLarsJob(result.data);
+      });
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeLarsJob?.background_running, activeLarsJob?.job?.job_id, activeLarsJob?.job?.status]);
 
   async function send() {
+    if (isLarsMode) {
+      setError("Use the LARS Assignment form below to start or control a durable assignment.");
+      return;
+    }
     const promptText = prompt.trim();
     if (!promptText) {
       setError("Enter a question or drafting instruction for Agent X.");
@@ -394,15 +453,171 @@ export function AgentXChatPage({
                 onChange={(event) => setMode(event.target.value)}
                 className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-[#A5B4FC] focus:bg-white focus:ring-2 focus:ring-[#E0E7FF]"
               >
-                <option value="template_generation">Template generation</option>
+                <option value="ask_mercy">Ask Mercy</option>
                 <option value="drafting">Drafting</option>
                 <option value="analysis">Document analysis</option>
-                <option value="dc_research">D.C. research support</option>
+                <option value="dc_research">D.C. Research</option>
+                <option value="lars_assignment">LARS Assignment</option>
+                <option value="template_generation">Template generation</option>
                 <option value="citation_verification">Citation verification</option>
                 <option value="compliance">Compliance check</option>
                 <option value="intake">Intake support</option>
               </select>
             </div>
+
+            {isLarsMode ? (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3 text-xs leading-5 text-[#4338CA]">
+                  <p className="font-semibold text-slate-950" title={LARS_HELP}>
+                    {LARS_FULL_NAME} (LARS) mode
+                  </p>
+                  <p className="mt-1">
+                    Start a durable assignment with matter, work product, deadline, depth, authority requirements, and
+                    approval gates. Live progress and {ALTS_FULL_NAME} (ALTS) activity appear here — the full Research Map
+                    opens in the assignment workspace.
+                  </p>
+                </div>
+                <AssignmentComposer
+                  matters={initialMatters}
+                  initialMatterId={matterId}
+                  initialQuery={prompt}
+                  initialDocumentIds={attachedDocIds}
+                  surfaceContext="chat"
+                  compact
+                  showTerminologyIntro={false}
+                  title="Compile LARS assignment"
+                  description="Preview, then start. Progress continues after you close this tab."
+                  onStarted={(payload) => {
+                    setActiveLarsJob(payload);
+                    setMessages((current) => [
+                      ...current,
+                      {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: `LARS assignment started: ${payload.job?.assignment && typeof payload.job.assignment === "object" ? String((payload.job.assignment as Record<string, unknown>).query || payload.job.job_id) : payload.job?.job_id}. Open the assignment workspace for the full ALTS Research Map, authorities, and review gates.`,
+                      },
+                    ]);
+                    void listLarsJobs(8, undefined, matterId ? { matterId } : undefined).then((result) => {
+                      if (result.ok && result.data) setLarsJobs(result.data.jobs || []);
+                    });
+                  }}
+                />
+                {activeLarsJob?.job ? (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", larsStatusTone(activeLarsJob.job.status))}>
+                        {formatLarsLabel(activeLarsJob.job.status)}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
+                        {phaseLabel(String(activeLarsJob.phase || ""))}
+                      </span>
+                      {(activeLarsJob.pending_gates?.length || 0) > 0 ? (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-900">
+                          Pending attorney review
+                        </span>
+                      ) : null}
+                      {activeLarsJob.background_running ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-900">
+                          <Loader2 className="size-3 animate-spin" /> ALTS working
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm font-medium text-slate-900">
+                      {String((activeLarsJob.job.assignment as Record<string, unknown> | undefined)?.query || activeLarsJob.job.job_id)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Last ALTS action: {formatLarsLabel(String(activeLarsJob.job.last_action || "—"))} · Artifacts{" "}
+                      {activeLarsJob.artifacts_catalog?.length ?? 0}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={larsBusy}
+                        onClick={() => {
+                          if (!activeLarsJob.job?.job_id) return;
+                          setLarsBusy(true);
+                          void pauseLarsJob(activeLarsJob.job.job_id).then((result) => {
+                            setLarsBusy(false);
+                            if (result.ok && result.data) setActiveLarsJob(result.data);
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                      >
+                        <Pause className="size-3.5" /> Pause
+                      </button>
+                      <button
+                        type="button"
+                        disabled={larsBusy}
+                        onClick={() => {
+                          if (!activeLarsJob.job?.job_id) return;
+                          setLarsBusy(true);
+                          void resumeLarsJob(activeLarsJob.job.job_id).then((result) => {
+                            setLarsBusy(false);
+                            if (result.ok && result.data) setActiveLarsJob(result.data);
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                      >
+                        <Play className="size-3.5" /> Resume
+                      </button>
+                      <Link
+                        href={
+                          assignmentWorkspaceHref(
+                            String(activeLarsJob.job.job_id),
+                            (activeLarsJob.job.assignment as Record<string, unknown> | undefined)?.matter_id
+                              ? String((activeLarsJob.job.assignment as Record<string, unknown>).matter_id)
+                              : matterId || null,
+                          ) as Route
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#4F46E5] px-2.5 py-1.5 text-xs font-semibold text-white"
+                      >
+                        <GitBranch className="size-3.5" /> Open assignment workspace
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={larsBusy}
+                        onClick={() => {
+                          if (!activeLarsJob.job?.job_id) return;
+                          setLarsBusy(true);
+                          void cancelLarsJob(activeLarsJob.job.job_id).then((result) => {
+                            setLarsBusy(false);
+                            if (result.ok && result.data) setActiveLarsJob(result.data);
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-900"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {larsJobs.length ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Recent assignments</p>
+                    <ul className="mt-2 space-y-1">
+                      {larsJobs.slice(0, 4).map((job) => (
+                        <li key={job.job_id}>
+                          <button
+                            type="button"
+                            className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-white"
+                            onClick={() => {
+                              void getLarsJob(job.job_id).then((result) => {
+                                if (result.ok && result.data) setActiveLarsJob(result.data);
+                              });
+                            }}
+                          >
+                            <span className="font-medium text-slate-900">{job.query || job.job_id}</span>
+                            <span className="mt-0.5 block text-[11px] text-slate-500">
+                              {formatLarsLabel(job.status)} · {phaseLabel(job.phase)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {selectedTemplate ? (
               <div className="mt-3 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3">
@@ -467,8 +682,15 @@ export function AgentXChatPage({
                     if (!busy && prompt.trim()) void send();
                   }
                 }}
-                placeholder="Ask Mercy about this matter, draft a document, review language, or check sources..."
+                placeholder={
+                  isLarsMode
+                    ? "Optional notes for the LARS form above…"
+                    : isResearchMode
+                      ? "Ask a D.C. research question…"
+                      : "Ask Mercy about this matter, draft a document, review language, or check sources..."
+                }
                 className="max-h-40 min-h-24 w-full resize-none rounded-t-2xl border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
+                disabled={isLarsMode}
               />
               <div className="flex flex-col gap-3 border-t border-slate-200 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap gap-2">

@@ -18,6 +18,7 @@ from lars.models import (
     ResearchJob,
     TreeNode,
     append_event,
+    contradiction_is_open,
     new_id,
     utc_now,
 )
@@ -43,7 +44,7 @@ def _budget_exhausted(job: ResearchJob) -> str | None:
     unresolved = [
         item
         for item in job.contradictions.values()
-        if item.resolution_status != "resolved" and item.severity in {"critical", "high"}
+        if contradiction_is_open(item.resolution_status) and item.severity in {"critical", "high"}
     ]
     if len(unresolved) > budgets.max_unresolved_contradictions and job.status not in {
         JobStatus.WAITING_ATTORNEY.value,
@@ -54,8 +55,44 @@ def _budget_exhausted(job: ResearchJob) -> str | None:
 
 
 def _pending_required_gate(job: ResearchJob) -> ApprovalGate | None:
+    """Return a pending gate only when it is in-scope for the current phase.
+
+    Draft/final gates are created up front for attorney visibility, but they must
+    not block early research. Phase-aware gating keeps long-horizon jobs moving
+    until the relevant checkpoint is actually due.
+    """
+    has_synthesis = any(node.node_type == NodeType.SYNTHESIS.value for node in job.nodes.values())
+    has_verification = any(node.node_type == NodeType.VERIFICATION.value for node in job.nodes.values())
+    has_final = any(node.node_type == NodeType.FINAL_ARTIFACT.value for node in job.nodes.values())
+    has_hypotheses = bool(job.hypotheses) or any(
+        node.node_type == NodeType.HYPOTHESIS.value for node in job.nodes.values()
+    )
+    open_contradictions = any(
+        contradiction_is_open(item.resolution_status) and item.severity in {"critical", "high"}
+        for item in job.contradictions.values()
+    )
+
     for gate in job.gates:
-        if gate.required and gate.status == "pending":
+        if not (gate.required and gate.status == "pending"):
+            continue
+        gate_type = gate.gate_type
+        if gate_type == GateType.ASSIGNMENT.value:
+            return gate
+        if gate_type == GateType.RESEARCH_PLAN.value and has_hypotheses:
+            return gate
+        if gate_type == GateType.DRAFT.value and has_synthesis and not has_final:
+            return gate
+        if gate_type == GateType.FINAL.value and has_final:
+            return gate
+        if gate_type == GateType.CONTRADICTION.value and open_contradictions:
+            return gate
+        if gate_type in {
+            GateType.FACTUAL_ASSUMPTION.value,
+            GateType.HIGH_RISK_THEORY.value,
+        }:
+            return gate
+        # Unknown custom gates remain blocking for safety.
+        if gate_type not in {item.value for item in GateType}:
             return gate
     return None
 
@@ -105,7 +142,7 @@ def choose_action(job: ResearchJob) -> tuple[AltsAction, str, TreeNode | None]:
     unresolved_critical = [
         item
         for item in job.contradictions.values()
-        if item.resolution_status != "resolved" and item.severity == "critical"
+        if contradiction_is_open(item.resolution_status) and item.severity == "critical"
     ]
     if unresolved_critical and job.status != JobStatus.WAITING_ATTORNEY.value:
         target = job.nodes.get(unresolved_critical[0].responsible_node_id or "")

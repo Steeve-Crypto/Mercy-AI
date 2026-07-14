@@ -1,0 +1,145 @@
+.lars-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 0 1rem;
+  border-top: 1px solid var(--colorNeutralStroke2, #e5ded3);
+  margin-top: 0.5rem;
+}
+
+.lars-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lars-panel__muted {
+  color: var(--colorNeutralForeground3, #6b645c);
+  display: block;
+}
+
+.lars-panel__banner {
+  border: 1px solid var(--colorNeutralStroke2, #e5ded3);
+  background: #fbf8f3;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lars-panel__banner--warn {
+  border-color: #f0d9a8;
+  background: #fff8eb;
+}
+
+.lars-panel__banner--error {
+  border-color: #f1c0c0;
+  background: #fdf2f2;
+  color: #7a1f2b;
+}
+
+.lars-panel__center {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.lars-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.lars-panel__job {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--colorNeutralStroke2, #e5ded3);
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+}
+
+.lars-panel__job.is-active {
+  border-color: #7a1f2b;
+  background: #fdf6f6;
+}
+
+.lars-panel__job-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #141210;
+  line-height: 1.35;
+}
+
+.lars-panel__job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.lars-panel__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border: 1px solid var(--colorNeutralStroke2, #e5ded3);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fbf8f3;
+}
+
+.lars-panel__detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lars-panel__section-title {
+  margin-top: 0.35rem;
+}
+
+.lars-panel__gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid #e8c4c8;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.55rem;
+}
+
+.lars-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.lars-panel__actions--wrap {
+  margin-top: 0.35rem;
+}
+
+.lars-panel__artifacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lars-panel__artifacts li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 12px;
+}

@@ -174,23 +174,38 @@ def get_job(job_id: str, *, tenant_id: str) -> ResearchJob | None:
         return ResearchJob.from_dict(payload)
 
 
-def list_jobs(*, tenant_id: str, limit: int = 50) -> list[ResearchJob]:
+def list_jobs(
+    *,
+    tenant_id: str,
+    limit: int = 50,
+    matter_id: str | None = None,
+    status: str | None = None,
+) -> list[ResearchJob]:
     with _LOCK:
         if persistent_storage_configured():
             _ensure_table()
             from sqlalchemy import text
 
+            clauses = ["tenant_id = :tenant_id"]
+            params: dict[str, Any] = {"tenant_id": tenant_id, "limit": limit}
+            if matter_id:
+                clauses.append("matter_id = :matter_id")
+                params["matter_id"] = matter_id
+            if status:
+                clauses.append("status = :status")
+                params["status"] = status
+            where_sql = " AND ".join(clauses)
             with session_scope() as session:
                 rows = session.execute(
                     text(
-                        """
+                        f"""
                         SELECT payload_json FROM mercy_lars_jobs
-                        WHERE tenant_id = :tenant_id
+                        WHERE {where_sql}
                         ORDER BY updated_at DESC
                         LIMIT :limit
                         """
                     ),
-                    {"tenant_id": tenant_id, "limit": limit},
+                    params,
                 ).mappings().all()
                 jobs: list[ResearchJob] = []
                 for row in rows:
@@ -199,11 +214,17 @@ def list_jobs(*, tenant_id: str, limit: int = 50) -> list[ResearchJob]:
                         payload = json.loads(payload)
                     jobs.append(ResearchJob.from_dict(payload))
                 return jobs
-        jobs = [
-            ResearchJob.from_dict(payload)
-            for payload in _MEMORY_JOBS.values()
-            if str(payload.get("tenant_id")) == tenant_id
-        ]
+        jobs = []
+        for payload in _MEMORY_JOBS.values():
+            if str(payload.get("tenant_id")) != tenant_id:
+                continue
+            if status and str(payload.get("status") or "") != status:
+                continue
+            assignment = payload.get("assignment") or {}
+            job_matter = str(payload.get("matter_id") or assignment.get("matter_id") or "")
+            if matter_id and job_matter != matter_id:
+                continue
+            jobs.append(ResearchJob.from_dict(payload))
         jobs.sort(key=lambda job: job.updated_at, reverse=True)
         return jobs[:limit]
 

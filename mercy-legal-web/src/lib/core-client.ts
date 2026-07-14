@@ -715,9 +715,15 @@ function authHeaders(auth?: CoreAuthContext): HeadersInit {
   return headers;
 }
 
-async function coreFetch<T>(path: string, init?: RequestInit, auth?: CoreAuthContext): Promise<CoreClientResult<T>> {
+async function coreFetch<T>(
+  path: string,
+  init?: RequestInit,
+  auth?: CoreAuthContext,
+  options?: { timeoutMs?: number },
+): Promise<CoreClientResult<T>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeoutMs = options?.timeoutMs ?? 15000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(coreRequestUrl(path), {
@@ -1216,5 +1222,389 @@ export async function uploadDiscoveryDocument(payload: {
       body: form,
     },
     auth,
+  );
+}
+
+/* ─── Mercy LARS / ALTS-MoE client ─────────────────────────────────────── */
+
+export type LarsPhase =
+  | "assignment"
+  | "plan"
+  | "research"
+  | "synthesis"
+  | "verification"
+  | "attorney_review"
+  | "complete";
+
+export type LarsJobSummary = {
+  job_id: string;
+  status: string;
+  matter_id?: string | null;
+  query?: string;
+  deliverable_type?: string;
+  deadline?: string | null;
+  research_depth?: string;
+  jurisdiction?: string;
+  created_at?: string;
+  updated_at?: string;
+  user_id?: string;
+  phase?: string;
+  pending_gates?: Array<Record<string, unknown>>;
+  pending_review_count?: number;
+  artifact_count?: number;
+  budget_state?: {
+    cost_usd_used?: number;
+    max_cost_usd?: number;
+    model_calls_used?: number;
+    max_model_calls?: number;
+  };
+};
+
+export type LarsTreeNode = {
+  node_id: string;
+  branch_id: string;
+  parent_ids: string[];
+  child_ids: string[];
+  node_type: string;
+  status: string;
+  label: string;
+  purpose?: string | null;
+  hypothesis?: string | null;
+  confidence: number;
+  overall_score: number;
+  has_contradictions: boolean;
+  authority_count: number;
+  retention_decision?: string;
+  assigned_agents?: string[];
+};
+
+export type LarsArtifact = {
+  artifact_id: string;
+  kind: string;
+  title: string;
+  version?: number;
+  versions?: Array<Record<string, unknown>>;
+  review_status?: string;
+  content_markdown?: string;
+  created_at?: string;
+  derived?: boolean;
+  attorney_review_required?: boolean;
+  authorities?: Array<Record<string, unknown>>;
+  protection?: {
+    manual_lock?: boolean;
+    locked_by?: string;
+    locked_at?: string;
+    locked_content_markdown?: string;
+    sections?: Record<string, Record<string, unknown>>;
+  };
+};
+
+export type LarsJobPayload = {
+  mode?: string;
+  lars_version?: string;
+  phase?: LarsPhase | string;
+  phases?: string[];
+  job?: {
+    job_id: string;
+    status: string;
+    tenant_id?: string;
+    user_id?: string;
+    firm_id?: string | null;
+    assignment?: Record<string, unknown>;
+    root_node_id?: string;
+    nodes?: Record<string, Record<string, unknown>>;
+    gates?: Array<Record<string, unknown>>;
+    events?: Array<Record<string, unknown>>;
+    artifacts?: Array<Record<string, unknown>>;
+    authorities?: Record<string, Record<string, unknown>>;
+    contradictions?: Record<string, Record<string, unknown>>;
+    budgets?: Record<string, unknown>;
+    last_action?: string | null;
+    last_error?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    completed_at?: string | null;
+    metadata?: Record<string, unknown>;
+  };
+  controller?: Record<string, unknown>;
+  tree?: {
+    root_node_id?: string;
+    node_count?: number;
+    nodes?: LarsTreeNode[];
+    active_branch_ids?: string[];
+    retained_branch_ids?: string[];
+    pruned_branch_ids?: string[];
+  };
+  artifacts_catalog?: LarsArtifact[];
+  budget_snapshot?: Record<string, unknown>;
+  timeline?: Array<{
+    event_id?: string;
+    event_type?: string;
+    timestamp?: string;
+    summary?: string;
+    detail?: Record<string, unknown>;
+  }>;
+  pending_gates?: Array<Record<string, unknown>>;
+  gate_history?: Array<Record<string, unknown>>;
+  unresolved_contradictions?: Array<Record<string, unknown>>;
+  authorities?: Array<Record<string, unknown>>;
+  attorney_notes?: Array<Record<string, unknown>>;
+  background_running?: boolean;
+  depth_budget_profiles?: Record<string, Record<string, unknown>>;
+  attorney_review_required?: boolean;
+  store?: Record<string, unknown>;
+  validation?: Record<string, unknown>;
+  assignment?: Record<string, unknown>;
+};
+
+export type LarsAssignmentInput = {
+  query: string;
+  matter_id?: string;
+  legal_questions?: string[];
+  deliverable_type?: string;
+  jurisdiction?: string;
+  factual_assumptions?: string[];
+  disputed_facts?: string[];
+  selected_document_ids?: string[];
+  research_depth?: "focused" | "standard" | "deep" | "custom" | string;
+  deadline?: string;
+  official_source_preference?: boolean;
+  require_adverse_authority_review?: boolean;
+  approval_checkpoints?: string[];
+  require_research_plan_approval?: boolean;
+  max_model_calls?: number;
+  max_tool_calls?: number;
+  max_duration_seconds?: number;
+  max_cost_usd?: number;
+  max_active_branches?: number;
+  max_tree_depth?: number;
+  auto_approve_assignment?: boolean;
+  force_start?: boolean;
+  surface_context?: string;
+};
+
+const LARS_TIMEOUT_MS = 60000;
+
+export async function listLarsJobs(
+  limit = 50,
+  auth?: CoreAuthContext,
+  options?: { matterId?: string; status?: string },
+): Promise<CoreClientResult<{ jobs: LarsJobSummary[]; lars_version?: string }>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options?.matterId) params.set("matter_id", options.matterId);
+  if (options?.status) params.set("status", options.status);
+  return coreFetch(`/v1/lars/jobs?${params.toString()}`, undefined, auth);
+}
+
+export async function compileLarsAssignment(
+  payload: LarsAssignmentInput,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    "/v1/lars/assignments/compile",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ surface_context: "web", ...payload }),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
+  );
+}
+
+export async function createLarsJob(
+  payload: LarsAssignmentInput,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    "/v1/lars/jobs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ surface_context: "web", ...payload }),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
+  );
+}
+
+export async function getLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(`/v1/lars/jobs/${encodeURIComponent(jobId)}`, undefined, auth, { timeoutMs: 30000 });
+}
+
+export async function pauseLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/pause`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    auth,
+  );
+}
+
+export async function resumeLarsJob(
+  jobId: string,
+  maxSteps = 4,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/resume`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_steps: maxSteps }),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
+  );
+}
+
+export async function cancelLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    auth,
+  );
+}
+
+export async function decideLarsGate(
+  jobId: string,
+  gateId: string,
+  payload: { decision: string; notes?: string; continue_steps?: number },
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/gates/${encodeURIComponent(gateId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
+  );
+}
+
+export async function getLarsNode(
+  jobId: string,
+  nodeId: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/nodes/${encodeURIComponent(nodeId)}`,
+    undefined,
+    auth,
+  );
+}
+
+export async function applyLarsNodeAction(
+  jobId: string,
+  nodeId: string,
+  payload: { action: string; notes?: string },
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/nodes/${encodeURIComponent(nodeId)}/actions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
+  );
+}
+
+export async function resolveLarsContradiction(
+  jobId: string,
+  contradictionId: string,
+  payload: { resolution_status: string; notes?: string; escalate?: boolean },
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/contradictions/${encodeURIComponent(contradictionId)}/resolve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
+}
+
+export async function addLarsNote(
+  jobId: string,
+  payload: { text: string; node_id?: string },
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/notes`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    auth,
+  );
+}
+
+export async function getLarsEvents(
+  jobId: string,
+  sinceIndex = 0,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/events?since_index=${sinceIndex}&limit=100`,
+    undefined,
+    auth,
+  );
+}
+
+export async function getLarsOfficeInsert(
+  jobId: string,
+  kind = "executive_summary",
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/office-insert?kind=${encodeURIComponent(kind)}`,
+    undefined,
+    auth,
+  );
+}
+
+export async function getLarsStatus(auth?: CoreAuthContext): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch("/v1/lars/status", undefined, auth);
+}
+
+export async function getLarsSourceUsage(
+  jobId: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch(`/v1/lars/jobs/${encodeURIComponent(jobId)}/sources`, undefined, auth);
+}
+
+export async function recoverLarsWorkers(
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<Record<string, unknown>>> {
+  return coreFetch(
+    "/v1/lars/workers/recover",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    auth,
+  );
+}
+
+export async function protectLarsArtifact(
+  jobId: string,
+  artifactId: string,
+  payload: { protected?: boolean; section_key?: string; notes?: string } = {},
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobPayload>> {
+  return coreFetch(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/artifacts/${encodeURIComponent(artifactId)}/protect`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ protected: true, ...payload }),
+    },
+    auth,
+    { timeoutMs: LARS_TIMEOUT_MS },
   );
 }

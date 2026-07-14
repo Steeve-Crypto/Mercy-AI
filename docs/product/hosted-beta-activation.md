@@ -57,6 +57,7 @@ In Supabase SQL editor or CLI, apply in order:
 2. `mercy-legal-web/supabase/migrations/202605250001_work_history.sql`
 3. `mercy-legal-web/supabase/migrations/202605260001_pgvector_storage_foundation.sql`
 4. `mercy-legal-web/supabase/migrations/202606080001_manual_beta_provisioning_statuses.sql`
+5. `mercy-legal-web/supabase/migrations/202607140001_mercy_lars_jobs.sql` (Mercy LARS durable jobs)
 
 Confirm tables exist:
 

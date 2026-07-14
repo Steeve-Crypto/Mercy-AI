@@ -9,6 +9,10 @@ import {
   attachVaultDocumentToMatter,
   getTemplateGallery,
   deleteMatterDocument,
+  addLarsNote,
+  applyLarsNodeAction,
+  getLarsJob,
+  listLarsJobs,
   listMatterDocuments,
   listVaultDocuments,
   previewMatterDocument,
@@ -20,7 +24,18 @@ import {
   type CoreMatterDocument,
   type CoreRagEnvelope,
   type CoreTemplateGalleryItem,
+  type LarsJobPayload,
+  type LarsJobSummary,
 } from "@/lib/core-client";
+import { AssignmentComposer } from "@/components/app/lars/assignment-composer";
+import { AssignmentStatusList } from "@/components/app/lars/assignment-status-card";
+import {
+  ALTS_FULL_NAME,
+  ALTS_HELP,
+  LARS_FULL_NAME,
+  assignmentWorkspaceHref,
+  formatLarsLabel,
+} from "@/lib/lars-labels";
 import { extractionLimitedMessage, safeObjectEntries, safeText } from "@/lib/display-safety";
 import { extractionLimitedWarning, normalizeVaultDocument, statusBadgeClasses, type VaultDocumentView } from "@/lib/vault-documents";
 import { createWorkHistoryClient } from "@/lib/work-history-client";
@@ -143,6 +158,60 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CoreRagEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [continueAsLars, setContinueAsLars] = useState(false);
+  const [matterLarsJobs, setMatterLarsJobs] = useState<LarsJobSummary[]>([]);
+  const [activeLarsJobId, setActiveLarsJobId] = useState<string>("");
+  const [activeLarsDetail, setActiveLarsDetail] = useState<LarsJobPayload | null>(null);
+  const [altsBusy, setAltsBusy] = useState(false);
+
+  useEffect(() => {
+    if (!matterId) {
+      setMatterLarsJobs([]);
+      setActiveLarsJobId("");
+      setActiveLarsDetail(null);
+      return;
+    }
+    let cancelled = false;
+    listLarsJobs(15, undefined, { matterId }).then((jobsResult) => {
+      if (cancelled || !jobsResult.ok || !jobsResult.data) return;
+      const jobs = jobsResult.data.jobs || [];
+      setMatterLarsJobs(jobs);
+      if (!activeLarsJobId && jobs[0]?.job_id) setActiveLarsJobId(jobs[0].job_id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [matterId]);
+
+  useEffect(() => {
+    if (!activeLarsJobId) {
+      setActiveLarsDetail(null);
+      return;
+    }
+    let cancelled = false;
+    getLarsJob(activeLarsJobId).then((response) => {
+      if (!cancelled && response.ok && response.data) setActiveLarsDetail(response.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLarsJobId]);
+
+  async function runAltsAction(nodeId: string, action: string) {
+    if (!activeLarsJobId) return;
+    setAltsBusy(true);
+    setError(null);
+    const response = await applyLarsNodeAction(activeLarsJobId, nodeId, {
+      action,
+      notes: `Research surface requested ${action}`,
+    });
+    setAltsBusy(false);
+    if (!response.ok || !response.data) {
+      setError(response.error ?? "ALTS action failed.");
+      return;
+    }
+    setActiveLarsDetail(response.data);
+  }
 
   async function runResearch() {
     setBusy(true);
@@ -171,6 +240,11 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
       return;
     }
     setResult(response.data);
+    if (matterId) {
+      void listLarsJobs(10, undefined, { matterId }).then((jobsResult) => {
+        if (jobsResult.ok && jobsResult.data) setMatterLarsJobs(jobsResult.data.jobs || []);
+      });
+    }
     try {
       await createWorkHistoryClient({
         matterId: matterId || null,
@@ -203,13 +277,21 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
     }
   }
 
+  const researchAssumptions = result
+    ? result.results
+        .slice(0, 8)
+        .map((item) => `${item.citation?.label ?? item.source_id}: ${safeText(item.summary || item.text, "").slice(0, 240)}`)
+        .join("\n")
+    : "";
+
   return (
     <div className="p-5 lg:p-8">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-5">
-            <h1 className="text-lg font-semibold text-slate-950">Research</h1>
+            <h1 className="text-lg font-semibold text-slate-950">D.C. Research</h1>
             <p className="mt-1 text-sm leading-6 text-slate-500">
               Run D.C.-focused retrieval with source metadata, matter context when selected, and attorney review before relying on any legal conclusion.
+              Continue into {LARS_FULL_NAME} (LARS) with {ALTS_FULL_NAME} (ALTS) paths without restarting from zero.
             </p>
           </div>
           <div className="grid gap-3 md:grid-cols-[0.45fr_1fr_auto]">
@@ -234,12 +316,194 @@ export function ResearchPage({ matters, initialMatterId, initialAttachedDocIds =
           {error ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{error}</p> : null}
           <div className="mt-5 space-y-3">
             {result ? (
-              <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
-                <p className="text-sm font-semibold text-slate-950">Retrieval summary</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Retrieval completed with review warnings. {result.results.length} source result{result.results.length === 1 ? "" : "s"} returned.
-                  Mercy was not invoked on this page; use Mercy Assistant for full reliability review before relying on these results.
-                </p>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-4">
+                  <p className="text-sm font-semibold text-slate-950">Retrieval summary</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Retrieval completed with review warnings. {result.results.length} source result{result.results.length === 1 ? "" : "s"} returned.
+                    Primary authorities, excerpts, and verification labels below require attorney review. Use Continue as LARS Assignment to preserve this
+                    query, matter, jurisdiction, sources, and findings for durable ALTS exploration.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setContinueAsLars(true)}
+                      className="rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA]"
+                    >
+                      Continue as LARS Assignment
+                    </button>
+                    <Link
+                      href={`/chat?mode=lars_assignment${matterId ? `&matterId=${encodeURIComponent(matterId)}` : ""}` as Route}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Open in Chat (LARS mode)
+                    </Link>
+                  </div>
+                </div>
+                {continueAsLars ? (
+                  <AssignmentComposer
+                    matters={matters}
+                    initialMatterId={matterId}
+                    initialQuery={query}
+                    initialAssumptions={researchAssumptions}
+                    initialDocumentIds={initialAttachedDocIds}
+                    initialJurisdiction="District of Columbia"
+                    surfaceContext="research"
+                    title="Continue as LARS Assignment"
+                    description="Preserves the research query, matter, jurisdiction, selected sources, and findings as assignment context — does not restart from zero."
+                    onCancel={() => setContinueAsLars(false)}
+                  />
+                ) : null}
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950" title={ALTS_HELP}>
+                        {ALTS_FULL_NAME} (ALTS) research paths
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Legal issues, authorities, contradictions, and verification from this retrieval and any linked LARS assignment.
+                        Full ALTS Research Map opens in the assignment workspace.
+                      </p>
+                    </div>
+                    {matterLarsJobs.length ? (
+                      <select
+                        value={activeLarsJobId}
+                        onChange={(event) => setActiveLarsJobId(event.target.value)}
+                        className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                      >
+                        <option value="">No linked LARS assignment</option>
+                        {matterLarsJobs.map((job) => (
+                          <option key={job.job_id} value={job.job_id}>
+                            {job.query || job.job_id}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Primary authorities (retrieval)</p>
+                      <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                        {result.results.slice(0, 5).map((item) => (
+                          <li key={item.chunk_id} className="rounded-md border border-slate-200 bg-white px-2 py-2">
+                            <span className="font-medium">{item.citation?.label ?? item.source_id}</span>
+                            <span className="mt-1 block text-xs text-slate-500">
+                              D.C. applicability · verification {String(item.citation?.verification_status ?? result.verification?.status ?? "review required")}
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-slate-600">
+                              {safeText(item.summary || item.text, "").slice(0, 180)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Linked ALTS state</p>
+                      {activeLarsDetail?.tree?.nodes?.length ? (
+                        <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto text-sm">
+                          {activeLarsDetail.tree.nodes.slice(0, 12).map((node) => (
+                            <li key={node.node_id} className="rounded-md border border-slate-200 bg-white px-2 py-2">
+                              <p className="font-medium text-slate-900">{node.label}</p>
+                              <p className="text-xs text-slate-500">
+                                {formatLarsLabel(node.node_type)} · {formatLarsLabel(node.status)}
+                                {node.has_contradictions ? " · contradiction" : ""}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {[
+                                  ["DEEPEN", "Research further"],
+                                  ["CHALLENGE", "Challenge conclusion"],
+                                  ["EXPAND_WIDER", "Explore related issue"],
+                                  ["REVISE", "Revise analysis"],
+                                  ["VERIFY", "Verify citations"],
+                                  ["PRUNE", "Remove from active analysis"],
+                                  ["PAUSE_FOR_ATTORNEY", "Request attorney review"],
+                                ].map(([action, label]) => (
+                                  <button
+                                    key={action}
+                                    type="button"
+                                    disabled={altsBusy}
+                                    onClick={() => void runAltsAction(node.node_id, action)}
+                                    className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-[#EEF2FF] hover:text-[#4338CA]"
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                                <button
+                                  type="button"
+                                  disabled={altsBusy || !activeLarsJobId}
+                                  onClick={() => {
+                                    if (!activeLarsJobId) return;
+                                    setAltsBusy(true);
+                                    void addLarsNote(activeLarsJobId, {
+                                      node_id: node.node_id,
+                                      text: `Add ALTS finding to work product: ${node.label}${node.purpose ? ` — ${node.purpose}` : ""}`,
+                                    }).then((response) => {
+                                      setAltsBusy(false);
+                                      if (!response.ok || !response.data) {
+                                        setError(response.error ?? "Could not add finding to work product.");
+                                        return;
+                                      }
+                                      setActiveLarsDetail(response.data);
+                                    });
+                                  }}
+                                  className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-[#EEF2FF] hover:text-[#4338CA]"
+                                >
+                                  Add to work product
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-sm text-slate-600">
+                          No live ALTS paths yet. Start or continue as a LARS assignment to create durable research paths, then use these controls against real persisted nodes.
+                        </p>
+                      )}
+                      {activeLarsDetail?.unresolved_contradictions?.length ? (
+                        <p className="mt-2 text-xs text-amber-800">
+                          {activeLarsDetail.unresolved_contradictions.length} open contradiction(s) — resolve in the assignment workspace.
+                        </p>
+                      ) : null}
+                      {activeLarsJobId ? (
+                        <Link
+                          href={
+                            assignmentWorkspaceHref(
+                              activeLarsJobId,
+                              (activeLarsDetail?.job?.assignment as Record<string, unknown> | undefined)?.matter_id
+                                ? String((activeLarsDetail?.job?.assignment as Record<string, unknown>).matter_id)
+                                : matterId || null,
+                            ) as Route
+                          }
+                          className="mt-3 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#4338CA] hover:bg-[#EEF2FF]"
+                        >
+                          Open assignment workspace (full ALTS map)
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1">Findings: {result.results.length}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                      Attorney review: required
+                    </span>
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                      Guardrail {String(result.guardrail_status ?? "warn")}
+                    </span>
+                    {activeLarsDetail?.phase ? (
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                        LARS phase {formatLarsLabel(String(activeLarsDetail.phase))}
+                      </span>
+                    ) : null}
+                  </div>
+                </section>
+
+                {matterLarsJobs.length ? (
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-slate-950">Related LARS assignments</h3>
+                    <AssignmentStatusList jobs={matterLarsJobs} compact />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
@@ -408,6 +672,8 @@ export function VaultPage({ matters }: VaultPageProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CoreDiscoveryEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [vaultLarsJobs, setVaultLarsJobs] = useState<LarsJobSummary[]>([]);
+  const [showVaultLars, setShowVaultLars] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [documentOverrides, setDocumentOverrides] = useState<Record<string, CoreMatterDocument[]>>({});
@@ -449,6 +715,20 @@ export function VaultPage({ matters }: VaultPageProps) {
   useEffect(() => {
     void refreshVaultDocuments();
   }, []);
+
+  useEffect(() => {
+    if (!matterId) {
+      setVaultLarsJobs([]);
+      return;
+    }
+    let cancelled = false;
+    listLarsJobs(15, undefined, { matterId }).then((response) => {
+      if (!cancelled && response.ok && response.data) setVaultLarsJobs(response.data.jobs || []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [matterId]);
 
   async function upload() {
     if (!file) return;
@@ -566,6 +846,7 @@ export function VaultPage({ matters }: VaultPageProps) {
               </div>
             <p className="mt-1 text-sm leading-6 text-slate-500">
                 Securely store, organize, and route legal documents into Mercy and Research while keeping matter context and attorney review visible.
+                Vault is also the source scope for {LARS_FULL_NAME} (LARS) assignments — entire matter Vault, selected folders/documents, official D.C. sources, and attorney-provided materials. Source usage is traced in the assignment workspace (ALTS path, finding, claim, citation, contradiction, work-product section). The full ALTS controller stays outside Vault.
             </p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:min-w-[460px]">
@@ -574,6 +855,43 @@ export function VaultPage({ matters }: VaultPageProps) {
               <VaultMetric label="Processing" value={processingCount} />
               <VaultMetric label="Limited" value={limitedCount} />
             </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">LARS source scope for selected matter</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {matterId
+                    ? `${vaultLarsJobs.length} assignment(s) on this matter · ${matterLinkedCount} matter-linked document(s)`
+                    : "Select a matter to scope Vault documents into LARS."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVaultLars((open) => !open)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
+              >
+                {showVaultLars ? "Hide LARS" : "Start LARS from Vault"}
+              </button>
+            </div>
+            {showVaultLars && matterId ? (
+              <div className="mt-4">
+                <AssignmentComposer
+                  matters={matters}
+                  initialMatterId={matterId}
+                  surfaceContext="vault"
+                  compact
+                  title="Start assignment using Vault sources"
+                  description="Selected matter documents become the LARS source scope with official D.C. sources preferred."
+                  onCancel={() => setShowVaultLars(false)}
+                />
+              </div>
+            ) : null}
+            {vaultLarsJobs.length ? (
+              <div className="mt-4">
+                <AssignmentStatusList jobs={vaultLarsJobs.slice(0, 4)} compact />
+              </div>
+            ) : null}
           </div>
           <div className="mb-5 grid gap-3 md:grid-cols-3">
             <VaultCue icon={FileText} label="Repository" text="Keep uploaded files tied to matter context." />

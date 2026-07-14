@@ -21,6 +21,42 @@ CRITICAL_INPUTS = (
     "query",
 )
 
+# Research depth modes map to real LARS budget envelopes (Custom uses explicit overrides).
+DEPTH_BUDGET_PROFILES: dict[str, dict[str, Any]] = {
+    "focused": {
+        "max_tree_depth": 3,
+        "max_active_branches": 3,
+        "max_children_per_node": 2,
+        "max_revisions_per_node": 1,
+        "max_model_calls": 12,
+        "max_tool_calls": 18,
+        "max_duration_seconds": 600,
+        "max_cost_usd": 1.5,
+        "max_unresolved_contradictions": 1,
+        "max_retry_count": 2,
+        "max_steps_per_tick": 3,
+    },
+    "standard": dict(DEFAULT_BUDGETS),
+    "deep": {
+        "max_tree_depth": 10,
+        "max_active_branches": 14,
+        "max_children_per_node": 5,
+        "max_revisions_per_node": 5,
+        "max_model_calls": 120,
+        "max_tool_calls": 180,
+        "max_duration_seconds": 14400,
+        "max_cost_usd": 25.0,
+        "max_unresolved_contradictions": 4,
+        "max_retry_count": 4,
+        "max_steps_per_tick": 6,
+    },
+    "custom": dict(DEFAULT_BUDGETS),
+}
+
+
+def depth_budget_profiles() -> dict[str, dict[str, Any]]:
+    return {key: dict(value) for key, value in DEPTH_BUDGET_PROFILES.items()}
+
 
 def _string_list(value: Any) -> list[str]:
     if value is None:
@@ -34,7 +70,10 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _budget_from_payload(payload: dict[str, Any]) -> BudgetState:
-    budgets = dict(DEFAULT_BUDGETS)
+    depth = str(payload.get("research_depth") or "standard").strip().lower()
+    if depth not in DEPTH_BUDGET_PROFILES:
+        depth = "standard"
+    budgets = dict(DEPTH_BUDGET_PROFILES.get(depth) or DEFAULT_BUDGETS)
     for key in DEFAULT_BUDGETS:
         if key in payload and payload[key] is not None:
             budgets[key] = payload[key]
