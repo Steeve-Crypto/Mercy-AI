@@ -824,6 +824,20 @@ def product_capabilities() -> dict[str, Any]:
             "retrieval_backbone": "dc-knowledge-rag-1.0",
             "eval_backbone": "ragas-eval-1.0",
             "agent_network": "agent-network-langgraph-1.0",
+            "lars_endpoint": "/v1/lars/jobs",
+            "lars_status_endpoint": "/v1/lars/status",
+            "alts_moe": "mercy-alts-moe-1.0",
+        },
+        "lars": {
+            "version": "mercy-lars-1.0",
+            "alts_version": "mercy-alts-1.0",
+            "alts_moe_version": "mercy-alts-moe-1.0",
+            "description": "Legal Autonomous Research System with Adaptive Legal Tree Search over the existing MoE agent network.",
+            "endpoints": {
+                "status": "/v1/lars/status",
+                "compile": "/v1/lars/assignments/compile",
+                "jobs": "/v1/lars/jobs",
+            },
         },
         "observability": {
             "version": "mercy-observability-1.0",

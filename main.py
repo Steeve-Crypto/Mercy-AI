@@ -19,6 +19,22 @@ from pydantic import BaseModel, Field
 
 from bridge import draft_from_facts, run_discovery
 from auth_context import TenantUser, get_current_tenant_user
+from lars import (
+    LARS_VERSION,
+    approve_gate as lars_approve_gate,
+    cancel_job as lars_cancel_job,
+    compile_legal_assignment,
+    create_and_start_job as lars_create_and_start_job,
+    get_job as lars_get_job,
+    list_jobs as lars_list_jobs,
+    pause_job as lars_pause_job,
+    resume_job as lars_resume_job,
+    run_job_steps as lars_run_job_steps,
+    status_payload as lars_status_payload,
+    validate_assignment as lars_validate_assignment,
+)
+from lars.models import ALTS_MOE_VERSION, ALTS_VERSION
+from lars.store import lars_store_status
 from beta_launch import (
     accept_invite,
     beta_analytics,
@@ -322,6 +338,41 @@ class DraftRequest(BaseModel):
     matter_id: str | None = Field(None, description="Optional workspace matter identifier.")
     surface_context: str = Field("core", description="Calling surface for route metadata.")
     user_type: str = Field("solo", description="User type used by the MoE router.")
+
+
+class LarsAssignmentRequest(BaseModel):
+    query: str | None = Field(None, description="Attorney instructions or research request.")
+    instructions: str | None = Field(None, description="Alias for query.")
+    matter_id: str | None = None
+    legal_questions: list[str] | None = None
+    deliverable_type: str = "research_memorandum"
+    jurisdiction: str = "District of Columbia"
+    factual_assumptions: list[str] | None = None
+    disputed_facts: list[str] | None = None
+    selected_document_ids: list[str] | None = None
+    research_depth: str = "standard"
+    official_source_preference: bool = True
+    require_adverse_authority_review: bool = True
+    approval_checkpoints: list[str] | None = None
+    max_model_calls: int | None = None
+    max_tool_calls: int | None = None
+    max_duration_seconds: int | None = None
+    max_cost_usd: float | None = None
+    max_active_branches: int | None = None
+    force_start: bool = False
+    auto_approve_assignment: bool = False
+    surface_context: str = "web"
+    allow_constrained_assumptions: bool = True
+
+
+class LarsGateDecisionRequest(BaseModel):
+    decision: str = Field(..., description="approved or rejected")
+    notes: str | None = None
+    continue_steps: int | None = Field(4, description="Steps to run after approval when no gates remain.")
+
+
+class LarsStepsRequest(BaseModel):
+    max_steps: int = Field(4, ge=1, le=20)
 
 
 class MatterCreateRequest(BaseModel):
@@ -1524,6 +1575,195 @@ async def create_observability_trace(
 async def agent_skills(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
     trace_event(name="agent_skills_manifest_view", surface_context="core_agent", category="auth", metadata=_auth_metadata(tenant_user))
     return mcp_skill_manifest()
+
+
+@app.post("/v1/lars/assignments/compile")
+async def lars_compile_assignment(
+    request: LarsAssignmentRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    assignment = compile_legal_assignment(
+        request.model_dump(exclude_none=True),
+        tenant_id=tenant_user.tenant_id,
+        user_id=tenant_user.user_id,
+        firm_id=tenant_user.firm_id,
+    )
+    validation = lars_validate_assignment(assignment)
+    return {
+        "lars_version": LARS_VERSION,
+        "alts_version": ALTS_VERSION,
+        "alts_moe_version": ALTS_MOE_VERSION,
+        "assignment": assignment.to_dict(),
+        "validation": validation,
+        "store": lars_store_status(),
+        "attorney_review_required": True,
+    }
+
+
+@app.post("/v1/lars/jobs")
+async def lars_create_job(
+    request: LarsAssignmentRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    if request.matter_id:
+        try:
+            _scoped_matter_context(tenant_user, matter_id=request.matter_id, surface_context="lars")
+        except MatterTenantAccessError as exc:
+            raise HTTPException(status_code=404, detail="Matter not found.") from exc
+    payload = request.model_dump(exclude_none=True)
+    # Local/dev can auto-approve assignment to exercise the tree; production paths keep the gate.
+    auto_approve = bool(request.auto_approve_assignment) or (
+        get_config().mercy_env == "local" and get_config().mercy_auth_mode in {"dev", "test"}
+    )
+    result = lars_create_and_start_job(
+        payload,
+        tenant_id=tenant_user.tenant_id,
+        user_id=tenant_user.user_id,
+        firm_id=tenant_user.firm_id,
+        roles=list(tenant_user.roles),
+        auto_approve_assignment=auto_approve,
+    )
+    return result
+
+
+@app.get("/v1/lars/jobs")
+async def lars_list_jobs_endpoint(
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+    limit: int = Query(50, ge=1, le=200),
+) -> dict[str, Any]:
+    jobs = lars_list_jobs(tenant_id=tenant_user.tenant_id, limit=limit)
+    return {
+        "lars_version": LARS_VERSION,
+        "jobs": [
+            {
+                "job_id": job.job_id,
+                "status": job.status,
+                "matter_id": job.assignment.matter_id,
+                "query": job.assignment.query,
+                "deliverable_type": job.assignment.deliverable_type,
+                "updated_at": job.updated_at,
+                "pending_gates": [gate.to_dict() for gate in job.gates if gate.status == "pending"],
+                "artifact_count": len(job.artifacts),
+            }
+            for job in jobs
+        ],
+        "store": lars_store_status(),
+    }
+
+
+@app.get("/v1/lars/jobs/{job_id}")
+async def lars_get_job_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    job = lars_get_job(job_id, tenant_id=tenant_user.tenant_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="LARS job not found.")
+    return lars_status_payload(job)
+
+
+@app.post("/v1/lars/jobs/{job_id}/steps")
+async def lars_run_steps_endpoint(
+    job_id: str,
+    request: LarsStepsRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_run_job_steps(job_id, tenant_id=tenant_user.tenant_id, max_steps=request.max_steps)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/pause")
+async def lars_pause_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_pause_job(job_id, tenant_id=tenant_user.tenant_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/resume")
+async def lars_resume_endpoint(
+    job_id: str,
+    request: LarsStepsRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_resume_job(job_id, tenant_id=tenant_user.tenant_id, steps=request.max_steps)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/cancel")
+async def lars_cancel_endpoint(
+    job_id: str,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_cancel_job(job_id, tenant_id=tenant_user.tenant_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LARS job not found.") from exc
+
+
+@app.post("/v1/lars/jobs/{job_id}/gates/{gate_id}")
+async def lars_gate_endpoint(
+    job_id: str,
+    gate_id: str,
+    request: LarsGateDecisionRequest,
+    tenant_user: TenantUser = Depends(get_current_tenant_user),
+) -> dict[str, Any]:
+    try:
+        return lars_approve_gate(
+            job_id,
+            tenant_id=tenant_user.tenant_id,
+            gate_id=gate_id,
+            decision=request.decision,
+            user_id=tenant_user.user_id,
+            notes=request.notes,
+            continue_steps=request.continue_steps,
+        )
+    except KeyError as exc:
+        detail = "LARS job not found." if str(exc) == "'job_not_found'" or str(exc) == "job_not_found" else "Gate not found."
+        raise HTTPException(status_code=404, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/lars/status")
+async def lars_status_endpoint(tenant_user: TenantUser = Depends(get_current_tenant_user)) -> dict[str, Any]:
+    return {
+        "lars_version": LARS_VERSION,
+        "alts_version": ALTS_VERSION,
+        "alts_moe_version": ALTS_MOE_VERSION,
+        "store": lars_store_status(),
+        "tenant_id": tenant_user.tenant_id,
+        "firm_id": tenant_user.firm_id,
+        "endpoints": {
+            "compile": "/v1/lars/assignments/compile",
+            "jobs": "/v1/lars/jobs",
+            "job": "/v1/lars/jobs/{job_id}",
+            "steps": "/v1/lars/jobs/{job_id}/steps",
+            "pause": "/v1/lars/jobs/{job_id}/pause",
+            "resume": "/v1/lars/jobs/{job_id}/resume",
+            "cancel": "/v1/lars/jobs/{job_id}/cancel",
+            "gates": "/v1/lars/jobs/{job_id}/gates/{gate_id}",
+        },
+        "division_of_responsibility": {
+            "alts": "Chooses research trajectory (expand, deepen, challenge, revise, merge, prune, synthesize, verify).",
+            "moe": "Selects experts, models, tools, and capabilities for each node task.",
+            "langgraph_agents": "Execute expert ReACT cycles through the existing agent network.",
+            "verification": "Citation, contradiction, and guardrail systems gate completion.",
+            "attorney": "Final control through durable approval gates.",
+        },
+        "attorney_review_required": True,
+    }
 
 
 @app.post("/v1/agent/execute")

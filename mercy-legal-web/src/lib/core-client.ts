@@ -1218,3 +1218,97 @@ export async function uploadDiscoveryDocument(payload: {
     auth,
   );
 }
+
+export type LarsJobSummary = {
+  job_id: string;
+  status: string;
+  matter_id?: string | null;
+  query: string;
+  deliverable_type: string;
+  updated_at: string;
+  pending_gates?: Array<Record<string, unknown>>;
+  artifact_count?: number;
+};
+
+export type LarsJobEnvelope = {
+  mode: string;
+  lars_version: string;
+  alts_version: string;
+  alts_moe_version: string;
+  job: Record<string, unknown>;
+  controller?: Record<string, unknown>;
+  pending_gates?: Array<Record<string, unknown>>;
+  unresolved_contradictions?: Array<Record<string, unknown>>;
+  attorney_review_required?: boolean;
+  store?: Record<string, unknown>;
+};
+
+export async function listLarsJobs(limit = 50, auth?: CoreAuthContext): Promise<CoreClientResult<{ jobs: LarsJobSummary[]; lars_version: string }>> {
+  return coreFetch<{ jobs: LarsJobSummary[]; lars_version: string }>(`/v1/lars/jobs?limit=${limit}`, { method: "GET" }, auth);
+}
+
+export async function getLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(`/v1/lars/jobs/${encodeURIComponent(jobId)}`, { method: "GET" }, auth);
+}
+
+export async function createLarsJob(payload: Record<string, unknown>, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(
+    "/v1/lars/jobs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ surface_context: "mercy_legal_web", ...payload }),
+    },
+    auth,
+  );
+}
+
+export async function runLarsJobSteps(jobId: string, maxSteps = 4, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/steps`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_steps: maxSteps }),
+    },
+    auth,
+  );
+}
+
+export async function pauseLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(`/v1/lars/jobs/${encodeURIComponent(jobId)}/pause`, { method: "POST" }, auth);
+}
+
+export async function resumeLarsJob(jobId: string, maxSteps = 4, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/resume`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_steps: maxSteps }),
+    },
+    auth,
+  );
+}
+
+export async function cancelLarsJob(jobId: string, auth?: CoreAuthContext): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(`/v1/lars/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }, auth);
+}
+
+export async function decideLarsGate(
+  jobId: string,
+  gateId: string,
+  decision: "approved" | "rejected",
+  notes?: string,
+  auth?: CoreAuthContext,
+): Promise<CoreClientResult<LarsJobEnvelope>> {
+  return coreFetch<LarsJobEnvelope>(
+    `/v1/lars/jobs/${encodeURIComponent(jobId)}/gates/${encodeURIComponent(gateId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, notes, continue_steps: 4 }),
+    },
+    auth,
+  );
+}

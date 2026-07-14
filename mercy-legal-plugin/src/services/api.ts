@@ -1436,5 +1436,34 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-  }
+  },
+
+  /** Mercy LARS durable research jobs — same tenant/auth model as other core routes. */
+  async listLarsJobs(limit = 20): Promise<{ jobs: Array<Record<string, unknown>>; lars_version?: string } | null> {
+    try {
+      return await coreFetch<{ jobs: Array<Record<string, unknown>>; lars_version?: string }>(`/v1/lars/jobs?limit=${limit}`);
+    } catch {
+      return null;
+    }
+  },
+
+  async createLarsJob(payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>("/v1/lars/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ surface_context: "office_addin", ...payload }),
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  async getLarsJob(jobId: string): Promise<Record<string, unknown> | null> {
+    try {
+      return await coreFetch<Record<string, unknown>>(`/v1/lars/jobs/${encodeURIComponent(jobId)}`);
+    } catch {
+      return null;
+    }
+  },
 };

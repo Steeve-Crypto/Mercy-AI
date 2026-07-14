@@ -6,7 +6,7 @@ description: "Active Kanban backlog for specs/002-legal-ai-integration"
 
 **Feature Branch**: `002-legal-ai-integration`
 **Primary Source Of Truth**: [spec.md](./spec.md) and [plan.md](./plan.md)
-**Current Priority**: Frontend productization and beta readiness. The shared FastAPI core, Agent X agent network, D.C. RAG, RAGAS regression, Office add-in integration, beta infrastructure, security controls, and monitoring are substantially implemented for local/beta use. The main remaining blocker is turning the stable-but-basic Next.js frontend into a polished authenticated attorney product with a coherent matter workflow.
+**Current Priority**: Hosted beta activation plus long-horizon legal intelligence. Shared FastAPI core, MoE, agents, RAG, web productization, and Office surfaces remain the foundation. **Mercy LARS / ALTS-MoE** (`lars/`, `/v1/lars/*`, web `/lars`) adds durable assignment compilation, adaptive legal tree search, MoE-backed node execution, attorney gates, and tenant-isolated job state without replacing existing routers or agents.
 
 ## Current State Snapshot
 

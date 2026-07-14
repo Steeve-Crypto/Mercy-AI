@@ -40,6 +40,12 @@ Update - 2026-07-13 (production auth claim hardening):
 - Automated regressions cover metadata-only and conflicting-metadata attacks, inactive-account override attempts, trusted tenant/firm precedence, platform-admin denial, malformed claims, Stripe customer provenance, and safe redirects. Static assertions cover the production Core proxy wiring; hosted behavioral proxy verification remains part of PD047. The targeted Core/web auth suite and pure Playwright claim tests pass.
 - Current paid signup and Microsoft-issued Mercy sessions already write canonical `app_metadata`. Before live beta, legacy users must be backfilled and forced to refresh/re-authenticate; live Stripe suspension/role-removal revocation timing still requires hosted verification.
 
+Update - 2026-07-14 (Mercy LARS / ALTS-MoE foundation):
+
+- Added durable Legal Autonomous Research System modules under `lars/` with assignment compiler, ALTS tree controller, structured branch evaluator, MoE/agent bridge, attorney approval gates, budget limits, and tenant-scoped job store (`mercy_lars_jobs` or local memory).
+- API surface: `/v1/lars/status`, compile, jobs CRUD lifecycle (steps/pause/resume/cancel/gates). Web Workspace route `/lars` and sidebar entry. Docs: `docs/product/lars-alts-moe.md`.
+- MoE router and LangGraph agents remain the expert/model/tool layer; ALTS only selects trajectory.
+
 Update - 2026-07-14 (premium web UI redesign pass):
 
 - Unified Mercy design tokens (navy/gold, light/dark), shared surface primitives, role-aware workspace chrome (solo vs firm vs platform admin), mobile navigation, and marketing shell polish across the Next.js web surface.

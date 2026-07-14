@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  TreePine,
   UserRound,
   UsersRound,
   X,
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/matters", label: "Matters", icon: BriefcaseBusiness, aliases: [] },
   { href: "/vault", label: "Vault", icon: Files, aliases: [] },
   { href: "/research", label: "Research", icon: Search, aliases: [] },
+  { href: "/lars", label: "LARS", icon: TreePine, aliases: [] },
   { href: "/templates", label: "Templates", icon: BookOpenText, aliases: [] },
   { href: "/history", label: "History", icon: Clock3, aliases: [] },
 ] as const;
