@@ -59,7 +59,9 @@ export function AuthShell({ mode }: AuthShellProps) {
       setError(response.error.message);
       return;
     }
-    router.push(next as Route);
+    // Prefer dashboard for local work; honor safe internal next paths.
+    const destination = next && next !== "/dashboard" ? next : "/dashboard";
+    router.push(destination as Route);
     router.refresh();
   }
 

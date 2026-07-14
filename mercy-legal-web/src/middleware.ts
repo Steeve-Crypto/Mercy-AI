@@ -2,7 +2,21 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { hasTrustedPlatformAdminAccess, hasTrustedWorkspaceAccess } from "@/lib/auth/trusted-claims";
 
-const PROTECTED_PREFIXES = ["/mercy", "/dashboard", "/chat", "/history", "/matters", "/templates", "/intake", "/research", "/vault", "/settings", "/billing", "/admin"];
+const PROTECTED_PREFIXES = [
+  "/mercy",
+  "/dashboard",
+  "/chat",
+  "/history",
+  "/matters",
+  "/templates",
+  "/intake",
+  "/research",
+  "/vault",
+  "/settings",
+  "/billing",
+  "/admin",
+  "/lars",
+];
 
 function supabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -17,14 +31,19 @@ export async function middleware(request: NextRequest) {
   if (path === "/api/stripe/webhook") {
     return NextResponse.next();
   }
+
   const protectedRoute = PROTECTED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
   if (!protectedRoute) {
     return NextResponse.next();
   }
+
+  // Explicit local/dev mode must never lock a developer out of their own project.
+  // Supabase keys may still be present for optional real-auth testing.
+  if (localDevAuthBypassConfigured()) {
+    return NextResponse.next();
+  }
+
   if (!supabaseConfigured()) {
-    if (localDevAuthBypassConfigured()) {
-      return NextResponse.next();
-    }
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/sign-in";
     redirectUrl.searchParams.set("next", `${path}${request.nextUrl.search}`);
@@ -68,10 +87,12 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!hasTrustedWorkspaceAccess(user)) {
+    // Authenticated but not provisioned: send to signup/activation, not a login loop.
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/sign-up";
     redirectUrl.searchParams.set("next", `${path}${request.nextUrl.search}`);
     redirectUrl.searchParams.set("subscription", "required");
+    redirectUrl.searchParams.set("auth", "workspace-claims-required");
     return NextResponse.redirect(redirectUrl);
   }
 

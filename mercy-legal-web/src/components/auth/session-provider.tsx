@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { trustedAccountClaims } from "@/lib/auth/trusted-claims";
+import { hasTrustedWorkspaceAccess, trustedAccountClaims } from "@/lib/auth/trusted-claims";
 
 type MercySession = {
   userId: string;
@@ -34,7 +34,7 @@ const LOCAL_DEV_SESSION: MercySession = {
   name: "Mercy Attorney",
   tenantId: process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
   firmId: process.env.NEXT_PUBLIC_MERCY_FIRM_ID || null,
-  roles: ["attorney"],
+  roles: (process.env.NEXT_PUBLIC_MERCY_ROLES || "attorney,admin").split(",").map((role) => role.trim()).filter(Boolean),
   firm: "Mercy Legal AI Demo Firm",
   dcBarNumber: null,
   accessToken: process.env.NEXT_PUBLIC_MERCY_API_TOKEN || null,
@@ -59,15 +59,17 @@ const SessionContext = createContext<SessionContextValue>({
   signOut: async () => undefined,
 });
 
-function sessionFromSupabase(user: User, accessToken: string | null): MercySession {
+function sessionFromSupabase(user: User, accessToken: string | null, allowLocalFallback: boolean): MercySession {
   const claims = trustedAccountClaims(user);
+  const tenantId = claims.tenantId ?? claims.firmId ?? (allowLocalFallback ? LOCAL_DEV_SESSION.tenantId : "");
+  const roles = claims.roles.length ? claims.roles : allowLocalFallback ? LOCAL_DEV_SESSION.roles : [];
   return {
     userId: user.id,
     email: user.email ?? null,
     name: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Mercy Attorney"),
-    tenantId: claims.tenantId ?? claims.firmId ?? "",
-    firmId: claims.firmId,
-    roles: claims.roles,
+    tenantId,
+    firmId: claims.firmId ?? (allowLocalFallback ? LOCAL_DEV_SESSION.firmId : null),
+    roles,
     firm: typeof user.user_metadata?.firm_name === "string" ? user.user_metadata.firm_name : null,
     dcBarNumber:
       typeof user.user_metadata?.dc_bar_number === "string"
@@ -111,6 +113,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const configured = isSupabaseConfigured();
   const localDevDefaults = localDevAuthDefaultsEnabled();
   const [session, setSession] = useState<MercySession>(localDevDefaults ? LOCAL_DEV_SESSION : EMPTY_SESSION);
+  // Local/dev should not block the UI on auth loading when we already have defaults.
   const [loading, setLoading] = useState(configured && !localDevDefaults);
 
   useEffect(() => {
@@ -124,6 +127,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
+      if (localDevDefaults) {
+        setSession(LOCAL_DEV_SESSION);
+        persistMercyContext(LOCAL_DEV_SESSION, true);
+      }
       setLoading(false);
       return;
     }
@@ -136,9 +143,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.getUser(accessToken);
       if (!mounted || revision !== authRevision) return;
       if (!error && data.user) {
-        const nextSession = sessionFromSupabase(data.user, null);
-        setSession(nextSession);
-        persistMercyContext(nextSession, false);
+        const nextSession = sessionFromSupabase(data.user, accessToken || null, localDevDefaults);
+        // In production, only keep a session that has trusted workspace claims.
+        if (!localDevDefaults && !hasTrustedWorkspaceAccess(data.user)) {
+          setSession(EMPTY_SESSION);
+          clearMercyContext();
+        } else {
+          setSession(nextSession);
+          persistMercyContext(nextSession, false);
+        }
+      } else if (localDevDefaults) {
+        setSession(LOCAL_DEV_SESSION);
+        persistMercyContext(LOCAL_DEV_SESSION, true);
       } else {
         setSession(EMPTY_SESSION);
         clearMercyContext();
@@ -151,8 +167,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, authSession) => {
       if (!authSession?.user) {
         authRevision += 1;
-        setSession(EMPTY_SESSION);
-        clearMercyContext();
+        if (localDevDefaults) {
+          setSession(LOCAL_DEV_SESSION);
+          persistMercyContext(LOCAL_DEV_SESSION, true);
+        } else {
+          setSession(EMPTY_SESSION);
+          clearMercyContext();
+        }
         setLoading(false);
         return;
       }
@@ -174,10 +195,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         const supabase = createSupabaseBrowserClient();
         await supabase?.auth.signOut();
         clearMercyContext();
+        if (localDevDefaults) {
+          window.location.href = "/dashboard";
+          return;
+        }
         window.location.href = "/sign-in";
       },
     }),
-    [configured, loading, session],
+    [configured, loading, localDevDefaults, session],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

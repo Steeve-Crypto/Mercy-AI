@@ -24,23 +24,39 @@ function localDevAuthDefaultsEnabled() {
   return process.env.MERCY_ENV === "local" && process.env.MERCY_AUTH_MODE === "dev";
 }
 
-function accountNameFromUser(user: User): string | null {
-  return String(
-    user.user_metadata?.firm_name ?? user.user_metadata?.firmName ?? "",
-  ).trim() || null;
+function localDevSessionUser(): MercySessionUser {
+  return {
+    id: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
+    email: null,
+    name: "Mercy Attorney",
+    tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
+    firmId: process.env.MERCY_FIRM_ID || process.env.NEXT_PUBLIC_MERCY_FIRM_ID || null,
+    roles: (process.env.MERCY_ROLES || "attorney,admin").split(",").map((role) => role.trim()).filter(Boolean),
+    stripeCustomerId: process.env.STRIPE_CUSTOMER_ID || null,
+  };
 }
 
-export function mercyUserFromSupabaseUser(user: User): MercySessionUser {
+function accountNameFromUser(user: User): string | null {
+  return String(user.user_metadata?.firm_name ?? user.user_metadata?.firmName ?? "").trim() || null;
+}
+
+export function mercyUserFromSupabaseUser(user: User, options?: { allowLocalFallback?: boolean }): MercySessionUser {
   const claims = trustedAccountClaims(user);
+  const local = localDevSessionUser();
+  const allowLocalFallback = Boolean(options?.allowLocalFallback && localDevAuthDefaultsEnabled());
+
+  const tenantId = claims.tenantId ?? claims.firmId ?? (allowLocalFallback ? local.tenantId : "");
+  const roles = claims.roles.length ? claims.roles : allowLocalFallback ? local.roles : [];
+
   return {
     id: user.id,
     email: user.email ?? null,
     name: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Mercy Attorney"),
     // Tenant/workspace, firm/account, and role authorization is server-owned
     // Supabase app_metadata. User metadata remains display-only.
-    tenantId: claims.tenantId ?? claims.firmId ?? "",
-    firmId: claims.firmId,
-    roles: claims.roles,
+    tenantId,
+    firmId: claims.firmId ?? (allowLocalFallback ? local.firmId : null),
+    roles,
     stripeCustomerId: claims.stripeCustomerId,
     firm: accountNameFromUser(user),
     dcBarNumber:
@@ -52,7 +68,7 @@ export function mercyUserFromSupabaseUser(user: User): MercySessionUser {
   };
 }
 
-async function getTrustedSupabaseSession(): Promise<{ user: User; accessToken: string } | null> {
+async function getSupabaseBrowserSession(): Promise<{ user: User; accessToken: string } | null> {
   if (!supabaseServerConfigured()) return null;
 
   const cookieStore = await cookies();
@@ -72,47 +88,59 @@ async function getTrustedSupabaseSession(): Promise<{ user: User; accessToken: s
   ]);
   const user = userResult.user;
   const session = sessionResult.session;
-  if (!user || !session || !hasTrustedWorkspaceAccess(user)) return null;
+  if (!user || !session) return null;
   return { user, accessToken: session.access_token };
 }
 
 export async function getServerMercySessionUser(): Promise<MercySessionUser | null> {
-  if (!supabaseServerConfigured()) {
-    if (!localDevAuthDefaultsEnabled()) return null;
-    return {
-      id: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
-      email: null,
-      name: "Mercy Attorney",
-      tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
-      firmId: process.env.MERCY_FIRM_ID || process.env.NEXT_PUBLIC_MERCY_FIRM_ID || null,
-      roles: (process.env.MERCY_ROLES || "attorney").split(",").map((role) => role.trim()).filter(Boolean),
-      stripeCustomerId: process.env.STRIPE_CUSTOMER_ID || null,
-    };
+  if (localDevAuthDefaultsEnabled()) {
+    const supabaseSession = await getSupabaseBrowserSession();
+    if (supabaseSession) {
+      return mercyUserFromSupabaseUser(supabaseSession.user, { allowLocalFallback: true });
+    }
+    return localDevSessionUser();
   }
 
-  const trustedSession = await getTrustedSupabaseSession();
-  return trustedSession ? mercyUserFromSupabaseUser(trustedSession.user) : null;
+  if (!supabaseServerConfigured()) {
+    return null;
+  }
+
+  const supabaseSession = await getSupabaseBrowserSession();
+  if (!supabaseSession || !hasTrustedWorkspaceAccess(supabaseSession.user)) return null;
+  return mercyUserFromSupabaseUser(supabaseSession.user);
 }
 
 export async function getServerMercyAuthContext(): Promise<CoreAuthContext> {
-  if (!supabaseServerConfigured()) {
-    if (!localDevAuthDefaultsEnabled()) {
-      return {};
+  if (localDevAuthDefaultsEnabled()) {
+    const supabaseSession = await getSupabaseBrowserSession();
+    if (supabaseSession) {
+      const mercyUser = mercyUserFromSupabaseUser(supabaseSession.user, { allowLocalFallback: true });
+      return {
+        token: supabaseSession.accessToken || process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
+        tenantId: mercyUser.tenantId,
+        firmId: mercyUser.firmId,
+        userId: mercyUser.id,
+        roles: mercyUser.roles.join(","),
+      };
     }
     return {
       token: process.env.MERCY_CORE_API_TOKEN || process.env.MERCY_API_TOKEN,
       tenantId: process.env.MERCY_TENANT_ID || process.env.NEXT_PUBLIC_MERCY_TENANT_ID || "local-dev-tenant",
       firmId: process.env.MERCY_FIRM_ID || process.env.NEXT_PUBLIC_MERCY_FIRM_ID,
       userId: process.env.MERCY_USER_ID || process.env.NEXT_PUBLIC_MERCY_USER_ID || "local-web-server",
-      roles: process.env.MERCY_ROLES || "attorney",
+      roles: process.env.MERCY_ROLES || "attorney,admin",
     };
   }
 
-  const trustedSession = await getTrustedSupabaseSession();
-  if (!trustedSession) return {};
-  const mercyUser = mercyUserFromSupabaseUser(trustedSession.user);
+  if (!supabaseServerConfigured()) {
+    return {};
+  }
+
+  const supabaseSession = await getSupabaseBrowserSession();
+  if (!supabaseSession || !hasTrustedWorkspaceAccess(supabaseSession.user)) return {};
+  const mercyUser = mercyUserFromSupabaseUser(supabaseSession.user);
   return {
-    token: trustedSession.accessToken,
+    token: supabaseSession.accessToken,
     tenantId: mercyUser.tenantId,
     firmId: mercyUser.firmId,
     userId: mercyUser.id,
