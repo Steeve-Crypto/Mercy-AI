@@ -25,21 +25,21 @@ function priceFor(accountType: AccountType, seats: number) {
 
 export function SignupPlanSelection() {
   return (
-    <main className="min-h-screen bg-[#f7f8fb] px-6 py-10 text-slate-950">
+    <main className="min-h-screen bg-[#f5f2eb] px-6 py-10 text-[#152033]">
       <div className="mx-auto max-w-5xl">
-        <Button asChild variant="ghost">
+        <Button asChild variant="ghost" className="text-[#152033] hover:bg-black/5">
           <Link href="/">
             <ArrowLeft />
-            Back to Mercy.ai
+            Back to Mercy
           </Link>
         </Button>
         <div className="mt-10 max-w-3xl">
           <Stepper activeStep="Plan" />
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#a37f12]">Beta signup</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-normal text-mercy-navy md:text-5xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6b16]">Beta signup</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-[#0b1426] md:text-5xl">
             Choose your Mercy workspace.
           </h1>
-          <p className="mt-5 text-lg leading-8 text-slate-600">
+          <p className="mt-5 text-lg leading-8 text-[#5c6b84]">
             Mercy assists attorney-supervised legal work. Attorneys remain responsible for reviewing outputs.
           </p>
         </div>
@@ -71,13 +71,17 @@ export function SignupPlanSelection() {
 function Stepper({ activeStep }: { activeStep: "Plan" | "Register" | "Payment" | "Confirmation" }) {
   const activeIndex = steps.indexOf(activeStep);
   return (
-    <ol className="mb-8 grid gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-4">
+    <ol className="mb-8 grid gap-2 text-xs font-semibold text-[#5c6b84] sm:grid-cols-4">
       {steps.map((step, index) => (
         <li
           key={step}
-          className={`rounded-md border px-3 py-2 ${index <= activeIndex ? "border-[#d4af37]/50 bg-[#fff8df] text-mercy-navy" : "border-slate-200 bg-white"}`}
+          className={`rounded-md border px-3 py-2 ${
+            index <= activeIndex
+              ? "border-[#d4af37]/55 bg-[#f8f1df] text-[#0b1426]"
+              : "border-[#e5e0d4] bg-white text-[#5c6b84]"
+          }`}
         >
-          <span className="mr-2 text-[#9b740e]">{index + 1}</span>
+          <span className="mr-2 text-[#8a6b16]">{index + 1}</span>
           {step}
         </li>
       ))}
@@ -103,20 +107,20 @@ function PlanCard({
   cta: string;
 }) {
   return (
-    <section className="rounded-lg border bg-white p-7 shadow-[0_18px_60px_rgba(10,20,40,0.06)]">
-      <div className="grid size-12 place-items-center rounded-md bg-[#f5ecd0] text-[#9b740e]">{icon}</div>
-      <h2 className="mt-5 text-2xl font-semibold text-mercy-navy">{title}</h2>
-      <p className="mt-2 text-3xl font-semibold text-mercy-navy">{price}</p>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{detail}</p>
+    <section className="rounded-2xl border border-[#e5e0d4] bg-white p-7 shadow-[0_18px_60px_rgba(11,20,38,0.06)]">
+      <div className="grid size-12 place-items-center rounded-lg border border-[#eadfbf] bg-[#f8f1df] text-[#8a6b16]">{icon}</div>
+      <h2 className="mt-5 text-2xl font-semibold tracking-tight text-[#0b1426]">{title}</h2>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-[#0b1426]">{price}</p>
+      <p className="mt-4 text-sm leading-6 text-[#5c6b84]">{detail}</p>
       <ul className="mt-6 space-y-3">
         {points.map((point) => (
-          <li key={point} className="flex items-center gap-3 text-sm text-slate-700">
-            <CheckCircle2 className="size-4 text-[#a37f12]" />
+          <li key={point} className="flex items-center gap-3 text-sm text-[#152033]">
+            <CheckCircle2 className="size-4 shrink-0 text-[#8a6b16]" />
             {point}
           </li>
         ))}
       </ul>
-      <Button asChild variant="gold" className="mt-7 w-full">
+      <Button asChild className="mt-7 w-full bg-[#0b1426] text-white hover:bg-[#15233d]">
         <Link href={href}>{cta}</Link>
       </Button>
     </section>
@@ -212,26 +216,26 @@ export function SignupForm({ accountType }: SignupFormProps) {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f7f8fb] lg:grid-cols-[0.82fr_1.18fr]">
-      <section className="relative hidden overflow-hidden bg-mercy-navy p-10 text-white lg:block">
-        <div className="navy-grid absolute inset-0 opacity-60" aria-hidden />
+    <main className="grid min-h-screen bg-[#f5f2eb] text-[#152033] lg:grid-cols-[0.82fr_1.18fr]">
+      <section className="relative hidden overflow-hidden bg-[#0b1426] p-10 text-white lg:block">
+        <div className="navy-grid absolute inset-0 opacity-40" aria-hidden />
         <Link href="/" className="relative z-10 flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-md bg-white text-mercy-navy">
+          <span className="grid size-10 place-items-center rounded-md bg-white text-[#0b1426]">
             <Scale className="size-5" />
           </span>
-          <span className="text-lg font-semibold">Mercy.ai</span>
+          <span className="text-lg font-semibold">Mercy Legal AI</span>
         </Link>
         <div className="relative z-10 mt-24 max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#f0d46a]">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d4b76a]">
             {isFirm ? "Small firm beta" : "Solo beta"}
           </p>
-          <h1 className="mt-5 text-5xl font-semibold leading-tight tracking-normal">
+          <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
             {isFirm ? "Create a paid firm workspace." : "Create your paid solo workspace."}
           </h1>
           <p className="mt-5 text-sm leading-7 text-white/72">
             Payment happens before activation. Tenant and firm IDs are created by the server after Stripe confirms the subscription.
           </p>
-          <div className="mt-8 rounded-lg border border-white/12 bg-white/8 p-5">
+          <div className="mt-8 rounded-xl border border-white/12 bg-white/8 p-5">
             <p className="text-sm text-white/70">Beta price</p>
             <p className="mt-2 text-3xl font-semibold text-white">{price}</p>
           </div>
@@ -241,22 +245,22 @@ export function SignupForm({ accountType }: SignupFormProps) {
       <section className="flex justify-center px-6 py-10">
         <div className="w-full max-w-2xl">
           <Stepper activeStep="Register" />
-          <Button asChild variant="ghost" className="mb-8">
+          <Button asChild variant="ghost" className="mb-8 text-[#152033] hover:bg-black/5">
             <Link href="/sign-up">
               <ArrowLeft />
               Back to plan selection
             </Link>
           </Button>
-          <div className="rounded-lg border bg-white p-6 shadow-[0_24px_80px_rgba(10,20,40,0.08)] md:p-8">
+          <div className="rounded-2xl border border-[#e5e0d4] bg-white p-6 shadow-[0_24px_80px_rgba(11,20,38,0.08)] md:p-8">
             <div className="flex items-center gap-3">
-              <div className="grid size-11 place-items-center rounded-md bg-[#f5ecd0] text-[#9b740e]">
+              <div className="grid size-11 place-items-center rounded-lg border border-[#eadfbf] bg-[#f8f1df] text-[#8a6b16]">
                 <ShieldCheck className="size-5" />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-mercy-navy">
+                <h2 className="text-2xl font-semibold tracking-tight text-[#0b1426]">
                   {isFirm ? "Small Firm signup" : "Solo Practitioner signup"}
                 </h2>
-                <p className="text-sm text-slate-600">{price}</p>
+                <p className="text-sm text-[#5c6b84]">{price}</p>
               </div>
             </div>
 
@@ -269,10 +273,10 @@ export function SignupForm({ accountType }: SignupFormProps) {
               <Field label="Password" value={password} onChange={setPassword} placeholder="Create a password" type="password" required />
               <Field label="Workspace name" value={tenantName} onChange={setTenantName} placeholder={isFirm ? "Capitol Hill workspace" : "Alex Carter Legal"} required />
               {isFirm ? (
-                <label className="block text-sm font-medium text-mercy-navy">
+                <label className="block text-sm font-medium text-[#0b1426]">
                   Attorney seats
                   <Input
-                    className="mt-2 h-11"
+                    className="mt-2 h-11 border-[#d8deea] bg-white text-[#0b1426]"
                     min={2}
                     type="number"
                     value={seats}
@@ -284,16 +288,16 @@ export function SignupForm({ accountType }: SignupFormProps) {
               <Field label="Practice areas" value={practiceAreas} onChange={setPracticeAreas} placeholder={practicePlaceholder} required wide />
               <Field label="Jurisdiction focus" value={jurisdictionFocus} onChange={setJurisdictionFocus} placeholder="District of Columbia" required wide />
 
-              <label className="flex gap-3 rounded-md border bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
+              <label className="flex gap-3 rounded-md border border-[#e5e0d4] bg-[#f8f6f1] p-3 text-sm text-[#152033] md:col-span-2">
                 <input className="mt-1 size-4" type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} required />
                 <span>I agree to Mercy&apos;s Terms, Privacy Policy, and beta AI responsibility notice.</span>
               </label>
-              <label className="flex gap-3 rounded-md border bg-slate-50 p-3 text-sm text-slate-700 md:col-span-2">
+              <label className="flex gap-3 rounded-md border border-[#e5e0d4] bg-[#f8f6f1] p-3 text-sm text-[#152033] md:col-span-2">
                 <input className="mt-1 size-4" type="checkbox" checked={responsibilityAccepted} onChange={(event) => setResponsibilityAccepted(event.target.checked)} required />
                 <span>Mercy assists attorney-supervised legal work. Attorneys remain responsible for reviewing outputs.</span>
               </label>
-              {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 md:col-span-2">{error}</div> : null}
-              <Button type="submit" variant="gold" className="h-12 w-full md:col-span-2" disabled={busy}>
+              {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 md:col-span-2">{error}</div> : null}
+              <Button type="submit" className="h-12 w-full bg-[#0b1426] text-white hover:bg-[#15233d] md:col-span-2" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                 {busy ? "Preparing review..." : "Review and continue"}
               </Button>
@@ -323,7 +327,7 @@ function Field({
   wide?: boolean;
 }) {
   return (
-    <label className={`block text-sm font-medium text-mercy-navy ${wide ? "md:col-span-2" : ""}`}>
+    <label className={`block text-sm font-medium text-[#0b1426] ${wide ? "md:col-span-2" : ""}`}>
       {label}
       <Input
         className="mt-2 h-11"

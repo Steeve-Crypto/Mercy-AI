@@ -105,7 +105,7 @@ export function AppSidebar() {
           href="/mercy"
           className={cn("flex min-w-0 items-center gap-3 rounded-lg px-2 py-2", collapsed ? "justify-center" : "")}
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--mercy-navy)] text-white dark:bg-[var(--mercy-gold)] dark:text-[var(--mercy-bg)]">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--mercy-brand)] text-white">
             <Scale className="size-4" />
           </div>
           {!collapsed ? (
@@ -149,7 +149,7 @@ export function AppSidebar() {
         href="/intake"
         title="New Matter"
         className={cn(
-          "mt-3 flex items-center justify-center gap-2 rounded-md bg-[var(--mercy-navy)] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--mercy-navy-soft)] dark:bg-[var(--mercy-gold)] dark:text-[var(--mercy-bg)] dark:hover:opacity-90",
+          "mt-3 flex items-center justify-center gap-2 rounded-md bg-[var(--mercy-brand)] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--mercy-brand-soft)]",
           collapsed ? "px-2" : "",
         )}
       >
@@ -174,7 +174,7 @@ export function AppSidebar() {
                   "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition",
                   collapsed ? "justify-center px-2" : "",
                   active
-                    ? "bg-[var(--mercy-navy)] text-white dark:bg-[var(--mercy-gold-soft)] dark:text-[var(--mercy-fg-strong)]"
+                    ? "bg-[var(--mercy-brand)] text-white"
                     : "text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)] hover:text-[var(--mercy-fg-strong)]",
                 )}
               >

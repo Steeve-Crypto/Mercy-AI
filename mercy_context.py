@@ -668,9 +668,27 @@ class UnavailableMatterStore:
 
 def _build_matter_store() -> InMemoryMatterStore | DatabaseMatterStore | UnavailableMatterStore:
     if persistent_storage_configured():
-        return DatabaseMatterStore()
+        try:
+            return DatabaseMatterStore()
+        except Exception as exc:  # noqa: BLE001 - local/dev must still boot when remote DB is unreachable
+            if local_memory_fallback_allowed():
+                trace_storage_event(
+                    "matter_store_db_fallback_local",
+                    "init",
+                    metadata={**storage_status(), "error": str(exc)[:300]},
+                )
+                # Do not call init_storage() here — it would re-attempt the broken remote URL.
+                return InMemoryMatterStore()
+            raise
     if local_memory_fallback_allowed():
-        init_storage()
+        try:
+            init_storage()
+        except Exception as exc:  # noqa: BLE001
+            trace_storage_event(
+                "matter_store_local_init_soft_fail",
+                "init",
+                metadata={**storage_status(), "error": str(exc)[:300]},
+            )
         return InMemoryMatterStore()
     trace_storage_event("matter_store_unavailable", "init", metadata=storage_status())
     return UnavailableMatterStore()

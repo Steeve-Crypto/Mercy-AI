@@ -45,6 +45,13 @@
 }
 
 :root {
+  /* Brand colors stay stable across themes (used for navy panels, CTAs, logos). */
+  --mercy-brand: #0b1426;
+  --mercy-brand-soft: #15233d;
+  --mercy-brand-mid: #1c2d4d;
+  --mercy-brand-gold: #c4a35a;
+  --mercy-brand-gold-soft: #f3ead2;
+  --mercy-brand-gold-deep: #8a6b16;
   --mercy-navy: #0b1426;
   --mercy-navy-soft: #15233d;
   --mercy-navy-mid: #1c2d4d;
@@ -75,9 +82,16 @@
 }
 
 html.dark {
-  --mercy-navy: #dbe4f3;
-  --mercy-navy-soft: #9fb0cb;
-  --mercy-navy-mid: #7f93b4;
+  /* Brand stays dark; only surface/text tokens invert. */
+  --mercy-brand: #0b1426;
+  --mercy-brand-soft: #15233d;
+  --mercy-brand-mid: #1c2d4d;
+  --mercy-brand-gold: #d4b76a;
+  --mercy-brand-gold-soft: #3a3320;
+  --mercy-brand-gold-deep: #e6d19a;
+  --mercy-navy: #0b1426;
+  --mercy-navy-soft: #1a2a48;
+  --mercy-navy-mid: #24365c;
   --mercy-gold: #d4b76a;
   --mercy-gold-soft: #3a3320;
   --mercy-gold-deep: #e6d19a;

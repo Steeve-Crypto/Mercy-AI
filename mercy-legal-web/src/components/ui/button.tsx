@@ -9,9 +9,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[var(--mercy-navy)] text-white shadow-sm hover:bg-[var(--mercy-navy-soft)] dark:bg-[var(--mercy-gold)] dark:text-[var(--mercy-bg)] dark:hover:opacity-90",
+          "bg-[var(--mercy-brand)] text-white shadow-sm hover:bg-[var(--mercy-brand-soft)]",
         gold:
-          "gold-sheen bg-[var(--mercy-gold)] text-[var(--mercy-navy)] shadow-sm hover:bg-[color-mix(in_srgb,var(--mercy-gold)_90%,black)]",
+          "gold-sheen bg-[var(--mercy-brand-gold)] text-[var(--mercy-brand)] shadow-sm hover:brightness-95",
         outline:
           "border border-[var(--mercy-border-strong)] bg-[var(--mercy-card)] text-[var(--mercy-fg-strong)] shadow-sm hover:bg-[var(--mercy-secondary)]",
         ghost: "text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]",
