@@ -243,6 +243,7 @@ Pull these in priority order. These are logical next steps from the existing bac
 24. [ ] PD046 [Frontend Architecture] Restructure `mercy-legal-web` around clean App Router product boundaries.
    - **Target Paths**: `mercy-legal-web/src/app/`, `mercy-legal-web/src/components/`, `mercy-legal-web/src/lib/core-client.ts`, `docs/product/web-app-architecture.md`.
    - **Definition of Done**: Marketing remains under `(marketing)`; auth routes are separate; authenticated app routes live under an `(app)` group; admin/beta/monitoring routes are isolated; dashboard code no longer mixes public marketing concerns with matter-workspace concerns.
+   - **Progress (2026-07-14)**: Route groups already separate marketing/app/admin. Unified design tokens, shared surface primitives, role-aware workspace chrome, marketing shell polish, platform-admin visual separation, light/dark theme, and mobile navigation landed. Residual work: deeper matter-detail command layout density and screenshot QA pack.
    - **Dependencies**: PD001, PD004, PD028, PD041.
 
 25. [ ] PD047 [Frontend Auth] Add production-ready web auth and tenant/session propagation.

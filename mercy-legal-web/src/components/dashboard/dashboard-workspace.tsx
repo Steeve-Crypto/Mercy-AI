@@ -150,7 +150,7 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
             )}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex h-10 items-center gap-2 rounded-md border bg-white px-3 text-sm text-muted-foreground shadow-sm sm:w-72">
+            <div className="flex h-10 items-center gap-2 rounded-md border bg-[var(--mercy-card)] px-3 text-sm text-muted-foreground shadow-[var(--mercy-shadow)] sm:w-72">
               <Search className="size-4" />
               {currentMatter ? currentMatter.name : "Create or select a matter"}
             </div>
@@ -175,7 +175,7 @@ export function DashboardWorkspace({ initialSnapshot }: DashboardWorkspaceProps)
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {liveStats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border bg-white p-5 shadow-[0_16px_45px_rgba(10,20,40,0.05)]">
+          <div key={stat.label} className="rounded-lg border bg-[var(--mercy-card)] p-5 shadow-[0_16px_45px_rgba(10,20,40,0.05)]">
             <div className="flex items-center justify-between">
               <div className="flex size-10 items-center justify-center rounded-md bg-[#f5ecd0] text-[#9b740e]">
                 <stat.icon className="size-5" />

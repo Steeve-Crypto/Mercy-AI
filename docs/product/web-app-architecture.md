@@ -2,7 +2,7 @@
 
 This document describes the target structure for `mercy-legal-web/`, the primary standalone web product for Mercy Legal AI.
 
-Current posture: the app is stable and connected to the FastAPI core, but still basic as a product. The next phase is to separate marketing, auth, authenticated matter workflows, and admin/beta operations cleanly.
+Current posture: App Router groups for marketing, authenticated workspace, and platform admin are in place. The 2026-07-14 UI pass unified Mercy design tokens (navy/gold, light/dark), role-aware workspace chrome (solo vs firm vs platform), and premium legal-product surfaces across marketing and authenticated routes while preserving live core integrations.
 
 ## Goals
 

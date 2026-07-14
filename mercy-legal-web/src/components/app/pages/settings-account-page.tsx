@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, HelpCircle, Loader2, MailPlus, Palette, Save, ShieldCheck, UsersRound, UserRound, X } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { useMercySession } from "@/components/auth/session-provider";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   getFirmSeats,
   getUserProfile,
@@ -11,6 +12,7 @@ import {
   updateUserProfile,
   type CoreFirmSeat,
 } from "@/lib/core-client";
+import { workspacePresentation } from "@/lib/workspace-context";
 
 type ProfileDraft = {
   name: string;
@@ -47,7 +49,13 @@ export function SettingsAccountPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("attorney");
   const [inviting, setInviting] = useState(false);
-  const isAdmin = session.roles.some((role) => ["admin", "superadmin", "platform_admin", "firm_admin", "ops"].includes(role));
+  const presentation = workspacePresentation({
+    roles: session.roles,
+    firmId: session.firmId,
+    firmName: session.firm,
+    tenantId: session.tenantId,
+  });
+  const isAdmin = presentation.showTeamManagement || presentation.isPlatformAdmin;
 
   useEffect(() => {
     if (!profileLoaded) {
@@ -161,17 +169,18 @@ export function SettingsAccountPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Account"
+        eyebrow={presentation.isFirm ? "Firm account" : "Solo account"}
         title="Account & Profile"
-        description="Manage attorney identity, firm context, D.C. Bar details, and workspace preferences for Mercy Legal AI."
+        description={
+          presentation.isFirm
+            ? "Manage attorney identity, firm workspace context, D.C. Bar details, and preferences. Team seats appear only for firm administrators."
+            : "Manage attorney identity, practice details, D.C. Bar number, and preferences without firm-management complexity."
+        }
       >
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-xs font-medium text-[#4338CA]">
-            {configured ? "Supabase Auth" : "Local dev session"}
-          </span>
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-            {session.roles.join(", ")}
-          </span>
+          <span className="mercy-chip mercy-chip-info">{configured ? "Supabase Auth" : "Local dev session"}</span>
+          <span className="mercy-chip">{presentation.scopeLabel}</span>
+          <span className="mercy-chip">{session.roles.join(", ") || "role pending"}</span>
         </div>
       </PageHeader>
 
@@ -181,12 +190,12 @@ export function SettingsAccountPage() {
             {toasts.map((toast) => (
               <div
                 key={toast.id}
-                className={`flex items-start justify-between gap-3 rounded-xl border bg-white p-4 text-sm shadow-lg ${
+                className={`flex items-start justify-between gap-3 rounded-xl border bg-[var(--mercy-card)] p-4 text-sm shadow-lg ${
                   toast.tone === "success"
                     ? "border-emerald-200 text-emerald-800"
                     : toast.tone === "error"
                       ? "border-rose-200 text-rose-800"
-                      : "border-[#C7D2FE] text-[#4338CA]"
+                      : "border-[var(--mercy-border-strong)] text-[var(--mercy-navy-soft)]"
                 }`}
               >
                 <span className="flex items-start gap-2">
@@ -202,21 +211,21 @@ export function SettingsAccountPage() {
         ) : null}
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-[#EEF2FF] text-[#4F46E5]">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
                 <UserRound className="size-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Attorney profile</h2>
-                <p className="text-sm text-slate-500">Used for workspace display and tenant-scoped request context.</p>
+                <h2 className="text-lg font-semibold text-[var(--mercy-fg-strong)]">Attorney profile</h2>
+                <p className="text-sm text-[var(--mercy-fg-muted)]">Used for workspace display and tenant-scoped request context.</p>
               </div>
             </div>
 
             {loading ? (
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 {[0, 1, 2, 3].map((item) => (
-                  <div key={item} className="h-16 animate-pulse rounded-lg bg-slate-100" />
+                  <div key={item} className="h-16 animate-pulse rounded-lg bg-[var(--mercy-muted)]" />
                 ))}
               </div>
             ) : (
@@ -227,10 +236,10 @@ export function SettingsAccountPage() {
                 <Field label="D.C. Bar number" value={profile.dcBarNumber} placeholder="Optional" onChange={(value) => setProfile((current) => ({ ...current, dcBarNumber: value }))} />
                 <div className="block text-sm font-medium text-mercy-navy">
                   Role
-                  <div className="mt-2 min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700" aria-readonly="true">
+                  <div className="mt-2 min-h-11 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-2.5 text-sm text-[var(--mercy-fg)]" aria-readonly="true">
                     {session.roles.length ? session.roles.join(", ") : "Not provisioned"}
                   </div>
-                  <span className="mt-1 block text-xs font-normal text-slate-500">Managed by Mercy workspace provisioning.</span>
+                  <span className="mt-1 block text-xs font-normal text-[var(--mercy-fg-muted)]">Managed by Mercy workspace provisioning.</span>
                 </div>
               </div>
             )}
@@ -240,7 +249,7 @@ export function SettingsAccountPage() {
                 type="button"
                 onClick={saveProfile}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)] disabled:opacity-60"
               >
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 {saving ? "Saving..." : "Save profile"}
@@ -249,9 +258,9 @@ export function SettingsAccountPage() {
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <ShieldCheck className="size-4 text-[#4F46E5]" />
+            <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
+                <ShieldCheck className="size-4 text-[var(--mercy-navy)]" />
                 Tenant context
               </div>
               <dl className="mt-4 space-y-3 text-sm">
@@ -261,10 +270,14 @@ export function SettingsAccountPage() {
               </dl>
             </div>
 
-            <div id="preferences" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <Palette className="size-4 text-[#4F46E5]" />
+            <div id="preferences" className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
+                <Palette className="size-4 text-[var(--mercy-navy)]" />
                 Appearance
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <p className="text-sm text-[var(--mercy-fg-muted)]">Light and dark themes are intentionally designed for dense legal work.</p>
+                <ThemeToggle />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 {(["system", "light"] as const).map((option) => (
@@ -273,7 +286,7 @@ export function SettingsAccountPage() {
                     type="button"
                     onClick={() => setTheme(option)}
                     className={`rounded-lg border px-3 py-2 text-sm font-medium capitalize ${
-                      theme === option ? "border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      theme === option ? "border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] text-[var(--mercy-navy-soft)]" : "border-[var(--mercy-border)] text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]"
                     }`}
                   >
                     {option}
@@ -282,35 +295,35 @@ export function SettingsAccountPage() {
               </div>
             </div>
 
-            <div id="support" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <HelpCircle className="size-4 text-[#4F46E5]" />
+            <div id="support" className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--mercy-fg-strong)]">
+                <HelpCircle className="size-4 text-[var(--mercy-navy)]" />
                 Help & Support
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
+              <p className="mt-3 text-sm leading-6 text-[var(--mercy-fg-muted)]">
                 For beta support, include your tenant ID, matter ID if relevant, and whether Mercy produced a trace link.
               </p>
-              <a className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="mailto:support@mercy.ai">
+              <a className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]" href="mailto:support@mercy.ai">
                 Email support
               </a>
             </div>
           </aside>
         </section>
 
-        {isAdmin ? (
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        {isAdmin && presentation.isFirm ? (
+          <section id="team" className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-5 shadow-[var(--mercy-shadow)]">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="flex items-center gap-2 text-lg font-semibold text-slate-950">
-                  <UsersRound className="size-5 text-[#4F46E5]" />
+                <div className="flex items-center gap-2 text-lg font-semibold text-[var(--mercy-fg-strong)]">
+                  <UsersRound className="size-5 text-[var(--mercy-navy)]" />
                   Firm-seat management
                 </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  {seats.length} of {seatTotal} seats used. Invite status is tenant-scoped and admin-only.
+                <p className="mt-1 text-sm text-[var(--mercy-fg-muted)]">
+                  {seats.length} of {seatTotal} seats used. Firm administrators manage seats; platform admin controls remain separate.
                 </p>
               </div>
               {seatError ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                <span className="rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1 text-xs font-medium text-[var(--mercy-fg-muted)]">
                   Backend invite endpoint pending
                 </span>
               ) : null}
@@ -322,12 +335,12 @@ export function SettingsAccountPage() {
                 value={inviteEmail}
                 onChange={(event) => setInviteEmail(event.target.value)}
                 placeholder="attorney@firm.com"
-                className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
+                className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
               />
               <select
                 value={inviteRole}
                 onChange={(event) => setInviteRole(event.target.value)}
-                className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
+                className="h-11 rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
               >
                 <option value="attorney">Attorney</option>
                 <option value="paralegal">Paralegal</option>
@@ -337,15 +350,15 @@ export function SettingsAccountPage() {
                 type="button"
                 onClick={inviteSeat}
                 disabled={inviting}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#4F46E5] px-4 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--mercy-navy)] px-4 text-sm font-semibold text-white hover:bg-[var(--mercy-navy-soft)] disabled:opacity-60"
               >
                 {inviting ? <Loader2 className="size-4 animate-spin" /> : <MailPlus className="size-4" />}
                 Invite
               </button>
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-              <div className="grid grid-cols-[1fr_0.5fr_0.5fr] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="mt-5 overflow-hidden rounded-xl border border-[var(--mercy-border)]">
+              <div className="grid grid-cols-[1fr_0.5fr_0.5fr] gap-3 bg-[var(--mercy-secondary)] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--mercy-fg-muted)]">
                 <span>User</span>
                 <span>Role</span>
                 <span>Status</span>
@@ -354,11 +367,11 @@ export function SettingsAccountPage() {
                 {seats.map((seat) => (
                   <div key={seat.user_id} className="grid grid-cols-1 gap-2 px-4 py-4 text-sm md:grid-cols-[1fr_0.5fr_0.5fr] md:items-center">
                     <div>
-                      <p className="font-semibold text-slate-950">{seat.name ?? seat.email}</p>
-                      <p className="text-xs text-slate-500">{seat.email}</p>
+                      <p className="font-semibold text-[var(--mercy-fg-strong)]">{seat.name ?? seat.email}</p>
+                      <p className="text-xs text-[var(--mercy-fg-muted)]">{seat.email}</p>
                     </div>
-                    <span className="text-slate-600">{seat.role}</span>
-                    <span className="w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{seat.status}</span>
+                    <span className="text-[var(--mercy-fg-muted)]">{seat.role}</span>
+                    <span className="w-fit rounded-full bg-[var(--mercy-muted)] px-2.5 py-1 text-xs font-medium text-[var(--mercy-fg)]">{seat.status}</span>
                   </div>
                 ))}
               </div>
@@ -384,14 +397,14 @@ function Field({
   type?: string;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-700">
+    <label className="block text-sm font-medium text-[var(--mercy-fg)]">
       {label}
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="mt-2 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#C7D2FE]"
+        className="mt-2 h-11 w-full rounded-lg border border-slate-300 bg-[var(--mercy-card)] px-3 text-sm text-[var(--mercy-fg-strong)] outline-none focus:border-[var(--mercy-navy)] focus:ring-2 focus:ring-[var(--mercy-border-strong)]"
       />
     </label>
   );
@@ -400,8 +413,8 @@ function Field({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 break-all font-semibold text-slate-950">{value}</dd>
+      <dt className="text-xs font-medium uppercase tracking-wide text-[var(--mercy-fg-muted)]">{label}</dt>
+      <dd className="mt-1 break-all font-semibold text-[var(--mercy-fg-strong)]">{value}</dd>
     </div>
   );
 }

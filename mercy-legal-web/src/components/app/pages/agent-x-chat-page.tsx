@@ -281,15 +281,15 @@ export function AgentXChatPage({
       <main className="flex min-h-[calc(100vh-2rem)] min-w-0 flex-col">
         <section className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
           <header className="shrink-0 pb-4 text-center">
-            <div className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-[#4F46E5] text-white shadow-sm">
+            <div className="mx-auto flex size-10 items-center justify-center rounded-2xl bg-[var(--mercy-navy)] text-white shadow-[var(--mercy-shadow)]">
               <Bot className="size-5" />
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950">Mercy</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-[var(--mercy-fg-strong)]">Mercy</h1>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <span className={`rounded-full border px-3 py-1 text-xs font-medium ${coreIsOnline ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
                 Core {coreIsOnline ? "online" : "offline"}
               </span>
-              <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              <Link href="/history" className="inline-flex items-center gap-1 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-1 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-secondary)]">
                 <Clock3 className="size-3.5" />
                 History
               </Link>
@@ -299,21 +299,21 @@ export function AgentXChatPage({
             ) : null}
           </header>
 
-          <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white px-3 py-4 shadow-sm md:px-5">
+          <section className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-4 shadow-[var(--mercy-shadow)] md:px-5">
             {messages.length ? (
               <div className="space-y-5">
                 {messages.map((message) => (
                   <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                     {message.role === "assistant" ? (
-                      <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5]">
+                      <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
                         <Bot className="size-4" />
                       </div>
                     ) : null}
                     <div
-                      className={`max-w-[min(760px,85%)] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                      className={`max-w-[min(760px,85%)] rounded-2xl px-4 py-3 text-sm leading-6 shadow-[var(--mercy-shadow)] ${
                         message.role === "user"
-                          ? "bg-[#4F46E5] text-white"
-                          : "border border-slate-200 bg-slate-50 text-slate-800"
+                          ? "bg-[var(--mercy-navy)] text-white"
+                          : "border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] text-slate-800"
                       }`}
                     >
                       <pre className="whitespace-pre-wrap break-words font-sans">{message.content}</pre>
@@ -322,11 +322,11 @@ export function AgentXChatPage({
                 ))}
                 {busy ? (
                   <div className="flex justify-start gap-3">
-                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5]">
+                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
                       <Bot className="size-4" />
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      <Loader2 className="size-4 animate-spin text-[#4F46E5]" />
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-4 py-3 text-sm text-[var(--mercy-fg-muted)]">
+                      <Loader2 className="size-4 animate-spin text-[var(--mercy-navy)]" />
                       Mercy is working
                     </div>
                   </div>
@@ -336,19 +336,19 @@ export function AgentXChatPage({
             ) : (
               <div className="flex min-h-[360px] items-center justify-center">
                 <div className="max-w-2xl text-center">
-                  <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#EEF2FF] text-[#4F46E5]">
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[var(--mercy-secondary)] text-[var(--mercy-navy)]">
                     <Bot className="size-6" />
                   </div>
-                  <h2 className="mt-4 text-lg font-semibold text-slate-950">Start with the work, then verify.</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                  <h2 className="mt-4 text-lg font-semibold text-[var(--mercy-fg-strong)]">Start with the work, then verify.</h2>
+                  <p className="mt-2 text-sm leading-6 text-[var(--mercy-fg-muted)]">
                     Ask for drafting, review, research support, or citation checking. Attorney review and source verification remain required before use.
                   </p>
                   <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                    <Link href="/templates" className="inline-flex items-center gap-2 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
                       <BookOpenText className="size-3.5" />
                       Open templates
                     </Link>
-                    <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                    <Link href="/research" className="inline-flex items-center gap-2 rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
                       <FileText className="size-3.5" />
                       Run D.C. research
                     </Link>
@@ -359,7 +359,7 @@ export function AgentXChatPage({
           </section>
 
           <div className="sticky bottom-0 z-10 mt-4 shrink-0 bg-[#F8FAFC] pb-1">
-            <div className="mx-auto max-w-4xl rounded-[1.25rem] border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+            <div className="mx-auto max-w-4xl rounded-[1.25rem] border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-3 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
               <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
               <label className="sr-only" htmlFor="mercy-matter">
                 Matter context
@@ -368,7 +368,7 @@ export function AgentXChatPage({
                 id="mercy-matter"
                 value={matterId}
                 onChange={(event) => setMatterId(event.target.value)}
-                className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-[#A5B4FC] focus:bg-white focus:ring-2 focus:ring-[#E0E7FF]"
+                className="h-11 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 text-sm font-medium text-[var(--mercy-fg-strong)] outline-none focus:border-[color-mix(in srgb, var(--mercy-gold) 45%, var(--mercy-border))] focus:bg-[var(--mercy-card)] focus:ring-2 focus:ring-[#E0E7FF]"
               >
                 <option value="">No matter selected</option>
                 {initialMatters.map((matter) => (
@@ -378,8 +378,8 @@ export function AgentXChatPage({
                 ))}
               </select>
 
-              <div className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
-                <Paperclip className="size-4 text-[#4F46E5]" />
+              <div className="flex h-11 items-center gap-2 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 text-sm text-[var(--mercy-fg-muted)]">
+                <Paperclip className="size-4 text-[var(--mercy-navy)]" />
                 <span className="truncate">
                   {attachedDocIds.length ? `${attachedDocIds.length} Vault file${attachedDocIds.length === 1 ? "" : "s"}` : "Vault context"}
                 </span>
@@ -392,7 +392,7 @@ export function AgentXChatPage({
                 id="mercy-workflow"
                 value={mode}
                 onChange={(event) => setMode(event.target.value)}
-                className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 outline-none focus:border-[#A5B4FC] focus:bg-white focus:ring-2 focus:ring-[#E0E7FF]"
+                className="h-11 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 text-sm font-medium text-[var(--mercy-fg-strong)] outline-none focus:border-[color-mix(in srgb, var(--mercy-gold) 45%, var(--mercy-border))] focus:bg-[var(--mercy-card)] focus:ring-2 focus:ring-[#E0E7FF]"
               >
                 <option value="template_generation">Template generation</option>
                 <option value="drafting">Drafting</option>
@@ -405,19 +405,19 @@ export function AgentXChatPage({
             </div>
 
             {selectedTemplate ? (
-              <div className="mt-3 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] p-3">
+              <div className="mt-3 rounded-xl border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] p-3">
                 <div className="flex items-start gap-3">
-                  <Sparkles className="mt-0.5 size-4 shrink-0 text-[#4F46E5]" />
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--mercy-navy)]" />
                   <div>
-                    <p className="text-sm font-semibold text-slate-950">{selectedTemplate.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">{selectedTemplate.description}</p>
+                    <p className="text-sm font-semibold text-[var(--mercy-fg-strong)]">{selectedTemplate.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--mercy-fg-muted)]">{selectedTemplate.description}</p>
                   </div>
                 </div>
               </div>
             ) : null}
 
             {attachedDocuments.length ? (
-              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mt-3 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-3">
                 {showAttachConfirmation ? (
                   <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
                     <span>Document attached to Agent X. It will be included with this request context.</span>
@@ -430,12 +430,12 @@ export function AgentXChatPage({
                   {attachedDocuments.map((document) => (
                     <span
                       key={document.id}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#C7D2FE] bg-white px-3 py-1 text-xs font-medium text-[#4338CA]"
+                      className="inline-flex items-center gap-2 rounded-full border border-[var(--mercy-border-strong)] bg-[var(--mercy-card)] px-3 py-1 text-xs font-medium text-[var(--mercy-navy-soft)]"
                     >
                       <FileText className="size-3.5" />
                       {document.name}
                       {activeMatter ? (
-                        <Link href={`/matters/${encodeURIComponent(activeMatter.matter_id)}?tab=documents`} className="text-[11px] font-semibold text-[#4F46E5] hover:underline">
+                        <Link href={`/matters/${encodeURIComponent(activeMatter.matter_id)}?tab=documents`} className="text-[11px] font-semibold text-[var(--mercy-navy)] hover:underline">
                           View in Vault
                         </Link>
                       ) : null}
@@ -457,7 +457,7 @@ export function AgentXChatPage({
               </div>
             ) : null}
 
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white">
+            <div className="mt-3 rounded-2xl border border-[var(--mercy-border)] bg-[var(--mercy-card)]">
               <textarea
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
@@ -468,36 +468,36 @@ export function AgentXChatPage({
                   }
                 }}
                 placeholder="Ask Mercy about this matter, draft a document, review language, or check sources..."
-                className="max-h-40 min-h-24 w-full resize-none rounded-t-2xl border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
+                className="max-h-40 min-h-24 w-full resize-none rounded-t-2xl border-0 bg-[var(--mercy-card)] px-4 py-4 text-base leading-7 text-[var(--mercy-fg-strong)] outline-none placeholder:text-slate-400"
               />
-              <div className="flex flex-col gap-3 border-t border-slate-200 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 border-t border-[var(--mercy-border)] px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                  <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                     <Paperclip className="size-3.5" />
                     Files and sources
                   </button>
-                  <Link href="/templates" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                  <Link href="/templates" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                     <BookOpenText className="size-3.5" />
                     Templates
                   </Link>
-                  <Link href="/research" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                  <Link href="/research" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                     <Search className="size-3.5" />
                     D.C. research
                   </Link>
-                  <button type="button" onClick={() => setMode("citation_verification")} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                  <button type="button" onClick={() => setMode("citation_verification")} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                     <ShieldCheck className="size-3.5" />
                     Citation check
                   </button>
-                  <button type="button" onClick={() => setMode("analysis")} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                  <button type="button" onClick={() => setMode("analysis")} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                     <Sparkles className="size-3.5" />
                     Improve / Review
                   </button>
                   <details className="relative">
-                    <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] hover:bg-[var(--mercy-card)]">
                       <SlidersHorizontal className="size-3.5" />
                       Context controls
                     </summary>
-                    <div className="absolute left-0 top-9 z-10 w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg">
+                    <div className="absolute left-0 top-9 z-10 w-64 rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-3 text-xs text-[var(--mercy-fg-muted)] shadow-lg">
                       <label className="flex items-center gap-2">
                         <input type="checkbox" checked={useDcSources} onChange={(event) => setUseDcSources(event.target.checked)} />
                         Use D.C. source retrieval
@@ -512,7 +512,7 @@ export function AgentXChatPage({
                       </label>
                       {activeVaultDocuments.length ? (
                         <div className="mt-3 border-t border-slate-100 pt-3">
-                          <p className="font-semibold text-slate-700">Ready Vault documents</p>
+                          <p className="font-semibold text-[var(--mercy-fg)]">Ready Vault documents</p>
                           <div className="mt-2 max-h-36 space-y-2 overflow-auto pr-1">
                             {activeVaultDocuments.map((document) => {
                               const ready = document.readiness === "searchable";
@@ -528,8 +528,8 @@ export function AgentXChatPage({
                                     }
                                   />
                                   <span>
-                                    <span className="block font-medium text-slate-700">{document.filename}</span>
-                                    <span className={`block text-[11px] ${ready ? "text-emerald-700" : document.readiness === "limited" ? "text-amber-700" : "text-slate-500"}`}>
+                                    <span className="block font-medium text-[var(--mercy-fg)]">{document.filename}</span>
+                                    <span className={`block text-[11px] ${ready ? "text-emerald-700" : document.readiness === "limited" ? "text-amber-700" : "text-[var(--mercy-fg-muted)]"}`}>
                                       {ready ? "Ready for Mercy / searchable" : document.readiness === "limited" ? "Extraction Limited / warning required" : "Processing / not searchable"}
                                     </span>
                                   </span>
@@ -549,7 +549,7 @@ export function AgentXChatPage({
                 <button
                   onClick={send}
                   disabled={busy}
-                  className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#4338CA] disabled:opacity-60"
+                  className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--mercy-navy)] px-5 text-sm font-semibold text-white shadow-[var(--mercy-shadow)] transition hover:bg-[var(--mercy-navy-soft)] disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                   Run Mercy
@@ -559,15 +559,15 @@ export function AgentXChatPage({
 
             {error ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{error}</div> : null}
             {!activeMatter ? (
-              <div className="mt-3 flex flex-col gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+              <div className="mt-3 flex flex-col gap-3 rounded-xl border border-dashed border-slate-300 bg-[var(--mercy-secondary)] p-4 text-sm text-[var(--mercy-fg-muted)] md:flex-row md:items-center md:justify-between">
                 <p>
                   Select or create a matter to use matter-specific context. Mercy can draft general scaffolds, but matter context improves review, citations, and D.C. grounding.
                 </p>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <Link href="/matters" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <Link href="/matters" className="rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-2 text-xs font-semibold text-[var(--mercy-fg)] hover:bg-[var(--mercy-secondary)]">
                     Select matter
                   </Link>
-                  <Link href="/intake" className="rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 text-xs font-semibold text-[#4338CA] hover:bg-[#E0E7FF]">
+                  <Link href="/intake" className="rounded-lg border border-[var(--mercy-border-strong)] bg-[var(--mercy-secondary)] px-3 py-2 text-xs font-semibold text-[var(--mercy-navy-soft)] hover:bg-[#E0E7FF]">
                     Create new matter
                   </Link>
                 </div>
@@ -578,7 +578,7 @@ export function AgentXChatPage({
           {templates.length ? (
             <div className="mx-auto mt-3 max-w-4xl">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended workflows</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--mercy-fg-muted)]">Recommended workflows</p>
                 <span className="text-xs text-slate-400">{workflowLabel(mode)}</span>
               </div>
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -589,7 +589,7 @@ export function AgentXChatPage({
                       setMode("template_generation");
                       setPrompt(promptFromTemplate(template));
                     }}
-                    className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:border-[#A5B4FC] hover:bg-[#EEF2FF] hover:text-[#4338CA]"
+                    className="shrink-0 rounded-full border border-[var(--mercy-border)] bg-[var(--mercy-card)] px-3 py-1.5 text-xs font-medium text-[var(--mercy-fg-muted)] shadow-[var(--mercy-shadow)] hover:border-[color-mix(in srgb, var(--mercy-gold) 45%, var(--mercy-border))] hover:bg-[var(--mercy-secondary)] hover:text-[var(--mercy-navy-soft)]"
                   >
                     {template.title}
                   </button>
@@ -603,27 +603,27 @@ export function AgentXChatPage({
 
       <aside className="space-y-4">
         <ReliabilityPanel agent={lastResult} />
-        <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-sm">
+        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-4 text-sm leading-6 text-[var(--mercy-fg-muted)] shadow-[var(--mercy-shadow)]">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-semibold text-slate-950">
-              <Clock3 className="size-4 text-[#4F46E5]" />
+            <div className="flex items-center gap-2 font-semibold text-[var(--mercy-fg-strong)]">
+              <Clock3 className="size-4 text-[var(--mercy-navy)]" />
               Recent work
             </div>
-            <Link href="/history" className="text-xs font-semibold text-[#4F46E5] hover:underline">
+            <Link href="/history" className="text-xs font-semibold text-[var(--mercy-navy)] hover:underline">
               History
             </Link>
           </div>
           <div className="mt-3 space-y-2">
             {workHistory.length ? (
               workHistory.slice(0, 4).map((record) => (
-                <Link key={record.id} href="/history" className="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-white">
+                <Link key={record.id} href="/history" className="block rounded-lg border border-[var(--mercy-border)] bg-[var(--mercy-secondary)] p-3 hover:bg-[var(--mercy-card)]">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-slate-900">{record.title}</p>
-                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                    <p className="truncate text-xs font-semibold text-[var(--mercy-fg-strong)]">{record.title}</p>
+                    <span className="shrink-0 rounded-full bg-[var(--mercy-card)] px-2 py-0.5 text-[11px] font-medium text-[var(--mercy-fg-muted)]">
                       {historyReliability(record)}
                     </span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                  <p className="mt-1 line-clamp-2 text-xs text-[var(--mercy-fg-muted)]">
                     {historyContext(record)} / {record.outputSummary ?? record.inputSummary ?? "Saved Mercy work"}
                   </p>
                 </Link>
@@ -633,9 +633,9 @@ export function AgentXChatPage({
             )}
           </div>
         </section>
-        <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600 shadow-sm">
-          <div className="flex items-center gap-2 font-semibold text-slate-950">
-            <SlidersHorizontal className="size-4 text-[#4F46E5]" />
+        <section className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-4 text-xs leading-5 text-[var(--mercy-fg-muted)] shadow-[var(--mercy-shadow)]">
+          <div className="flex items-center gap-2 font-semibold text-[var(--mercy-fg-strong)]">
+            <SlidersHorizontal className="size-4 text-[var(--mercy-navy)]" />
             Context sent with request
           </div>
           <p className="mt-2">

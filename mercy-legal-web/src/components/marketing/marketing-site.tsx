@@ -83,6 +83,11 @@ const resourceLinks = [
   ["Contact Us", routes.contact, "Request a demo or trust packet."],
 ] as const;
 
+const audienceLinks = [
+  ["Solo attorneys", routes.useCases, "Matters, Vault, research, drafting, and personal billing without firm-admin noise."],
+  ["Small firms", routes.useCases, "Shared matters, seats, firm billing ownership, and workspace isolation."],
+] as const;
+
 type Feature = {
   title: string;
   description: string;
@@ -233,38 +238,30 @@ function LogoMark() {
 
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f6f4ef] text-[#151515]">
+    <div className="mercy-marketing min-h-screen">
       <style jsx global>{`
         @keyframes mercy-drift {
           0% { transform: translate3d(0, 0, 0); }
-          50% { transform: translate3d(0, -10px, 0); }
+          50% { transform: translate3d(0, -8px, 0); }
           100% { transform: translate3d(0, 0, 0); }
         }
         @keyframes mercy-grid-pan {
           0% { background-position: 0 0, 0 0; }
-          100% { background-position: 72px 36px, 36px 72px; }
-        }
-        @keyframes mercy-node-pulse {
-          0%, 100% { opacity: 0.72; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.06); }
+          100% { background-position: 64px 32px, 32px 64px; }
         }
         .mercy-hero-grid {
-          animation: mercy-grid-pan 28s linear infinite;
+          animation: mercy-grid-pan 36s linear infinite;
         }
         .mercy-float-slow {
-          animation: mercy-drift 8s ease-in-out infinite;
+          animation: mercy-drift 10s ease-in-out infinite;
         }
         .mercy-float-medium {
-          animation: mercy-drift 6.5s ease-in-out infinite;
-        }
-        .mercy-source-node {
-          animation: mercy-node-pulse 4.8s ease-in-out infinite;
+          animation: mercy-drift 8s ease-in-out infinite;
         }
         @media (prefers-reduced-motion: reduce) {
           .mercy-hero-grid,
           .mercy-float-slow,
-          .mercy-float-medium,
-          .mercy-source-node {
+          .mercy-float-medium {
             animation: none !important;
           }
         }
@@ -285,26 +282,26 @@ function MarketingHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-black/10 bg-[#f6f4ef]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-4 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-black/10 bg-[color-mix(in_srgb,#f5f2eb_92%,transparent)] backdrop-blur">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-3.5 lg:px-8">
         <LogoMark />
         <nav className="hidden items-center gap-1 text-sm font-medium text-[#4b4741] lg:flex" aria-label="Marketing navigation">
           <MegaMenu label="Product" items={productLinks} active={active(routes.product) || active(routes.howItWorks) || pathname === "/"} />
           <MegaMenu label="Solutions" items={solutionLinks} active={active(routes.solutions) || active(routes.useCases)} />
           <Link className={navClass(active(routes.location))} href={routes.location}>
-            Location
+            D.C. focus
           </Link>
           <Link className={navClass(active(routes.security))} href={routes.security}>
             Security
           </Link>
           <MegaMenu label="Resources" items={resourceLinks} active={active(routes.resources) || active(routes.blog) || active(routes.trust) || active(routes.contact)} align="right" />
         </nav>
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden items-center gap-2 lg:flex">
           <Button asChild variant="ghost" size="sm">
-            <Link href={routes.signIn}>Login</Link>
+            <Link href={routes.signIn}>Sign in</Link>
           </Button>
-          <Button asChild size="sm" className="bg-[#111827] text-white shadow-sm hover:bg-[#1f2937]">
-            <Link href={routes.getStarted}>Get Started</Link>
+          <Button asChild size="sm">
+            <Link href={routes.getStarted}>Start beta</Link>
           </Button>
         </div>
         <button
@@ -349,11 +346,11 @@ function MegaMenu({
           align === "right" ? "right-0" : "left-0",
         )}
       >
-        <div className="grid w-[315px] gap-1 rounded-md border border-[#d4af37]/16 bg-[#202632]/95 p-2 text-white shadow-[0_16px_42px_rgba(5,8,15,0.24)] ring-1 ring-white/5 backdrop-blur-md">
-          {items.map(([title, href, description], index) => (
+        <div className="grid w-[320px] gap-1 rounded-md border border-[#d4af37]/18 bg-[#0f1724]/96 p-2 text-white shadow-[0_16px_42px_rgba(5,8,15,0.24)] ring-1 ring-white/5 backdrop-blur-md">
+          {items.map(([title, href, description]) => (
             <Link key={title} href={href} className="rounded-sm border border-transparent px-2.5 py-2 transition hover:border-[#d4af37]/20 hover:bg-white/[0.07]">
               <span className="flex items-center gap-2 text-sm font-semibold">
-                <span className={cn("size-1.5 rounded-full", index % 3 === 0 ? "bg-[#d4af37]" : index % 3 === 1 ? "bg-[#6d5dfc]" : "bg-[#14b8a6]")} />
+                <span className="size-1.5 rounded-full bg-[#d4af37]" />
                 {title}
               </span>
               <span className="mt-0.5 block text-[0.72rem] leading-4 text-white/66">{description}</span>
@@ -474,9 +471,9 @@ function HeroSection() {
             </Button>
           </div>
           <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 text-xs text-[#5b564e]">
-            <div className="border-l border-[#d4af37]/50 pl-3">Workspace + Office</div>
-            <div className="border-l border-[#6d5dfc]/50 pl-3">Assistant layer</div>
-            <div className="border-l border-[#14b8a6]/50 pl-3">Source signals</div>
+            <div className="border-l border-[#d4af37]/55 pl-3">Workspace + Office</div>
+            <div className="border-l border-[#8a6b16]/40 pl-3">Assistant layer</div>
+            <div className="border-l border-[#111827]/25 pl-3">Source signals</div>
           </div>
         </div>
         <ProductArchitectureVisual />
@@ -489,8 +486,8 @@ function ProductArchitectureVisual() {
   return (
     <div className="relative overflow-hidden rounded-xl border border-[#d4af37]/25 bg-[#0c111b] p-3 shadow-[0_34px_110px_rgba(5,8,15,0.34)] lg:p-4">
       <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/70 to-transparent" />
-      <div className="mercy-float-slow absolute -right-14 top-8 size-52 rounded-full bg-[#6d5dfc]/12 blur-3xl" />
-      <div className="mercy-float-medium absolute -bottom-24 left-16 size-64 rounded-full bg-[#14b8a6]/12 blur-3xl" />
+      <div className="mercy-float-slow absolute -right-14 top-8 size-52 rounded-full bg-[#d4af37]/10 blur-3xl" />
+      <div className="mercy-float-medium absolute -bottom-24 left-16 size-64 rounded-full bg-white/5 blur-3xl" />
       <div className="absolute inset-0 opacity-[0.12] [background-image:linear-gradient(135deg,transparent_0_46%,#d4af37_46%_47%,transparent_47%_100%)] [background-size:84px_84px]" />
       <div className="relative rounded-lg border border-white/10 bg-[#202632] p-3">
         <div className="grid gap-3 lg:grid-cols-[1fr_0.92fr]">
@@ -504,7 +501,7 @@ function ProductArchitectureVisual() {
             </div>
             <div className="mt-3 grid gap-2">
               <SurfaceMini title="Matter context" meta="Documents, facts, jurisdiction" icon={BriefcaseBusiness} />
-              <SurfaceMini title="Assistant layer" meta="Draft, review, reason" icon={MessageSquareText} accent="purple" />
+              <SurfaceMini title="Assistant layer" meta="Draft, review, reason" icon={MessageSquareText} accent="gold" />
               <SurfaceMini title="Office Add-ins" meta="Word + Outlook workflows" icon={Layers3} accent="gold" />
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -545,11 +542,11 @@ function ProductArchitectureVisual() {
   );
 }
 
-function SurfaceMini({ title, meta, icon: Icon, accent = "teal" }: { title: string; meta: string; icon: LucideIcon; accent?: "gold" | "purple" | "teal" }) {
+function SurfaceMini({ title, meta, icon: Icon, accent = "gold" }: { title: string; meta: string; icon: LucideIcon; accent?: "gold" | "navy" }) {
   return (
     <div className="rounded-md border border-black/10 bg-white p-3 shadow-sm">
       <div className="flex items-start gap-3">
-        <Icon className={cn("mt-1 size-4", accent === "purple" ? "text-[#6d5dfc]" : accent === "gold" ? "text-[#8a6b16]" : "text-[#0f766e]")} />
+        <Icon className={cn("mt-1 size-4", accent === "navy" ? "text-[#111827]" : "text-[#8a6b16]")} />
         <div>
           <h3 className="text-sm font-semibold">{title}</h3>
           <p className="mt-1 text-xs leading-5 text-slate-600">{meta}</p>
@@ -605,12 +602,16 @@ function TrustStrip() {
   ] as const;
 
   return (
-    <section className="bg-[#111827] px-5 py-16 text-white lg:px-8">
+    <section className="bg-[#0f1724] px-5 py-16 text-white lg:px-8">
       <div className="mx-auto max-w-[1440px]">
+        <div className="mb-8 max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d4af37]">Trust signals</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight">Security and supervision are product features, not footnotes.</h2>
+        </div>
         <div className="grid gap-4 md:grid-cols-5">
-          {items.map(([title, description], index) => (
+          {items.map(([title, description]) => (
             <div key={title} className="rounded-lg border border-white/10 bg-white/[0.04] p-5">
-              <span className={cn("block h-1 w-10 rounded-full", index === 2 ? "bg-[#6d5dfc]" : index === 3 ? "bg-[#14b8a6]" : "bg-[#d4af37]")} />
+              <span className="block h-1 w-10 rounded-full bg-[#d4af37]" />
               <h3 className="mt-5 text-sm font-semibold">{title}</h3>
               <p className="mt-3 text-xs leading-5 text-white/64">{description}</p>
             </div>
@@ -624,9 +625,9 @@ function TrustStrip() {
 function SectionIntro({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <div className="mx-auto max-w-3xl text-center">
-      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
-      <h2 className="mt-4 text-4xl font-semibold tracking-normal text-[#111827] md:text-5xl">{title}</h2>
-      <p className="mt-5 text-base leading-7 text-[#5b564e] md:text-lg">{description}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6b16]">{eyebrow}</p>
+      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#111827] md:text-4xl">{title}</h2>
+      <p className="mt-4 text-base leading-7 text-[#5b564e]">{description}</p>
     </div>
   );
 }
@@ -767,12 +768,12 @@ export function HomeMarketingPage() {
     <MarketingShell>
       <main>
         <HeroSection />
-        <section className="bg-white px-5 py-20 lg:px-8">
+        <section className="bg-white px-5 py-16 lg:px-8 lg:py-20">
           <div className="mx-auto max-w-[1440px]">
             <SectionIntro
-              eyebrow="Product"
-              title="One focused product system."
-              description="Mercy keeps the workflow simple: matter setup, Office-first work, and reliability review before attorney final judgment."
+              eyebrow="Product system"
+              title="One connected legal operating environment."
+              description="Mercy Workspace, Office add-ins, Vault documents, research, drafting, and reliability review share the same matter, tenant, and attorney-control model."
             />
             <div className="mt-12 grid gap-4 md:grid-cols-3">
               <ProductSurfaceCard title="How It Works" description="Matter setup, workspace context, Assistant support, Office workflows, and attorney final review." icon={Monitor} href={routes.howItWorks} />
@@ -781,14 +782,49 @@ export function HomeMarketingPage() {
             </div>
           </div>
         </section>
+        <section className="border-y border-black/10 bg-[#f8f5ee] px-5 py-16 lg:px-8">
+          <div className="mx-auto max-w-[1440px]">
+            <SectionIntro
+              eyebrow="Built for practice"
+              title="Solo clarity. Firm structure."
+              description="The same product model adapts to individual attorneys and small firms without inventing separate products—or exposing platform-admin controls to customers."
+            />
+            <div className="mt-12 grid gap-4 md:grid-cols-2">
+              {audienceLinks.map(([title, href, description]) => (
+                <Link
+                  key={title}
+                  href={href}
+                  className="rounded-xl border border-black/10 bg-white p-7 shadow-[0_12px_40px_rgba(17,24,39,0.05)] transition hover:border-[#d4af37]/35"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6b16]">{title}</p>
+                  <p className="mt-4 text-base leading-7 text-[#5b564e]">{description}</p>
+                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#111827]">
+                    Explore use cases <ArrowRight className="size-4" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild>
+                <Link href="/sign-up/solo">Solo signup</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/sign-up/firm">Firm signup</Link>
+              </Button>
+              <Button asChild variant="ghost">
+                <Link href={routes.security}>Security posture</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
         <AttorneyControlSection />
         <DcIntelligenceSection />
-        <section className="px-5 py-20 lg:px-8">
+        <section className="px-5 py-16 lg:px-8 lg:py-20">
           <div className="mx-auto max-w-[1440px]">
             <SectionIntro
               eyebrow="Solutions"
-              title="Three workflows. Clear boundaries."
-              description="Mercy is organized around litigation, transactional work, and research/compliance workflows that require source visibility and attorney judgment."
+              title="Litigation, transactions, and research with review boundaries."
+              description="Mercy is organized around practice workflows that require source visibility, matter context, and attorney judgment—not generic chat."
             />
             <div className="mt-12 grid gap-4 md:grid-cols-3">
               {[

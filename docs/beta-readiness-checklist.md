@@ -40,6 +40,12 @@ Update - 2026-07-13 (production auth claim hardening):
 - Automated regressions cover metadata-only and conflicting-metadata attacks, inactive-account override attempts, trusted tenant/firm precedence, platform-admin denial, malformed claims, Stripe customer provenance, and safe redirects. Static assertions cover the production Core proxy wiring; hosted behavioral proxy verification remains part of PD047. The targeted Core/web auth suite and pure Playwright claim tests pass.
 - Current paid signup and Microsoft-issued Mercy sessions already write canonical `app_metadata`. Before live beta, legacy users must be backfilled and forced to refresh/re-authenticate; live Stripe suspension/role-removal revocation timing still requires hosted verification.
 
+Update - 2026-07-14 (premium web UI redesign pass):
+
+- Unified Mercy design tokens (navy/gold, light/dark), shared surface primitives, role-aware workspace chrome (solo vs firm vs platform admin), mobile navigation, and marketing shell polish across the Next.js web surface.
+- Production build remains green for all 64 routes; TypeScript and ESLint clean. Authorization boundaries unchanged—UI only adapts presentation from existing session claims.
+- Residual UI: denser matter-detail command layout, packaged screenshot QA, and live hosted visual QA on real solo/firm accounts.
+
 Update - 2026-07-14 (hosted activation support for claims and entitlements):
 
 - Canonical claim builders, membership-backed legacy backfill decisions, entitlement status mapping, and stale JWT detection live in `mercy-legal-web/src/lib/auth/authorization-claims.ts`.

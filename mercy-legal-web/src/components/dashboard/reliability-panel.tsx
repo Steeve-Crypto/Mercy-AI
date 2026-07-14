@@ -53,7 +53,7 @@ export function ReliabilityPanel({ title = "Reliability", envelope, route, citat
     agent?.langsmith_project_url && agent.trace_id ? `${agent.langsmith_project_url}?trace_id=${agent.trace_id}` : undefined;
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-lg border bg-[var(--mercy-card)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-mercy-navy">
           <ShieldCheck className="size-4 text-[#9b740e]" />

@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import { ArrowLeft, CheckCircle2, Scale, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/ui/surface";
 import { safeInternalNextPath } from "@/lib/auth/safe-next";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
@@ -64,29 +65,31 @@ export function AuthShell({ mode }: AuthShellProps) {
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f7f8fb] lg:grid-cols-[0.9fr_1.1fr]">
-      <section className="relative hidden overflow-hidden bg-mercy-navy p-10 text-white lg:block">
-        <div className="navy-grid absolute inset-0 opacity-60" aria-hidden />
+    <main className="grid min-h-screen bg-[var(--mercy-bg)] lg:grid-cols-[0.95fr_1.05fr]">
+      <section className="relative hidden overflow-hidden bg-[var(--mercy-navy)] p-10 text-white lg:block dark:bg-[#070c14]">
+        <div className="navy-grid absolute inset-0 opacity-50" aria-hidden />
         <Link href="/" className="relative z-10 flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-md bg-white text-mercy-navy">
+          <span className="grid size-10 place-items-center rounded-md bg-white text-[var(--mercy-navy)]">
             <Scale className="size-5" />
           </span>
-          <span className="text-lg font-semibold">Mercy.ai</span>
+          <span className="text-lg font-semibold">Mercy Legal AI</span>
         </Link>
-        <div className="relative z-10 mt-28 max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#f0d46a]">
-            Secure firm access
-          </p>
-          <h1 className="mt-5 text-5xl font-semibold leading-tight tracking-normal">
-            Enter the DC legal AI workspace.
+        <div className="relative z-10 mt-24 max-w-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mercy-gold)]">Secure attorney access</p>
+          <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
+            Enter the D.C. legal AI workspace.
           </h1>
-          <p className="mt-5 text-sm leading-7 text-white/68">
-            Auth pages are ready for Clerk/Auth.js connection. The current experience keeps the flow visible while provider keys are added.
+          <p className="mt-5 text-sm leading-7 text-white/70">
+            Sign in to matter-scoped research, drafting, Vault documents, citations, and attorney-review controls. Workspace access requires an active provisioned account.
           </p>
-          <div className="mt-8 space-y-4">
-            {["Matter-isolated workspace", "Word plugin download access", "Stripe subscription checkout"].map((item) => (
-              <div key={item} className="flex items-center gap-3 text-sm text-white/78">
-                <CheckCircle2 className="size-4 text-[#f0d46a]" />
+          <div className="mt-8 space-y-3">
+            {[
+              "Server-owned tenant and firm authorization",
+              "Matter isolation with attorney-review signals",
+              "Word and Outlook workflows on the same account model",
+            ].map((item) => (
+              <div key={item} className="flex items-center gap-3 text-sm text-white/80">
+                <CheckCircle2 className="size-4 text-[var(--mercy-gold)]" />
                 {item}
               </div>
             ))}
@@ -102,25 +105,33 @@ export function AuthShell({ mode }: AuthShellProps) {
               Back to home
             </Link>
           </Button>
-          <div className="rounded-lg border bg-white p-7 shadow-[0_24px_80px_rgba(10,20,40,0.08)]">
-            <div className="flex items-center gap-3">
-              <div className="grid size-11 place-items-center rounded-md bg-[#f5ecd0] text-[#9b740e]">
+          <div className="rounded-xl border border-[var(--mercy-border)] bg-[var(--mercy-card)] p-7 shadow-[var(--mercy-shadow-lg)]">
+            <div className="flex items-start gap-3">
+              <div className="grid size-11 place-items-center rounded-md border border-[var(--mercy-border)] bg-[var(--mercy-gold-soft)] text-[var(--mercy-gold-deep)]">
                 <ShieldCheck className="size-5" />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold text-mercy-navy">
+                <h2 className="text-2xl font-semibold text-[var(--mercy-fg-strong)]">
                   {isSignUp ? "Create your account" : "Welcome back"}
                 </h2>
-                <p className="text-sm text-muted-foreground">
-                  {isSignUp ? "Start with Mercy.ai in private beta." : "Sign in to continue to your matters."}
+                <p className="mt-1 text-sm text-[var(--mercy-fg-muted)]">
+                  {isSignUp
+                    ? "Start Mercy beta signup. Paid plans and admin provisioning activate the workspace."
+                    : "Sign in to continue to your matters and Vault."}
                 </p>
               </div>
             </div>
 
+            {!isSupabaseConfigured() ? (
+              <div className="mt-5">
+                <Chip tone="warning">Local auth mode — provider not configured</Chip>
+              </div>
+            ) : null}
+
             <form onSubmit={submit} className="mt-8 space-y-4">
               {isSignUp ? (
-                <label className="block text-sm font-medium text-mercy-navy">
-                  Firm name
+                <label className="block text-sm font-medium text-[var(--mercy-fg-strong)]">
+                  Display firm / practice name
                   <Input
                     value={firmName}
                     onChange={(event) => setFirmName(event.target.value)}
@@ -129,7 +140,7 @@ export function AuthShell({ mode }: AuthShellProps) {
                   />
                 </label>
               ) : null}
-              <label className="block text-sm font-medium text-mercy-navy">
+              <label className="block text-sm font-medium text-[var(--mercy-fg-strong)]">
                 Work email
                 <Input
                   value={email}
@@ -138,9 +149,10 @@ export function AuthShell({ mode }: AuthShellProps) {
                   placeholder="attorney@firm.com"
                   type="email"
                   required
+                  autoComplete="email"
                 />
               </label>
-              <label className="block text-sm font-medium text-mercy-navy">
+              <label className="block text-sm font-medium text-[var(--mercy-fg-strong)]">
                 Password
                 <Input
                   value={password}
@@ -149,20 +161,39 @@ export function AuthShell({ mode }: AuthShellProps) {
                   placeholder="Enter password"
                   type="password"
                   required
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
                 />
               </label>
-              {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
-              <Button type="submit" variant="gold" className="w-full" disabled={busy}>
-                {busy ? "Working..." : isSignUp ? "Create account" : "Sign in"}
+              {error ? (
+                <div className="rounded-md border border-[color-mix(in_srgb,var(--mercy-danger)_30%,var(--mercy-border))] bg-[var(--mercy-danger-soft)] p-3 text-sm text-[var(--mercy-danger)]">
+                  {error}
+                </div>
+              ) : null}
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? "Working..." : isSignUp ? "Continue" : "Sign in"}
               </Button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              {isSignUp ? "Already have an account?" : "New to Mercy.ai?"}{" "}
-              <Link className="font-medium text-mercy-navy underline underline-offset-4" href={isSignUp ? "/sign-in" : "/sign-up"}>
-                {isSignUp ? "Sign in" : "Create account"}
-              </Link>
-            </p>
+            <div className="mt-6 space-y-3 text-center text-sm text-[var(--mercy-fg-muted)]">
+              <p>
+                {isSignUp ? "Already have an account?" : "New to Mercy?"}{" "}
+                <Link className="font-medium text-[var(--mercy-fg-strong)] underline underline-offset-4" href={isSignUp ? "/sign-in" : "/sign-up"}>
+                  {isSignUp ? "Sign in" : "Create account"}
+                </Link>
+              </p>
+              {isSignUp ? (
+                <p>
+                  Prefer plan selection first?{" "}
+                  <Link className="font-medium text-[var(--mercy-fg-strong)] underline underline-offset-4" href="/sign-up/solo">
+                    Solo
+                  </Link>
+                  {" · "}
+                  <Link className="font-medium text-[var(--mercy-fg-strong)] underline underline-offset-4" href="/sign-up/firm">
+                    Firm
+                  </Link>
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
