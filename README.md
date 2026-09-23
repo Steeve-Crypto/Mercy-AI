@@ -4,6 +4,21 @@ Mercy Legal AI is a D.C.-native legal AI platform for solo attorneys and small f
 
 Current product posture: **strong backend, stable basic frontend, beta-readiness in progress**.
 
+
+## Demo
+
+Live screenshots from a local run (Next.js `mercy-legal-web` + FastAPI Shared Intelligence Core) on Linux:
+
+![Mercy workspace — Core online](docs/demo/dashboard.png)
+
+![Matters — empty state](docs/demo/matters.png)
+
+![Marketing home](docs/demo/home.png)
+
+![Legal Discovery Streamlit UI](docs/demo/legal-discovery-ui.png)
+
+Empty matters / pending Agent X metrics are real — no invented filled briefs or fake scores.
+
 ## What Mercy Is
 
 Mercy helps D.C. attorneys:
